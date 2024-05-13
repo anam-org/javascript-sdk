@@ -1,0 +1,33 @@
+{
+  "name": "@anam-ai/sdk",
+  "version": "1.0.0",
+  "description": "Client side javascript sdk for Anam AI",
+  "author": "Anam AI",
+  "main": "dist/main/index.js",
+  "module": "dist/module/index.js",
+  "types": "dist/module/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anam-org/javascript-sdk.git"
+  },
+  "keywords": [
+    "javascript",
+    "typescript",
+    "anam",
+    "avatar",
+    "persona",
+    "sdk"
+  ],
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/anam-org/javascript-sdk/issues"
+  },
+  "homepage": "https://github.com/anam-org/javascript-sdk#readme",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.5"
+  }
+}
