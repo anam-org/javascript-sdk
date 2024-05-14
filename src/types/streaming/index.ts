@@ -1,1 +1,1 @@
-export type { TextMessageEvent } from "./TextMessageEvent";
+export type { TextMessageEvent } from './TextMessageEvent';

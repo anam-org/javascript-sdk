@@ -1,8 +1,8 @@
-import { DEFAULT_PERSONA_CONFIG } from "./lib/constants";
-import { ApiClient } from "./modules/ApiClient";
-import { StreamingClient } from "./modules/StreamingClient";
-import { PersonaConfig, StartSessionResponse } from "./types";
-import { AnamClientOptions } from "./types/AnamClientOptions";
+import { DEFAULT_PERSONA_CONFIG } from './lib/constants';
+import { ApiClient } from './modules/ApiClient';
+import { StreamingClient } from './modules/StreamingClient';
+import { PersonaConfig, StartSessionResponse } from './types';
+import { AnamClientOptions } from './types/AnamClientOptions';
 
 export default class AnamClient {
   protected sessionToken: string | undefined;
@@ -15,7 +15,7 @@ export default class AnamClient {
 
   constructor(sessionToken?: string, options: AnamClientOptions = {}) {
     if (!sessionToken && !options.apiKey) {
-      throw new Error("Either sessionToken or apiKey must be provided");
+      throw new Error('Either sessionToken or apiKey must be provided');
     }
     this.sessionToken = sessionToken;
     this.apiKey = options.apiKey;
@@ -53,17 +53,17 @@ export default class AnamClient {
       return sessionId;
     } catch (error) {
       console.error(error); // TODO: remove from package
-      throw new Error("Failed to start session");
+      throw new Error('Failed to start session');
     }
   }
 
   public async stream(): Promise<MediaStream[]> {
     if (!this.sessionId || !this.streamingClient) {
       throw new Error(
-        "Failed to start stream: session is not started. Have you called startSession?"
+        'Failed to start stream: session is not started. Have you called startSession?',
       );
     }
-    return new Promise<MediaStream[]>((resolve, reject) => {
+    return new Promise<MediaStream[]>((resolve) => {
       // set stream callbacks to capture the stream
       const streams: MediaStream[] = [];
       let videoReceived = false;
@@ -76,7 +76,7 @@ export default class AnamClient {
           if (audioReceived) {
             resolve(streams);
           }
-        }
+        },
       );
       this.streamingClient?.setOnAudioStreamStartCallback(
         (audioStream: MediaStream) => {
@@ -85,7 +85,7 @@ export default class AnamClient {
           if (videoReceived) {
             resolve(streams);
           }
-        }
+        },
       );
       // start streaming
       this.streamingClient?.startConnection();
@@ -94,16 +94,16 @@ export default class AnamClient {
 
   public async streamToVideoAndAudioElements(
     videoElementId: string,
-    audioElementId: string
+    audioElementId: string,
   ): Promise<void> {
     if (!this.sessionId || !this.streamingClient) {
       throw new Error(
-        "Failed to start stream: session is not started. Have you called startSession?"
+        'Failed to start stream: session is not started. Have you called startSession?',
       );
     }
     this.streamingClient.setMediaStreamTargetsById(
       videoElementId,
-      audioElementId
+      audioElementId,
     );
     this.streamingClient.startConnection();
   }

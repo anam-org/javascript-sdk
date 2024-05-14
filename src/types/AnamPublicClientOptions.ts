@@ -1,4 +1,4 @@
-import { ApiClientOptions } from "../types";
+import { ApiClientOptions } from '../types';
 
 export interface AnamPublicClientOptions {
   api?: ApiClientOptions;

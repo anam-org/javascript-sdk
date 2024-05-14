@@ -1,4 +1,4 @@
-import { SignallingClientOptions } from "../signalling";
+import { SignallingClientOptions } from '../signalling';
 
 export interface StreamingClientOptions {
   signalling: SignallingClientOptions;

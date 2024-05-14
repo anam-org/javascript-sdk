@@ -2,14 +2,14 @@ import {
   DEFAULT_ICE_SERVERS,
   PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE,
   PUBLIC_MESSAGE_ON_WEBRTC_FAILURE,
-} from "../lib/constants";
-import { SignalMessage, SignalMessageAction } from "../types/signalling";
-import { TextMessageEvent } from "../types/streaming";
-import { StreamingClientOptions } from "../types/streaming/StreamingClientOptions";
+} from '../lib/constants';
+import { SignalMessage, SignalMessageAction } from '../types/signalling';
+import { TextMessageEvent } from '../types/streaming';
+import { StreamingClientOptions } from '../types/streaming/StreamingClientOptions';
 import {
   SignallingClient,
   DEFATULT_OPTIONS as DEFAULT_SIGNALLING_OPTIONS,
-} from "./SignallingClient";
+} from './SignallingClient';
 
 const DEFAULT_OPTIONS: StreamingClientOptions = {
   signalling: DEFAULT_SIGNALLING_OPTIONS,
@@ -22,7 +22,7 @@ export class StreamingClient {
   protected onConnectionEstablishedCallback?: () => void;
   protected onConnectionClosedCallback?: (reason: string) => void;
   protected onInputAudioStreamStartCallback?: (
-    audioStream: MediaStream
+    audioStream: MediaStream,
   ) => void;
   protected onVideoStreamStartCallback?: (videoStream: MediaStream) => void;
   protected onAudioStreamStartCallback?: (audioStream: MediaStream) => void;
@@ -47,7 +47,7 @@ export class StreamingClient {
     onInputAudioStreamStartCallback?: (audioStream: MediaStream) => void,
     onVideoStreamStartCallback?: (videoStream: MediaStream) => void,
     onVideoPlayStartedCallback?: () => void,
-    onAudioStreamStartCallback?: (audioStream: MediaStream) => void
+    onAudioStreamStartCallback?: (audioStream: MediaStream) => void,
   ) {
     if (onReceiveMessageCallback) {
       this.onReceiveMessageCallback = onReceiveMessageCallback;
@@ -77,7 +77,7 @@ export class StreamingClient {
       options.signalling,
       this.onSignalMessage.bind(this),
       this.onSignallingClientConnected.bind(this),
-      this.onSignallingClientFailed.bind(this)
+      this.onSignallingClientFailed.bind(this),
     );
   }
 
@@ -98,34 +98,34 @@ export class StreamingClient {
   }
 
   public setOnVideoStreamStartCallback(
-    callback: (videoStream: MediaStream) => void
+    callback: (videoStream: MediaStream) => void,
   ) {
     this.onVideoStreamStartCallback = callback;
   }
 
   public setOnAudioStreamStartCallback(
-    callback: (audioStream: MediaStream) => void
+    callback: (audioStream: MediaStream) => void,
   ) {
     this.onAudioStreamStartCallback = callback;
   }
 
   public sendDataMessage(message: string) {
-    console.log("StreamingClient - sendDataMessage: sending message", message);
-    if (this.dataChannel && this.dataChannel.readyState === "open") {
+    console.log('StreamingClient - sendDataMessage: sending message', message);
+    if (this.dataChannel && this.dataChannel.readyState === 'open') {
       this.dataChannel.send(message);
     }
   }
 
   public setMediaStreamTargetsById(
     videoElementId: string,
-    audioElementId: string
+    audioElementId: string,
   ) {
     // set up streaming targets
     if (videoElementId) {
       const videoElement = document.getElementById(videoElementId);
       if (!videoElement) {
         throw new Error(
-          `StreamingClient: video element with id ${videoElementId} not found`
+          `StreamingClient: video element with id ${videoElementId} not found`,
         );
       }
       this.videoElement = videoElement as HTMLVideoElement;
@@ -134,7 +134,7 @@ export class StreamingClient {
       const audioElement = document.getElementById(audioElementId);
       if (!audioElement) {
         throw new Error(
-          `StreamingClient: audio element with id ${audioElementId} not found`
+          `StreamingClient: audio element with id ${audioElementId} not found`,
         );
       }
       this.audioElement = audioElement as HTMLAudioElement;
@@ -142,11 +142,11 @@ export class StreamingClient {
   }
 
   public startConnection() {
-    console.log("StreamingClient - startConnection: starting connection");
+    console.log('StreamingClient - startConnection: starting connection');
     try {
       if (this.peerConnection) {
         console.error(
-          "StreamingClient - startConnection: peer connection already exists"
+          'StreamingClient - startConnection: peer connection already exists',
         );
         return;
       }
@@ -157,7 +157,7 @@ export class StreamingClient {
   }
 
   public stopConnection() {
-    console.log("StreamingClient - stopConnection: stopping connection");
+    console.log('StreamingClient - stopConnection: stopping connection');
     this.shutdown();
   }
 
@@ -172,30 +172,30 @@ export class StreamingClient {
     this.peerConnection.onconnectionstatechange =
       this.onConnectionStateChange.bind(this);
     this.peerConnection.addEventListener(
-      "track",
-      this.onTrackEventHandler.bind(this)
+      'track',
+      this.onTrackEventHandler.bind(this),
     );
 
     // set up data channels
     await this.setupDataChannels();
 
     // add transceivers
-    this.peerConnection.addTransceiver("video", { direction: "recvonly" });
-    this.peerConnection.addTransceiver("audio", { direction: "sendrecv" });
+    this.peerConnection.addTransceiver('video', { direction: 'recvonly' });
+    this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
   }
 
   private async onSignalMessage(signalMessage: SignalMessage) {
     if (!this.peerConnection) {
       console.error(
-        "StreamingClient - onSignalMessage: peerConnection is not initialized"
+        'StreamingClient - onSignalMessage: peerConnection is not initialized',
       );
       return;
     }
     switch (signalMessage.actionType) {
       case SignalMessageAction.ANSWER:
         console.log(
-          "StreamingClient - onSignalMessage: received answer ",
-          signalMessage.payload
+          'StreamingClient - onSignalMessage: received answer ',
+          signalMessage.payload,
         );
         const answer = signalMessage.payload as RTCSessionDescriptionInit;
         await this.peerConnection.setRemoteDescription(answer);
@@ -205,8 +205,8 @@ export class StreamingClient {
         break;
       case SignalMessageAction.ICE_CANDIDATE:
         console.log(
-          "StreamingClient - onSignalMessage: received ice candidate ",
-          signalMessage.payload
+          'StreamingClient - onSignalMessage: received ice candidate ',
+          signalMessage.payload,
         );
         const candidate = new RTCIceCandidate(signalMessage.payload);
         if (this.connectionReceivedAnswer) {
@@ -216,7 +216,7 @@ export class StreamingClient {
         }
         break;
       case SignalMessageAction.END_SESSION:
-        console.log("StreamingClient - onSignalMessage: received end session");
+        console.log('StreamingClient - onSignalMessage: received end session');
         const reason = signalMessage.payload as string;
         if (this.onConnectionClosedCallback) {
           this.onConnectionClosedCallback(reason);
@@ -226,15 +226,15 @@ export class StreamingClient {
         break;
       default:
         console.error(
-          "StreamingClient - onSignalMessage: unknown signal message action type",
-          signalMessage
+          'StreamingClient - onSignalMessage: unknown signal message action type',
+          signalMessage,
         );
     }
   }
 
   private async onSignallingClientConnected() {
     console.log(
-      "StreamingClient - onSignallingClientConnected: signalling client connected"
+      'StreamingClient - onSignallingClientConnected: signalling client connected',
     );
     if (!this.peerConnection) {
       // TODO: THIS COULD BE ERROR PRONE - the old code in client has an error here
@@ -242,8 +242,8 @@ export class StreamingClient {
         await this.initPeerConnectionAndSendOffer();
       } catch (err) {
         console.error(
-          "StreamingClient - onSignallingClientConnected: Error initializing peer connection",
-          err
+          'StreamingClient - onSignallingClientConnected: Error initializing peer connection',
+          err,
         );
         this.handleWebrtcFailure(err);
       }
@@ -252,11 +252,11 @@ export class StreamingClient {
 
   private onSignallingClientFailed() {
     console.error(
-      "StreamingClient - onSignallingClientFailed: signalling client failed"
+      'StreamingClient - onSignallingClientFailed: signalling client failed',
     );
     if (this.onConnectionClosedCallback) {
       this.onConnectionClosedCallback(
-        PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE
+        PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE,
       );
     }
   }
@@ -282,11 +282,11 @@ export class StreamingClient {
   // TODO: should be able to use the connection ref from the function rather than the class variable
   private onIceConnectionStateChange() {
     if (
-      this.peerConnection?.iceConnectionState === "connected" ||
-      this.peerConnection?.iceConnectionState === "completed"
+      this.peerConnection?.iceConnectionState === 'connected' ||
+      this.peerConnection?.iceConnectionState === 'completed'
     ) {
       console.log(
-        "StreamingClient - onIceConnectionStateChange: ICE Connection State is connected"
+        'StreamingClient - onIceConnectionStateChange: ICE Connection State is connected',
       );
       if (this.onConnectionEstablishedCallback) {
         this.onConnectionEstablishedCallback();
@@ -296,27 +296,27 @@ export class StreamingClient {
 
   private onConnectionStateChange() {
     console.log(
-      "StreamingClient - onConnectionStateChange: Connection State is ",
-      this.peerConnection?.connectionState
+      'StreamingClient - onConnectionStateChange: Connection State is ',
+      this.peerConnection?.connectionState,
     );
-    if (this.peerConnection?.connectionState === "closed") {
+    if (this.peerConnection?.connectionState === 'closed') {
       console.error(
-        "StreamingClient - onConnectionStateChange: Connection closed"
+        'StreamingClient - onConnectionStateChange: Connection closed',
       );
       this.handleWebrtcFailure(
-        "The connection to our servers was lost. Please try again."
+        'The connection to our servers was lost. Please try again.',
       );
     }
   }
 
   private handleWebrtcFailure(err: any) {
-    console.error("StreamingClient - handleWebrtcFailure: ", err);
+    console.error('StreamingClient - handleWebrtcFailure: ', err);
     try {
       this.stopConnection();
     } catch (error) {
       console.error(
-        "StreamingClient - handleWebrtcFailure: error stopping connection",
-        error
+        'StreamingClient - handleWebrtcFailure: error stopping connection',
+        error,
       );
     }
     if (this.onConnectionClosedCallback) {
@@ -326,10 +326,10 @@ export class StreamingClient {
 
   private onTrackEventHandler(event: RTCTrackEvent) {
     console.log(
-      "StreamingClient - onTrackEventHandler: received track event",
-      event
+      'StreamingClient - onTrackEventHandler: received track event',
+      event,
     );
-    if (event.track.kind === "video") {
+    if (event.track.kind === 'video') {
       this.videoStream = event.streams[0];
       if (this.onVideoStreamStartCallback) {
         this.onVideoStreamStartCallback(this.videoStream);
@@ -344,7 +344,7 @@ export class StreamingClient {
           }
         });
       }
-    } else if (event.track.kind === "audio") {
+    } else if (event.track.kind === 'audio') {
       // TODO: this check is not in the original code
       this.audioStream = event.streams[0];
       if (this.onAudioStreamStartCallback) {
@@ -361,7 +361,7 @@ export class StreamingClient {
   private async setupDataChannels() {
     if (!this.peerConnection) {
       console.error(
-        "StreamingClient - setupDataChannels: peer connection is not initialized"
+        'StreamingClient - setupDataChannels: peer connection is not initialized',
       );
       return;
     }
@@ -379,12 +379,12 @@ export class StreamingClient {
     const audioTrack = audioStream.getAudioTracks()[0];
     this.peerConnection.addTrack(audioTrack, audioStream);
     console.log(
-      "StreamingClient - setupDataChannels: audio track added: " +
-        audioTrack.readyState
+      'StreamingClient - setupDataChannels: audio track added: ' +
+        audioTrack.readyState,
     ); // Should log "live"
     console.log(
-      "StreamingClient - setupDataChannels: echo canellation: " +
-        audioTrack.getCapabilities().echoCancellation
+      'StreamingClient - setupDataChannels: echo canellation: ' +
+        audioTrack.getCapabilities().echoCancellation,
     );
     // pass the stream to the callback if it exists
     if (this.onInputAudioStreamStartCallback) {
@@ -397,7 +397,7 @@ export class StreamingClient {
      * Create the data channel for sending and receiving text.
      * There is no input stream for text, instead the sending of data is triggered by a UI interaction.
      */
-    const dataChannel = this.peerConnection.createDataChannel("chat", {
+    const dataChannel = this.peerConnection.createDataChannel('chat', {
       ordered: true,
     });
     dataChannel.onopen = () => {
@@ -405,13 +405,13 @@ export class StreamingClient {
     };
     dataChannel.onclose = () => {
       // TODO: should we set the data channel to null here?
-      console.log("StreamingClient - setupDataChannels: data channel closed");
+      console.log('StreamingClient - setupDataChannels: data channel closed');
     };
     // pass test messages to the callback
     dataChannel.onmessage = (event) => {
       if (this.onReceiveMessageCallback) {
         this.onReceiveMessageCallback(
-          JSON.parse(event.data) as TextMessageEvent
+          JSON.parse(event.data) as TextMessageEvent,
         );
       }
     };
@@ -422,7 +422,7 @@ export class StreamingClient {
 
     if (!this.peerConnection) {
       console.error(
-        "StreamingClient - initPeerConnectionAndSendOffer: peer connection is not initialized"
+        'StreamingClient - initPeerConnectionAndSendOffer: peer connection is not initialized',
       );
       return;
     }
@@ -433,14 +433,14 @@ export class StreamingClient {
     await this.peerConnection.setLocalDescription(offer);
     if (!this.peerConnection.localDescription) {
       throw new Error(
-        "StreamingClient - initPeerConnectionAndSendOffer: local description is null"
+        'StreamingClient - initPeerConnectionAndSendOffer: local description is null',
       );
     }
     await this.signallingClient.sendOffer(this.peerConnection.localDescription);
   }
 
   private shutdown() {
-    console.log("StreamingClient - shutdown: shutting down");
+    console.log('StreamingClient - shutdown: shutting down');
     try {
       if (this.inputAudioStream) {
         this.inputAudioStream.getTracks().forEach((track) => {
@@ -450,32 +450,32 @@ export class StreamingClient {
       this.inputAudioStream = null;
     } catch (error) {
       console.error(
-        "StreamingClient - shutdown: error stopping input audio stream",
-        error
+        'StreamingClient - shutdown: error stopping input audio stream',
+        error,
       );
     }
     try {
       this.signallingClient.stop();
     } catch (error) {
       console.error(
-        "StreamingClient - shutdown: error stopping signallilng",
-        error
+        'StreamingClient - shutdown: error stopping signallilng',
+        error,
       );
     }
     try {
       if (
         this.peerConnection &&
-        this.peerConnection.connectionState !== "closed"
+        this.peerConnection.connectionState !== 'closed'
       ) {
         this.peerConnection.onconnectionstatechange = null;
         this.peerConnection.close();
-        console.log("StreamingClient - shutdown: peer connection closed");
+        console.log('StreamingClient - shutdown: peer connection closed');
         this.peerConnection = null;
       }
     } catch (error) {
       console.error(
-        "StreamingClient - shutdown: error closing peer connection",
-        error
+        'StreamingClient - shutdown: error closing peer connection',
+        error,
       );
     }
   }

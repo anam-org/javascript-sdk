@@ -1,9 +1,9 @@
-import { DEFAULT_ENGING_BASE_URL } from "../lib/constants";
+import { DEFAULT_ENGING_BASE_URL } from '../lib/constants';
 import {
   SignalMessage,
   SignalMessageAction,
   SignallingClientOptions,
-} from "../types";
+} from '../types';
 
 const DEFAULT_HEARTBEART_INTERVAL_SECONDS = 5;
 const DEFAULT_WS_RECONNECTION_ATTEMPTS = 5;
@@ -22,7 +22,7 @@ export class SignallingClient {
   protected heartbeatIntervalSeconds: number;
   protected maxWsReconnectionAttempts: number;
   protected onSignalMessageReceivedCallback?: (
-    msg: SignalMessage
+    msg: SignalMessage,
   ) => Promise<void> | void;
   protected onClientConnectedCallback?: () => Promise<void> | void;
   protected onClientConnectionFailureCallback?: () => Promise<void> | void;
@@ -37,13 +37,13 @@ export class SignallingClient {
     sessionId: string,
     options: SignallingClientOptions = DEFATULT_OPTIONS,
     onSignalMessageReceivedCallback?: (
-      msg: SignalMessage
+      msg: SignalMessage,
     ) => Promise<void> | void,
     onClientConnectedCallback?: () => Promise<void> | void,
-    onClientConnectionFailureCallback?: () => Promise<void> | void
+    onClientConnectionFailureCallback?: () => Promise<void> | void,
   ) {
     if (!sessionId) {
-      throw new Error("Signalling Client: sessionId is required");
+      throw new Error('Signalling Client: sessionId is required');
     }
     this.sessionId = sessionId;
 
@@ -68,18 +68,18 @@ export class SignallingClient {
       maxWsReconnectionAttempts || DEFAULT_WS_RECONNECTION_ATTEMPTS;
 
     if (!url.baseUrl) {
-      throw new Error("Signalling Client: baseUrl is required");
+      throw new Error('Signalling Client: baseUrl is required');
     }
     this.url = new URL(url.baseUrl);
-    this.url.protocol = url.protocol || "wss";
-    this.url.port = url.port ?? "443";
-    this.url.pathname = url.signallingPath ?? "/ws";
+    this.url.protocol = url.protocol || 'wss';
+    this.url.port = url.port ?? '443';
+    this.url.pathname = url.signallingPath ?? '/ws';
     console.log(`SignallingClient created with url: ${this.url.href}`); // TODO: remove comment
   }
 
   public stop() {
     this.stopSignal = true;
-    console.log("Stopping signalling");
+    console.log('Stopping signalling');
     this.closeSocket();
   }
 
@@ -102,8 +102,8 @@ export class SignallingClient {
       payload: offerMessagePayload,
     };
     console.log(
-      "SignallingClient - sendOffer: sending offer message",
-      offerMessage
+      'SignallingClient - sendOffer: sending offer message',
+      offerMessage,
     );
     this.sendSignalMessage(offerMessage);
   }
@@ -120,17 +120,17 @@ export class SignallingClient {
   private sendSignalMessage(message: SignalMessage) {
     if (this.socket?.readyState === WebSocket.OPEN) {
       try {
-        console.log("SignallingClient - sendSignalMessage: sending message");
+        console.log('SignallingClient - sendSignalMessage: sending message');
         this.socket.send(JSON.stringify(message));
       } catch (error) {
         console.error(
-          "SignallingClient - sendSignalMessage: error sending message",
-          error
+          'SignallingClient - sendSignalMessage: error sending message',
+          error,
         );
       }
     } else {
       console.log(
-        "SignallingClient - sendSignalMessage: Websocket not open, buffering msg"
+        'SignallingClient - sendSignalMessage: Websocket not open, buffering msg',
       );
       this.sendingBuffer.push(message);
     }
@@ -149,10 +149,10 @@ export class SignallingClient {
 
   private async onOpen(): Promise<void> {
     if (!this.socket) {
-      throw new Error("SignallingClient - onOpen: socket is null");
+      throw new Error('SignallingClient - onOpen: socket is null');
     }
     console.log(
-      `SignallingClient - onOpen: connection opened to ${this.url.href}`
+      `SignallingClient - onOpen: connection opened to ${this.url.href}`,
     );
     try {
       this.wsConnectionAttempts = 0;
@@ -163,7 +163,7 @@ export class SignallingClient {
         await this.onClientConnectedCallback();
       }
     } catch (e) {
-      console.error("SignallingClient - onOpen: error in onOpen", e);
+      console.error('SignallingClient - onOpen: error in onOpen', e);
       if (this.onClientConnectionFailureCallback) {
         this.onClientConnectionFailureCallback();
       }
@@ -171,21 +171,21 @@ export class SignallingClient {
   }
 
   private async onClose() {
-    console.log("SignallingClient - onClose: connection closed");
+    console.log('SignallingClient - onClose: connection closed');
     this.wsConnectionAttempts += 1;
     if (this.stopSignal) {
-      console.log("SignallingClient - onClose: already in stopped state");
+      console.log('SignallingClient - onClose: already in stopped state');
       return;
     }
     if (this.wsConnectionAttempts <= this.maxWsReconnectionAttempts) {
       this.socket = null;
       setTimeout(() => {
-        console.log("SignallingClient - onClose: reconnecting");
+        console.log('SignallingClient - onClose: reconnecting');
         this.connect();
       }, 100 * this.wsConnectionAttempts);
     } else {
       console.log(
-        "SignallingClient - onClose: max reconnection attempts reached"
+        'SignallingClient - onClose: max reconnection attempts reached',
       );
       if (this.heartBeatIntervalRef) {
         clearInterval(this.heartBeatIntervalRef);
@@ -201,18 +201,18 @@ export class SignallingClient {
     if (this.stopSignal) {
       return;
     }
-    console.error("SignallingClient - onError: ", event);
+    console.error('SignallingClient - onError: ', event);
   }
 
   private flushSendingBuffer() {
     const newBuffer: SignalMessage[] = [];
     if (this.sendingBuffer.length > 0) {
-      console.log("Flushing sending buffer");
+      console.log('Flushing sending buffer');
       this.sendingBuffer.forEach((message: SignalMessage) => {
         if (this.socket?.readyState === WebSocket.OPEN) {
           this.socket.send(JSON.stringify(message));
         } else {
-          console.log("Websocket not open, buffering msg");
+          console.log('Websocket not open, buffering msg');
           newBuffer.push(message);
         }
       });
@@ -222,7 +222,7 @@ export class SignallingClient {
 
   private async onMessage(event: MessageEvent) {
     const message = JSON.parse(event.data);
-    console.log("SignallingClient: received message", message);
+    console.log('SignallingClient: received message', message);
     if (this.onSignalMessageReceivedCallback) {
       await this.onSignalMessageReceivedCallback(message);
     }
@@ -231,12 +231,12 @@ export class SignallingClient {
   private startSendingHeartBeats() {
     if (this.socket) {
       throw new Error(
-        "SignallingClient - startSendingHeartBeats: socket is null"
+        'SignallingClient - startSendingHeartBeats: socket is null',
       );
     }
     if (this.heartBeatIntervalRef) {
       console.log(
-        "SignallingClient - startSendingHeartBeats: heartbeat interval already set"
+        'SignallingClient - startSendingHeartBeats: heartbeat interval already set',
       );
     }
     // send a heartbeat message every heartbeatIntervalSeconds
@@ -244,7 +244,7 @@ export class SignallingClient {
     const heartbeatMessage: SignalMessage = {
       actionType: SignalMessageAction.HEARTBEAT,
       sessionId: this.sessionId,
-      payload: "",
+      payload: '',
     };
     const heartbeatMessageJson = JSON.stringify(heartbeatMessage);
     this.heartBeatIntervalRef = setInterval(() => {
@@ -254,7 +254,7 @@ export class SignallingClient {
       if (this.socket?.readyState === WebSocket.OPEN) {
         this.socket.send(heartbeatMessageJson);
       } else {
-        console.log("Websocket not open. Missing one heartbeat.");
+        console.log('Websocket not open. Missing one heartbeat.');
       }
     }, heartbeatInterval);
   }

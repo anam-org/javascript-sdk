@@ -1,1 +1,1 @@
-export { SignallingClient } from "./SignallingClient";
+export { SignallingClient } from './SignallingClient';
