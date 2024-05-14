@@ -12,8 +12,6 @@ import {
 } from "./SignallingClient";
 
 const DEFAULT_OPTIONS: StreamingClientOptions = {
-  videoElementId: "video",
-  audioElementId: "audio",
   signalling: DEFAULT_SIGNALLING_OPTIONS,
 };
 
@@ -73,27 +71,6 @@ export class StreamingClient {
       this.onAudioStreamStartCallback = onAudioStreamStartCallback;
     }
 
-    // set up streaming targets
-    const { videoElementId, audioElementId } = options;
-    if (videoElementId) {
-      const videoElement = document.getElementById(videoElementId);
-      if (!videoElement) {
-        throw new Error(
-          `StreamingClient: video element with id ${videoElementId} not found`
-        );
-      }
-      this.videoElement = videoElement as HTMLVideoElement;
-    }
-    if (audioElementId) {
-      const audioElement = document.getElementById(audioElementId);
-      if (!audioElement) {
-        throw new Error(
-          `StreamingClient: audio element with id ${audioElementId} not found`
-        );
-      }
-      this.audioElement = audioElement as HTMLAudioElement;
-    }
-
     // initialize signalling client
     this.signallingClient = new SignallingClient(
       sessionId,
@@ -120,6 +97,18 @@ export class StreamingClient {
     return this.audioStream;
   }
 
+  public setOnVideoStreamStartCallback(
+    callback: (videoStream: MediaStream) => void
+  ) {
+    this.onVideoStreamStartCallback = callback;
+  }
+
+  public setOnAudioStreamStartCallback(
+    callback: (audioStream: MediaStream) => void
+  ) {
+    this.onAudioStreamStartCallback = callback;
+  }
+
   public sendDataMessage(message: string) {
     console.log("StreamingClient - sendDataMessage: sending message", message);
     if (this.dataChannel && this.dataChannel.readyState === "open") {
@@ -127,7 +116,32 @@ export class StreamingClient {
     }
   }
 
-  public async startConnection() {
+  public setMediaStreamTargetsById(
+    videoElementId: string,
+    audioElementId: string
+  ) {
+    // set up streaming targets
+    if (videoElementId) {
+      const videoElement = document.getElementById(videoElementId);
+      if (!videoElement) {
+        throw new Error(
+          `StreamingClient: video element with id ${videoElementId} not found`
+        );
+      }
+      this.videoElement = videoElement as HTMLVideoElement;
+    }
+    if (audioElementId) {
+      const audioElement = document.getElementById(audioElementId);
+      if (!audioElement) {
+        throw new Error(
+          `StreamingClient: audio element with id ${audioElementId} not found`
+        );
+      }
+      this.audioElement = audioElement as HTMLAudioElement;
+    }
+  }
+
+  public startConnection() {
     console.log("StreamingClient - startConnection: starting connection");
     try {
       if (this.peerConnection) {

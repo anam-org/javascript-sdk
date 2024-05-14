@@ -1,9 +1,9 @@
-import { DEFAULT_URL } from "../lib/constants";
+import { DEFAULT_BASE_URL } from "../lib/constants";
 import {
   SignalMessage,
   SignalMessageAction,
   SignallingClientOptions,
-} from "../types/signalling";
+} from "../types";
 
 const DEFAULT_HEARTBEART_INTERVAL_SECONDS = 5;
 const DEFAULT_WS_RECONNECTION_ATTEMPTS = 5;
@@ -12,7 +12,7 @@ export const DEFATULT_OPTIONS: SignallingClientOptions = {
   heartbeatIntervalSeconds: DEFAULT_HEARTBEART_INTERVAL_SECONDS,
   maxWsReconnectionAttempts: DEFAULT_WS_RECONNECTION_ATTEMPTS,
   url: {
-    baseUrl: DEFAULT_URL,
+    baseUrl: DEFAULT_BASE_URL,
   },
 };
 
