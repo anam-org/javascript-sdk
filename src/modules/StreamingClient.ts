@@ -4,7 +4,7 @@ import {
   PUBLIC_MESSAGE_ON_WEBRTC_FAILURE,
 } from '../lib/constants';
 import { SignalMessage, SignalMessageAction } from '../types/signalling';
-import { TextMessageEvent } from '../types/streaming';
+import { ConnectionCallbacks, TextMessageEvent } from '../types/streaming';
 import { StreamingClientOptions } from '../types/streaming/StreamingClientOptions';
 import {
   SignallingClient,
@@ -41,36 +41,7 @@ export class StreamingClient {
   constructor(
     sessionId: string,
     options: StreamingClientOptions = DEFAULT_OPTIONS,
-    onReceiveMessageCallback?: (messageEvent: TextMessageEvent) => void,
-    onConnectionEstablishedCallback?: () => void,
-    onConnectionClosedCallback?: (reason: string) => void,
-    onInputAudioStreamStartCallback?: (audioStream: MediaStream) => void,
-    onVideoStreamStartCallback?: (videoStream: MediaStream) => void,
-    onVideoPlayStartedCallback?: () => void,
-    onAudioStreamStartCallback?: (audioStream: MediaStream) => void,
   ) {
-    if (onReceiveMessageCallback) {
-      this.onReceiveMessageCallback = onReceiveMessageCallback;
-    }
-    if (onConnectionEstablishedCallback) {
-      this.onConnectionEstablishedCallback = onConnectionEstablishedCallback;
-    }
-    if (onConnectionClosedCallback) {
-      this.onConnectionClosedCallback = onConnectionClosedCallback;
-    }
-    if (onInputAudioStreamStartCallback) {
-      this.onInputAudioStreamStartCallback = onInputAudioStreamStartCallback;
-    }
-    if (onVideoStreamStartCallback) {
-      this.onVideoStreamStartCallback = onVideoStreamStartCallback;
-    }
-    if (onVideoPlayStartedCallback) {
-      this.onVideoPlayStartedCallback = onVideoPlayStartedCallback;
-    }
-    if (onAudioStreamStartCallback) {
-      this.onAudioStreamStartCallback = onAudioStreamStartCallback;
-    }
-
     // initialize signalling client
     this.signallingClient = new SignallingClient(
       sessionId,
@@ -141,7 +112,7 @@ export class StreamingClient {
     }
   }
 
-  public startConnection() {
+  public startConnection(callbacks: ConnectionCallbacks) {
     console.log('StreamingClient - startConnection: starting connection');
     try {
       if (this.peerConnection) {
@@ -150,6 +121,9 @@ export class StreamingClient {
         );
         return;
       }
+      // set callbacks
+      this.setConnectionCallbacks(callbacks);
+      // start the connection
       this.signallingClient.connect();
     } catch (error) {
       this.handleWebrtcFailure(error);
@@ -159,6 +133,38 @@ export class StreamingClient {
   public stopConnection() {
     console.log('StreamingClient - stopConnection: stopping connection');
     this.shutdown();
+  }
+
+  private setConnectionCallbacks({
+    onReceiveMessageCallback,
+    onConnectionEstablishedCallback,
+    onConnectionClosedCallback,
+    onInputAudioStreamStartCallback,
+    onVideoStreamStartCallback,
+    onVideoPlayStartedCallback,
+    onAudioStreamStartCallback,
+  }: ConnectionCallbacks) {
+    if (onReceiveMessageCallback) {
+      this.onReceiveMessageCallback = onReceiveMessageCallback;
+    }
+    if (onConnectionEstablishedCallback) {
+      this.onConnectionEstablishedCallback = onConnectionEstablishedCallback;
+    }
+    if (onConnectionClosedCallback) {
+      this.onConnectionClosedCallback = onConnectionClosedCallback;
+    }
+    if (onInputAudioStreamStartCallback) {
+      this.onInputAudioStreamStartCallback = onInputAudioStreamStartCallback;
+    }
+    if (onVideoStreamStartCallback) {
+      this.onVideoStreamStartCallback = onVideoStreamStartCallback;
+    }
+    if (onVideoPlayStartedCallback) {
+      this.onVideoPlayStartedCallback = onVideoPlayStartedCallback;
+    }
+    if (onAudioStreamStartCallback) {
+      this.onAudioStreamStartCallback = onAudioStreamStartCallback;
+    }
   }
 
   private async initPeerConnection() {

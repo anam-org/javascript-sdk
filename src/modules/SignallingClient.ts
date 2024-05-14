@@ -1,4 +1,4 @@
-import { DEFAULT_ENGING_BASE_URL } from '../lib/constants';
+import { DEFAULT_ENGINE_BASE_URL } from '../lib/constants';
 import {
   SignalMessage,
   SignalMessageAction,
@@ -12,7 +12,8 @@ export const DEFATULT_OPTIONS: SignallingClientOptions = {
   heartbeatIntervalSeconds: DEFAULT_HEARTBEART_INTERVAL_SECONDS,
   maxWsReconnectionAttempts: DEFAULT_WS_RECONNECTION_ATTEMPTS,
   url: {
-    baseUrl: DEFAULT_ENGING_BASE_URL,
+    baseUrl: DEFAULT_ENGINE_BASE_URL,
+    protocol: 'ws',
   },
 };
 
@@ -57,7 +58,7 @@ export class SignallingClient {
       this.onClientConnectionFailureCallback =
         onClientConnectionFailureCallback;
     }
-
+    console.log('SignallingClient: options', options);
     const { heartbeatIntervalSeconds, maxWsReconnectionAttempts, url } =
       options;
 
@@ -70,10 +71,15 @@ export class SignallingClient {
     if (!url.baseUrl) {
       throw new Error('Signalling Client: baseUrl is required');
     }
-    this.url = new URL(url.baseUrl);
-    this.url.protocol = url.protocol || 'wss';
-    this.url.port = url.port ?? '443';
+    const httpProtocol = url.protocol || 'https';
+    const initUrl = `${httpProtocol}://${url.baseUrl}`;
+    this.url = new URL(initUrl);
+    this.url.protocol = url.protocol === 'http' ? 'ws:' : 'wss:';
+    if (url.port) {
+      this.url.port = url.port;
+    }
     this.url.pathname = url.signallingPath ?? '/ws';
+    this.url.searchParams.append('session_id', sessionId);
     console.log(`SignallingClient created with url: ${this.url.href}`); // TODO: remove comment
   }
 
@@ -229,13 +235,13 @@ export class SignallingClient {
   }
 
   private startSendingHeartBeats() {
-    if (this.socket) {
+    if (!this.socket) {
       throw new Error(
         'SignallingClient - startSendingHeartBeats: socket is null',
       );
     }
     if (this.heartBeatIntervalRef) {
-      console.log(
+      console.warn(
         'SignallingClient - startSendingHeartBeats: heartbeat interval already set',
       );
     }

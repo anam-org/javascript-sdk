@@ -1,7 +1,11 @@
 import { DEFAULT_PERSONA_CONFIG } from './lib/constants';
 import { ApiClient } from './modules/ApiClient';
 import { StreamingClient } from './modules/StreamingClient';
-import { PersonaConfig, StartSessionResponse } from './types';
+import {
+  ConnectionCallbacks,
+  PersonaConfig,
+  StartSessionResponse,
+} from './types';
 import { AnamClientOptions } from './types/AnamClientOptions';
 
 export default class AnamClient {
@@ -12,6 +16,7 @@ export default class AnamClient {
 
   private streamingClient: StreamingClient | null = null;
   private apiClient: ApiClient;
+  private _isStreaming = false;
 
   constructor(sessionToken?: string, options: AnamClientOptions = {}) {
     if (!sessionToken && !options.apiKey) {
@@ -57,12 +62,18 @@ export default class AnamClient {
     }
   }
 
-  public async stream(): Promise<MediaStream[]> {
+  public async stream(
+    callbacks: ConnectionCallbacks = {},
+  ): Promise<MediaStream[]> {
     if (!this.sessionId || !this.streamingClient) {
       throw new Error(
         'Failed to start stream: session is not started. Have you called startSession?',
       );
     }
+    if (this._isStreaming) {
+      throw new Error('Already streaming');
+    }
+    this._isStreaming = true;
     return new Promise<MediaStream[]>((resolve) => {
       // set stream callbacks to capture the stream
       const streams: MediaStream[] = [];
@@ -88,23 +99,51 @@ export default class AnamClient {
         },
       );
       // start streaming
-      this.streamingClient?.startConnection();
+      this.streamingClient?.startConnection(callbacks);
     });
   }
 
   public async streamToVideoAndAudioElements(
     videoElementId: string,
     audioElementId: string,
+    callbacks: ConnectionCallbacks = {},
   ): Promise<void> {
     if (!this.sessionId || !this.streamingClient) {
       throw new Error(
         'Failed to start stream: session is not started. Have you called startSession?',
       );
     }
+    if (this._isStreaming) {
+      throw new Error('Already streaming');
+    }
+    this._isStreaming = true;
+
     this.streamingClient.setMediaStreamTargetsById(
       videoElementId,
       audioElementId,
     );
-    this.streamingClient.startConnection();
+    this.streamingClient.startConnection(callbacks);
+  }
+
+  public sendDataMessage(message: string): void {
+    if (this.streamingClient) {
+      this.streamingClient.sendDataMessage(message);
+    } else {
+      throw new Error('Failed to send message: session is not started.');
+    }
+  }
+
+  public async stopStreaming(): Promise<void> {
+    if (this.streamingClient) {
+      this.streamingClient.stopConnection();
+      console.log('Streaming stopped.');
+      this._isStreaming = false;
+    } else {
+      console.warn('No streams running to stop.');
+    }
+  }
+
+  public isStreaming(): boolean {
+    return this._isStreaming;
   }
 }

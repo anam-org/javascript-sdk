@@ -1,10 +1,8 @@
 import { PersonaConfig } from '../types';
-import { version } from './version';
 
 // API
 export const DEFAULT_HEADERS = {
   'Content-Type': 'application/json',
-  'User-Agent': `@anam-ai/sdk/${version}`,
 };
 export const DEFAULT_API_BASE_URL = 'https://api.anam.ai';
 export const DEFAULT_API_VERSION = '/v1'; // include the leading slash
@@ -16,7 +14,7 @@ export const PUBLIC_MESSAGE_ON_WEBRTC_FAILURE =
   'There was an issue connecting to our servers. Please try again.';
 
 // Signalling
-export const DEFAULT_ENGING_BASE_URL = 'http://localhost:8081';
+export const DEFAULT_ENGINE_BASE_URL = 'http://localhost:8081';
 // TODO: these should come from the server
 export const DEFAULT_ICE_SERVERS = [
   {

@@ -2,7 +2,7 @@ import AnamClient from './AnamClient';
 import { AnamPublicClientOptions } from './types/AnamPublicClientOptions';
 
 const createClient = (
-  sessionToken?: string,
+  sessionToken: string,
   options: AnamPublicClientOptions = {},
 ): AnamClient => {
   return new AnamClient(sessionToken, options);
@@ -16,3 +16,4 @@ const unsafe_createClientWithApiKey = (
 };
 
 export { createClient, unsafe_createClientWithApiKey };
+export type { AnamClient };

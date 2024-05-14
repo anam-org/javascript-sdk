@@ -38,7 +38,7 @@ export class ApiClient {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.sessionToken}`,
         },
-        body: JSON.stringify(personaConfig),
+        body: JSON.stringify({ personaConfig }),
       });
       const data: StartSessionResponse = await response.json();
       return data;
