@@ -9,5 +9,5 @@ export enum SignalMessageAction {
 export interface SignalMessage {
   actionType: SignalMessageAction;
   sessionId: string;
-  payload: object;
+  payload: object | string;
 }

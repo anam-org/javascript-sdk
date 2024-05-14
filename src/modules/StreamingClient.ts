@@ -208,7 +208,8 @@ export class StreamingClient {
           'StreamingClient - onSignalMessage: received ice candidate ',
           signalMessage.payload,
         );
-        const candidate = new RTCIceCandidate(signalMessage.payload);
+        const iceCandidateConfig = signalMessage.payload as RTCIceCandidateInit;
+        const candidate = new RTCIceCandidate(iceCandidateConfig);
         if (this.connectionReceivedAnswer) {
           await this.peerConnection.addIceCandidate(candidate);
         } else {
