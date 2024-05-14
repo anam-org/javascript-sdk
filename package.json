@@ -1,5 +1,5 @@
 {
-  "name": "@anam-ai/sdk",
+  "name": "@anam-ai/js-sdk",
   "version": "1.0.0",
   "description": "Client side javascript sdk for Anam AI",
   "author": "Anam AI",
