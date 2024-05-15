@@ -1,11 +1,11 @@
 import { DEFAULT_API_BASE_URL, DEFAULT_API_VERSION } from '../lib/constants';
 import {
-  ApiClientOptions,
+  CoreApiRestClientOptions,
   PersonaConfig,
   StartSessionResponse,
 } from '../types';
 
-export class ApiClient {
+export class CoreApiRestClient {
   protected baseUrl: string;
   protected apiVersion: string;
   protected apiKey: string | null;
@@ -14,7 +14,7 @@ export class ApiClient {
   constructor(
     sessionToken?: string,
     apiKey?: string,
-    options: ApiClientOptions = {},
+    options: CoreApiRestClientOptions = {},
   ) {
     if (!sessionToken && !apiKey) {
       throw new Error('Either sessionToken or apiKey must be provided');

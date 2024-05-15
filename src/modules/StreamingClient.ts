@@ -2,21 +2,27 @@ import {
   DEFAULT_ICE_SERVERS,
   PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE,
   PUBLIC_MESSAGE_ON_WEBRTC_FAILURE,
+  DEFAULT_ENGINE_BASE_URL,
 } from '../lib/constants';
 import { SignalMessage, SignalMessageAction } from '../types/signalling';
 import { ConnectionCallbacks, TextMessageEvent } from '../types/streaming';
 import { StreamingClientOptions } from '../types/streaming/StreamingClientOptions';
+import { EngineApiRestClient } from './EngineApiRestClient';
 import {
   SignallingClient,
   DEFATULT_OPTIONS as DEFAULT_SIGNALLING_OPTIONS,
 } from './SignallingClient';
 
 const DEFAULT_OPTIONS: StreamingClientOptions = {
+  engine: {
+    baseUrl: DEFAULT_ENGINE_BASE_URL,
+  },
   signalling: DEFAULT_SIGNALLING_OPTIONS,
 };
 
 export class StreamingClient {
   protected signallingClient: SignallingClient;
+  protected engineApiRestClient: EngineApiRestClient;
 
   protected onReceiveMessageCallback?: (messageEvent: TextMessageEvent) => void;
   protected onConnectionEstablishedCallback?: () => void;
@@ -49,6 +55,11 @@ export class StreamingClient {
       this.onSignalMessage.bind(this),
       this.onSignallingClientConnected.bind(this),
       this.onSignallingClientFailed.bind(this),
+    );
+    // initialize engine API client
+    this.engineApiRestClient = new EngineApiRestClient(
+      options.engine.baseUrl,
+      sessionId,
     );
   }
 
@@ -133,6 +144,17 @@ export class StreamingClient {
   public stopConnection() {
     console.log('StreamingClient - stopConnection: stopping connection');
     this.shutdown();
+  }
+
+  public async sendTalkCommand(content: string): Promise<void> {
+    if (!this.peerConnection) {
+      throw new Error(
+        'StreamingClient - sendTalkCommand: peer connection is null',
+      );
+    }
+    console.log('StreamingClient - sendTalkCommand: sending talk command');
+    await this.engineApiRestClient.sendTalkCommand(content);
+    return;
   }
 
   private setConnectionCallbacks({

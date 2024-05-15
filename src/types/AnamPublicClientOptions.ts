@@ -1,5 +1,5 @@
-import { ApiClientOptions } from '../types';
+import { CoreApiRestClientOptions } from '../types';
 
 export interface AnamPublicClientOptions {
-  api?: ApiClientOptions;
+  api?: CoreApiRestClientOptions;
 }

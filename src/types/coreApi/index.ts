@@ -1,4 +1,4 @@
-export type { ApiClientOptions } from './ApiClientOptions';
+export type { CoreApiRestClientOptions } from './CoreApiRestClientOptions';
 export type {
   StartSessionResponse,
   ClientConfigResponse,

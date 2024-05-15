@@ -1,5 +1,5 @@
 import { DEFAULT_PERSONA_CONFIG } from './lib/constants';
-import { ApiClient } from './modules/ApiClient';
+import { CoreApiRestClient } from './modules/CoreApiRestClient';
 import { StreamingClient } from './modules/StreamingClient';
 import {
   ConnectionCallbacks,
@@ -15,7 +15,7 @@ export default class AnamClient {
   private sessionId: string | null = null;
 
   private streamingClient: StreamingClient | null = null;
-  private apiClient: ApiClient;
+  private apiClient: CoreApiRestClient;
   private _isStreaming = false;
 
   constructor(sessionToken?: string, options: AnamClientOptions = {}) {
@@ -25,7 +25,11 @@ export default class AnamClient {
     this.sessionToken = sessionToken;
     this.apiKey = options.apiKey;
 
-    this.apiClient = new ApiClient(sessionToken, options.apiKey, options.api);
+    this.apiClient = new CoreApiRestClient(
+      sessionToken,
+      options.apiKey,
+      options.api,
+    );
   }
 
   public async startSession(personaConfig?: PersonaConfig): Promise<string> {
@@ -44,6 +48,9 @@ export default class AnamClient {
         clientConfig;
       // create a new streaming client
       this.streamingClient = new StreamingClient(sessionId, {
+        engine: {
+          baseUrl: `${engineProtocol}://${engineHost}`,
+        },
         signalling: {
           heartbeatIntervalSeconds,
           maxWsReconnectionAttempts,
@@ -123,6 +130,22 @@ export default class AnamClient {
       audioElementId,
     );
     this.streamingClient.startConnection(callbacks);
+  }
+
+  public async talk(content: string): Promise<void> {
+    if (!this.streamingClient) {
+      throw new Error(
+        'Failed to send talk command: session is not started. Have you called startSession?',
+      );
+    }
+    if (!this._isStreaming) {
+      throw new Error(
+        'Failed to send talk command: not currently streaming. Have you called stream?',
+      );
+    }
+    const response = await this.streamingClient.sendTalkCommand(content);
+    console.log('Talk response:', JSON.stringify(response));
+    return;
   }
 
   public sendDataMessage(message: string): void {
