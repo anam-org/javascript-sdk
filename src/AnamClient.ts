@@ -64,7 +64,6 @@ export default class AnamClient {
       this.sessionId = sessionId;
       return sessionId;
     } catch (error) {
-      console.error(error); // TODO: remove from package
       throw new Error('Failed to start session');
     }
   }
@@ -143,8 +142,7 @@ export default class AnamClient {
         'Failed to send talk command: not currently streaming. Have you called stream?',
       );
     }
-    const response = await this.streamingClient.sendTalkCommand(content);
-    console.log('Talk response:', JSON.stringify(response));
+    await this.streamingClient.sendTalkCommand(content);
     return;
   }
 
@@ -159,10 +157,7 @@ export default class AnamClient {
   public async stopStreaming(): Promise<void> {
     if (this.streamingClient) {
       this.streamingClient.stopConnection();
-      console.log('Streaming stopped.');
       this._isStreaming = false;
-    } else {
-      console.warn('No streams running to stop.');
     }
   }
 

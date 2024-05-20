@@ -92,7 +92,6 @@ export class StreamingClient {
   }
 
   public sendDataMessage(message: string) {
-    console.log('StreamingClient - sendDataMessage: sending message', message);
     if (this.dataChannel && this.dataChannel.readyState === 'open') {
       this.dataChannel.send(message);
     }
@@ -124,7 +123,6 @@ export class StreamingClient {
   }
 
   public startConnection(callbacks: ConnectionCallbacks) {
-    console.log('StreamingClient - startConnection: starting connection');
     try {
       if (this.peerConnection) {
         console.error(
@@ -142,7 +140,6 @@ export class StreamingClient {
   }
 
   public stopConnection() {
-    console.log('StreamingClient - stopConnection: stopping connection');
     this.shutdown();
   }
 
@@ -152,7 +149,6 @@ export class StreamingClient {
         'StreamingClient - sendTalkCommand: peer connection is null',
       );
     }
-    console.log('StreamingClient - sendTalkCommand: sending talk command');
     await this.engineApiRestClient.sendTalkCommand(content);
     return;
   }
@@ -221,10 +217,6 @@ export class StreamingClient {
     }
     switch (signalMessage.actionType) {
       case SignalMessageAction.ANSWER:
-        console.log(
-          'StreamingClient - onSignalMessage: received answer ',
-          signalMessage.payload,
-        );
         const answer = signalMessage.payload as RTCSessionDescriptionInit;
         await this.peerConnection.setRemoteDescription(answer);
         this.connectionReceivedAnswer = true;
@@ -232,10 +224,6 @@ export class StreamingClient {
         this.flushRemoteIceCandidateBuffer();
         break;
       case SignalMessageAction.ICE_CANDIDATE:
-        console.log(
-          'StreamingClient - onSignalMessage: received ice candidate ',
-          signalMessage.payload,
-        );
         const iceCandidateConfig = signalMessage.payload as RTCIceCandidateInit;
         const candidate = new RTCIceCandidate(iceCandidateConfig);
         if (this.connectionReceivedAnswer) {
@@ -245,7 +233,6 @@ export class StreamingClient {
         }
         break;
       case SignalMessageAction.END_SESSION:
-        console.log('StreamingClient - onSignalMessage: received end session');
         const reason = signalMessage.payload as string;
         if (this.onConnectionClosedCallback) {
           this.onConnectionClosedCallback(reason);
@@ -262,11 +249,7 @@ export class StreamingClient {
   }
 
   private async onSignallingClientConnected() {
-    console.log(
-      'StreamingClient - onSignallingClientConnected: signalling client connected',
-    );
     if (!this.peerConnection) {
-      // TODO: THIS COULD BE ERROR PRONE - the old code in client has an error here
       try {
         await this.initPeerConnectionAndSendOffer();
       } catch (err) {
@@ -308,15 +291,11 @@ export class StreamingClient {
     }
   }
 
-  // TODO: should be able to use the connection ref from the function rather than the class variable
   private onIceConnectionStateChange() {
     if (
       this.peerConnection?.iceConnectionState === 'connected' ||
       this.peerConnection?.iceConnectionState === 'completed'
     ) {
-      console.log(
-        'StreamingClient - onIceConnectionStateChange: ICE Connection State is connected',
-      );
       if (this.onConnectionEstablishedCallback) {
         this.onConnectionEstablishedCallback();
       }
@@ -324,10 +303,6 @@ export class StreamingClient {
   }
 
   private onConnectionStateChange() {
-    console.log(
-      'StreamingClient - onConnectionStateChange: Connection State is ',
-      this.peerConnection?.connectionState,
-    );
     if (this.peerConnection?.connectionState === 'closed') {
       console.error(
         'StreamingClient - onConnectionStateChange: Connection closed',
@@ -354,10 +329,6 @@ export class StreamingClient {
   }
 
   private onTrackEventHandler(event: RTCTrackEvent) {
-    console.log(
-      'StreamingClient - onTrackEventHandler: received track event',
-      event,
-    );
     if (event.track.kind === 'video') {
       this.videoStream = event.streams[0];
       if (this.onVideoStreamStartCallback) {
@@ -374,7 +345,6 @@ export class StreamingClient {
         });
       }
     } else if (event.track.kind === 'audio') {
-      // TODO: this check is not in the original code
       this.audioStream = event.streams[0];
       if (this.onAudioStreamStartCallback) {
         this.onAudioStreamStartCallback(this.audioStream);
@@ -407,14 +377,6 @@ export class StreamingClient {
     this.inputAudioStream = audioStream;
     const audioTrack = audioStream.getAudioTracks()[0];
     this.peerConnection.addTrack(audioTrack, audioStream);
-    console.log(
-      'StreamingClient - setupDataChannels: audio track added: ' +
-        audioTrack.readyState,
-    ); // Should log "live"
-    console.log(
-      'StreamingClient - setupDataChannels: echo canellation: ' +
-        audioTrack.getCapabilities().echoCancellation,
-    );
     // pass the stream to the callback if it exists
     if (this.onInputAudioStreamStartCallback) {
       this.onInputAudioStreamStartCallback(audioStream);
@@ -434,7 +396,6 @@ export class StreamingClient {
     };
     dataChannel.onclose = () => {
       // TODO: should we set the data channel to null here?
-      console.log('StreamingClient - setupDataChannels: data channel closed');
     };
     // pass test messages to the callback
     dataChannel.onmessage = (event) => {
@@ -469,7 +430,6 @@ export class StreamingClient {
   }
 
   private shutdown() {
-    console.log('StreamingClient - shutdown: shutting down');
     try {
       if (this.inputAudioStream) {
         this.inputAudioStream.getTracks().forEach((track) => {
@@ -498,7 +458,6 @@ export class StreamingClient {
       ) {
         this.peerConnection.onconnectionstatechange = null;
         this.peerConnection.close();
-        console.log('StreamingClient - shutdown: peer connection closed');
         this.peerConnection = null;
       }
     } catch (error) {

@@ -58,7 +58,6 @@ export class SignallingClient {
       this.onClientConnectionFailureCallback =
         onClientConnectionFailureCallback;
     }
-    console.log('SignallingClient: options', options);
     const { heartbeatIntervalSeconds, maxWsReconnectionAttempts, url } =
       options;
 
@@ -80,12 +79,10 @@ export class SignallingClient {
     }
     this.url.pathname = url.signallingPath ?? '/ws';
     this.url.searchParams.append('session_id', sessionId);
-    console.log(`SignallingClient created with url: ${this.url.href}`); // TODO: remove comment
   }
 
   public stop() {
     this.stopSignal = true;
-    console.log('Stopping signalling');
     this.closeSocket();
   }
 
@@ -107,10 +104,6 @@ export class SignallingClient {
       sessionId: this.sessionId,
       payload: offerMessagePayload,
     };
-    console.log(
-      'SignallingClient - sendOffer: sending offer message',
-      offerMessage,
-    );
     this.sendSignalMessage(offerMessage);
   }
 
@@ -126,7 +119,6 @@ export class SignallingClient {
   private sendSignalMessage(message: SignalMessage) {
     if (this.socket?.readyState === WebSocket.OPEN) {
       try {
-        console.log('SignallingClient - sendSignalMessage: sending message');
         this.socket.send(JSON.stringify(message));
       } catch (error) {
         console.error(
@@ -135,9 +127,6 @@ export class SignallingClient {
         );
       }
     } else {
-      console.log(
-        'SignallingClient - sendSignalMessage: Websocket not open, buffering msg',
-      );
       this.sendingBuffer.push(message);
     }
   }
@@ -145,11 +134,11 @@ export class SignallingClient {
   private closeSocket() {
     if (this.socket) {
       this.socket.close();
-      this.socket = null; // TODO: do we need this?
+      this.socket = null;
     }
     if (this.heartBeatIntervalRef) {
       clearInterval(this.heartBeatIntervalRef);
-      this.heartBeatIntervalRef = null; // TODO: do we need this?
+      this.heartBeatIntervalRef = null;
     }
   }
 
@@ -157,9 +146,6 @@ export class SignallingClient {
     if (!this.socket) {
       throw new Error('SignallingClient - onOpen: socket is null');
     }
-    console.log(
-      `SignallingClient - onOpen: connection opened to ${this.url.href}`,
-    );
     try {
       this.wsConnectionAttempts = 0;
       this.flushSendingBuffer();
@@ -177,22 +163,16 @@ export class SignallingClient {
   }
 
   private async onClose() {
-    console.log('SignallingClient - onClose: connection closed');
     this.wsConnectionAttempts += 1;
     if (this.stopSignal) {
-      console.log('SignallingClient - onClose: already in stopped state');
       return;
     }
     if (this.wsConnectionAttempts <= this.maxWsReconnectionAttempts) {
       this.socket = null;
       setTimeout(() => {
-        console.log('SignallingClient - onClose: reconnecting');
         this.connect();
       }, 100 * this.wsConnectionAttempts);
     } else {
-      console.log(
-        'SignallingClient - onClose: max reconnection attempts reached',
-      );
       if (this.heartBeatIntervalRef) {
         clearInterval(this.heartBeatIntervalRef);
         this.heartBeatIntervalRef = null;
@@ -213,12 +193,10 @@ export class SignallingClient {
   private flushSendingBuffer() {
     const newBuffer: SignalMessage[] = [];
     if (this.sendingBuffer.length > 0) {
-      console.log('Flushing sending buffer');
       this.sendingBuffer.forEach((message: SignalMessage) => {
         if (this.socket?.readyState === WebSocket.OPEN) {
           this.socket.send(JSON.stringify(message));
         } else {
-          console.log('Websocket not open, buffering msg');
           newBuffer.push(message);
         }
       });
@@ -228,7 +206,6 @@ export class SignallingClient {
 
   private async onMessage(event: MessageEvent) {
     const message = JSON.parse(event.data);
-    console.log('SignallingClient: received message', message);
     if (this.onSignalMessageReceivedCallback) {
       await this.onSignalMessageReceivedCallback(message);
     }
@@ -259,8 +236,6 @@ export class SignallingClient {
       }
       if (this.socket?.readyState === WebSocket.OPEN) {
         this.socket.send(heartbeatMessageJson);
-      } else {
-        console.log('Websocket not open. Missing one heartbeat.');
       }
     }, heartbeatInterval);
   }

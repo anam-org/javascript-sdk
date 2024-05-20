@@ -43,7 +43,6 @@ export class CoreApiRestClient {
       const data: StartSessionResponse = await response.json();
       return data;
     } catch (error) {
-      console.error(error); // TODO: remove from package
       throw new Error('Failed to start session');
     }
   }
@@ -66,7 +65,6 @@ export class CoreApiRestClient {
       const data = await response.json();
       return data.sessionToken;
     } catch (e) {
-      console.error(e); // TODO: remove from package
       throw new Error('Failed to get session token');
     }
   }
