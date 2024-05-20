@@ -18,11 +18,13 @@ const DEFAULT_OPTIONS: StreamingClientOptions = {
     baseUrl: DEFAULT_ENGINE_BASE_URL,
   },
   signalling: DEFAULT_SIGNALLING_OPTIONS,
+  iceServers: DEFAULT_ICE_SERVERS,
 };
 
 export class StreamingClient {
   protected signallingClient: SignallingClient;
   protected engineApiRestClient: EngineApiRestClient;
+  protected iceServers: RTCIceServer[] = DEFAULT_ICE_SERVERS;
 
   protected onReceiveMessageCallback?: (messageEvent: TextMessageEvent) => void;
   protected onConnectionEstablishedCallback?: () => void;
@@ -48,6 +50,8 @@ export class StreamingClient {
     sessionId: string,
     options: StreamingClientOptions = DEFAULT_OPTIONS,
   ) {
+    // set ice servers
+    this.iceServers = options.iceServers || DEFAULT_ICE_SERVERS;
     // initialize signalling client
     this.signallingClient = new SignallingClient(
       sessionId,
@@ -186,8 +190,12 @@ export class StreamingClient {
   }
 
   private async initPeerConnection() {
+    console.log(
+      'StreamingClient - initPeerConnection: Starting new connection with ice servers: ',
+      this.iceServers,
+    );
     this.peerConnection = new RTCPeerConnection({
-      iceServers: DEFAULT_ICE_SERVERS,
+      iceServers: this.iceServers,
     });
     // set event handlers
     this.peerConnection.onicecandidate = this.onIceCandidate.bind(this);

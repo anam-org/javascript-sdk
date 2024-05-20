@@ -5,7 +5,6 @@ export class EngineApiRestClient {
   constructor(baseUrl: string, sessionId: string) {
     this.baseUrl = baseUrl;
     this.sessionId = sessionId;
-    console.log('EngineApiRestClient: baseUrl', baseUrl);
   }
 
   public async sendTalkCommand(content: string): Promise<void> {
@@ -27,7 +26,6 @@ export class EngineApiRestClient {
           `Failed to send talk command: ${response.status} ${response.statusText}`,
         );
       }
-      console.log('EngineApiRestClient - sendTalkCommand: response', response);
     } catch (error) {
       console.error(error);
       throw new Error(

@@ -44,8 +44,11 @@ export default class AnamClient {
         engineProtocol,
         signallingEndpoint,
       } = response;
-      const { heartbeatIntervalSeconds, maxWsReconnectionAttempts } =
-        clientConfig;
+      const {
+        heartbeatIntervalSeconds,
+        maxWsReconnectionAttempts,
+        iceServers,
+      } = clientConfig;
       // create a new streaming client
       this.streamingClient = new StreamingClient(sessionId, {
         engine: {
@@ -60,6 +63,7 @@ export default class AnamClient {
             signallingPath: signallingEndpoint,
           },
         },
+        iceServers,
       });
       this.sessionId = sessionId;
       return sessionId;

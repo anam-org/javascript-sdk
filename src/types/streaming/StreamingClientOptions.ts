@@ -4,4 +4,5 @@ import { EngineApiRestClientOptions } from '../engineApi/EngineApiRestClientOpti
 export interface StreamingClientOptions {
   engine: EngineApiRestClientOptions;
   signalling: SignallingClientOptions;
+  iceServers?: RTCIceServer[];
 }
