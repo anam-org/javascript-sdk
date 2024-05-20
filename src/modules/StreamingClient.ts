@@ -190,10 +190,6 @@ export class StreamingClient {
   }
 
   private async initPeerConnection() {
-    console.log(
-      'StreamingClient - initPeerConnection: Starting new connection with ice servers: ',
-      this.iceServers,
-    );
     this.peerConnection = new RTCPeerConnection({
       iceServers: this.iceServers,
     });
