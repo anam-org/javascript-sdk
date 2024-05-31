@@ -117,11 +117,18 @@ export default class AnamClient {
     videoElementId: string,
     audioElementId: string,
     callbacks: ConnectionCallbacks = {},
+    personaConfig?: PersonaConfig,
   ): Promise<void> {
     if (!this.sessionId || !this.streamingClient) {
-      throw new Error(
-        'Failed to start stream: session is not started. Have you called startSession?',
+      console.warn(
+        'StreamToVideoAndAudioElements: session is not started. starting a new session',
       );
+      await this.startSession(personaConfig);
+      if (!this.sessionId || !this.streamingClient) {
+        throw new Error(
+          'StreamToVideoAndAudioElements: Failed to start session',
+        );
+      }
     }
     if (this._isStreaming) {
       throw new Error('Already streaming');
