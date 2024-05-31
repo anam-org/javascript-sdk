@@ -123,10 +123,16 @@ export default class AnamClient {
       console.warn(
         'StreamToVideoAndAudioElements: session is not started. starting a new session',
       );
-      await this.startSession(personaConfig);
-      if (!this.sessionId || !this.streamingClient) {
+      try {
+        await this.startSession(personaConfig);
+      } catch (error) {
         throw new Error(
           'StreamToVideoAndAudioElements: Failed to start session',
+        );
+      }
+      if (!this.sessionId || !this.streamingClient) {
+        throw new Error(
+          'StreamToVideoAndAudioElements: session Id or streaming client is not available after starting session',
         );
       }
     }
