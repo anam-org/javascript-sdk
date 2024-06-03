@@ -174,6 +174,8 @@ export default class AnamClient {
   public async stopStreaming(): Promise<void> {
     if (this.streamingClient) {
       this.streamingClient.stopConnection();
+      this.streamingClient = null;
+      this.sessionId = null;
       this._isStreaming = false;
     }
   }
