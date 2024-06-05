@@ -26,4 +26,5 @@ export const DEFAULT_ICE_SERVERS = [
 // Persona
 export const DEFAULT_PERSONA_CONFIG: PersonaConfig = {
   personaName: 'eva',
+  disableBrains: false,
 };
