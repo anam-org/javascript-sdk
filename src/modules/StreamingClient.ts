@@ -65,6 +65,9 @@ export class StreamingClient {
       options.engine.baseUrl,
       sessionId,
     );
+    if (options.userProvidedMediaStream) {
+      this.inputAudioStream = options.userProvidedMediaStream;
+    }
   }
 
   public getPeerConnection(): RTCPeerConnection | null {
@@ -371,19 +374,28 @@ export class StreamingClient {
     /**
      * Audio
      *
-     * Capture the audio stream from the user's microphone and send it to the peer connection
+     * If the user hasn't provided an audio stream, capture the audio stream from the user's microphone and send it to the peer connection
      */
-    const audioStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-      },
-    });
-    this.inputAudioStream = audioStream;
-    const audioTrack = audioStream.getAudioTracks()[0];
-    this.peerConnection.addTrack(audioTrack, audioStream);
+    if (this.inputAudioStream) {
+      // verify the user provided stream has audio tracks
+      if (!this.inputAudioStream.getAudioTracks().length) {
+        throw new Error(
+          'StreamingClient - setupDataChannels: user provided stream does not have audio tracks',
+        );
+      }
+    } else {
+      this.inputAudioStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+        },
+      });
+    }
+
+    const audioTrack = this.inputAudioStream.getAudioTracks()[0];
+    this.peerConnection.addTrack(audioTrack, this.inputAudioStream);
     // pass the stream to the callback if it exists
     if (this.onInputAudioStreamStartCallback) {
-      this.onInputAudioStreamStartCallback(audioStream);
+      this.onInputAudioStreamStartCallback(this.inputAudioStream);
     }
 
     /**
