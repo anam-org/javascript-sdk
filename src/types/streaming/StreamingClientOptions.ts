@@ -5,4 +5,5 @@ export interface StreamingClientOptions {
   engine: EngineApiRestClientOptions;
   signalling: SignallingClientOptions;
   iceServers?: RTCIceServer[];
+  userProvidedMediaStream?: MediaStream;
 }
