@@ -32,7 +32,10 @@ export default class AnamClient {
     );
   }
 
-  public async startSession(personaConfig?: PersonaConfig): Promise<string> {
+  public async startSession(
+    personaConfig?: PersonaConfig,
+    userProvidedAudioStream?: MediaStream,
+  ): Promise<string> {
     try {
       const config = personaConfig || DEFAULT_PERSONA_CONFIG;
       const response: StartSessionResponse =
@@ -64,6 +67,7 @@ export default class AnamClient {
           },
         },
         iceServers,
+        userProvidedMediaStream: userProvidedAudioStream,
       });
       this.sessionId = sessionId;
       return sessionId;
@@ -74,12 +78,10 @@ export default class AnamClient {
 
   public async stream(
     callbacks: ConnectionCallbacks = {},
+    personaConfig?: PersonaConfig,
+    userProvidedAudioStream?: MediaStream,
   ): Promise<MediaStream[]> {
-    if (!this.sessionId || !this.streamingClient) {
-      throw new Error(
-        'Failed to start stream: session is not started. Have you called startSession?',
-      );
-    }
+    await this.startSessionIfNeeded(personaConfig, userProvidedAudioStream);
     if (this._isStreaming) {
       throw new Error('Already streaming');
     }
@@ -118,13 +120,34 @@ export default class AnamClient {
     audioElementId: string,
     callbacks: ConnectionCallbacks = {},
     personaConfig?: PersonaConfig,
+    userProvidedMediaStream?: MediaStream,
   ): Promise<void> {
+    await this.startSessionIfNeeded(personaConfig, userProvidedMediaStream);
+    if (this._isStreaming) {
+      throw new Error('Already streaming');
+    }
+    this._isStreaming = true;
+    if (!this.streamingClient) {
+      throw new Error('Failed to stream: streaming client is not available');
+    }
+
+    this.streamingClient.setMediaStreamTargetsById(
+      videoElementId,
+      audioElementId,
+    );
+    this.streamingClient.startConnection(callbacks);
+  }
+
+  private async startSessionIfNeeded(
+    personaConfig: PersonaConfig | undefined,
+    userProvidedMediaStream?: MediaStream,
+  ) {
     if (!this.sessionId || !this.streamingClient) {
       console.warn(
         'StreamToVideoAndAudioElements: session is not started. starting a new session',
       );
       try {
-        await this.startSession(personaConfig);
+        await this.startSession(personaConfig, userProvidedMediaStream);
       } catch (error) {
         throw new Error(
           'StreamToVideoAndAudioElements: Failed to start session',
@@ -136,16 +159,6 @@ export default class AnamClient {
         );
       }
     }
-    if (this._isStreaming) {
-      throw new Error('Already streaming');
-    }
-    this._isStreaming = true;
-
-    this.streamingClient.setMediaStreamTargetsById(
-      videoElementId,
-      audioElementId,
-    );
-    this.streamingClient.startConnection(callbacks);
   }
 
   public async talk(content: string): Promise<void> {
