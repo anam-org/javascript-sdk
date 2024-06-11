@@ -1,6 +1,6 @@
 {
   "name": "@anam-ai/js-sdk",
-  "version": "1.0.0-alpha.9",
+  "version": "0.0.0-automated",
   "description": "Client side javascript sdk for Anam AI",
   "author": "Anam AI",
   "main": "dist/main/index.js",
