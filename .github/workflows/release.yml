@@ -6,26 +6,24 @@ on:
       - main
       - rc
       - alpha
-  workflow_dispatch:
 
 jobs:
   release:
-    name: Release / Node ${{ matrix.node }}
-    strategy:
-      matrix:
-        node: ['20']
-
+    name: Release
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Set up Node
-        uses: actions/setup-node@v2
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version: 20
 
-      - run: |
+      - name: Install and Build
+        run: |
           npm ci
           npm run build
 
