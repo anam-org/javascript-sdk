@@ -1,3 +1,5 @@
 export interface PersonaConfig {
-  personaName: string;
+  personaId: string;
+  disableBrains?: boolean;
+  disableFillerPhrases?: boolean;
 }

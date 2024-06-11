@@ -1,4 +1,3 @@
-import { DEFAULT_PERSONA_CONFIG } from './lib/constants';
 import { CoreApiRestClient } from './modules/CoreApiRestClient';
 import { StreamingClient } from './modules/StreamingClient';
 import {
@@ -12,29 +11,42 @@ export default class AnamClient {
   protected sessionToken: string | undefined;
   protected apiKey: string | undefined;
 
+  private personaConfig: PersonaConfig | undefined;
   private sessionId: string | null = null;
-
   private streamingClient: StreamingClient | null = null;
   private apiClient: CoreApiRestClient;
   private _isStreaming = false;
 
-  constructor(sessionToken?: string, options: AnamClientOptions = {}) {
-    if (!sessionToken && !options.apiKey) {
+  constructor(
+    sessionToken: string | undefined,
+    personaConfig: PersonaConfig,
+    options?: AnamClientOptions,
+  ) {
+    if (!sessionToken && !options?.apiKey) {
       throw new Error('Either sessionToken or apiKey must be provided');
     }
     this.sessionToken = sessionToken;
-    this.apiKey = options.apiKey;
+    this.apiKey = options?.apiKey;
+    this.personaConfig = personaConfig;
 
     this.apiClient = new CoreApiRestClient(
       sessionToken,
-      options.apiKey,
-      options.api,
+      options?.apiKey,
+      options?.api,
     );
   }
 
-  public async startSession(personaConfig?: PersonaConfig): Promise<string> {
+  private async startSession(
+    personaConfig?: PersonaConfig,
+    userProvidedAudioStream?: MediaStream,
+  ): Promise<string> {
     try {
-      const config = personaConfig || DEFAULT_PERSONA_CONFIG;
+      const config = personaConfig || this.personaConfig;
+      if (!config) {
+        throw new Error(
+          'A default persona configuration has not been set and no persona configuration was provided',
+        );
+      }
       const response: StartSessionResponse =
         await this.apiClient.startSession(config);
       const {
@@ -64,6 +76,7 @@ export default class AnamClient {
           },
         },
         iceServers,
+        userProvidedMediaStream: userProvidedAudioStream,
       });
       this.sessionId = sessionId;
       return sessionId;
@@ -72,14 +85,35 @@ export default class AnamClient {
     }
   }
 
+  private async startSessionIfNeeded(
+    personaConfig: PersonaConfig | undefined,
+    userProvidedMediaStream?: MediaStream,
+  ) {
+    if (!this.sessionId || !this.streamingClient) {
+      console.warn(
+        'StreamToVideoAndAudioElements: session is not started. starting a new session',
+      );
+      try {
+        await this.startSession(personaConfig, userProvidedMediaStream);
+      } catch (error) {
+        throw new Error(
+          'StreamToVideoAndAudioElements: Failed to start session',
+        );
+      }
+      if (!this.sessionId || !this.streamingClient) {
+        throw new Error(
+          'StreamToVideoAndAudioElements: session Id or streaming client is not available after starting session',
+        );
+      }
+    }
+  }
+
   public async stream(
     callbacks: ConnectionCallbacks = {},
+    personaConfig?: PersonaConfig,
+    userProvidedAudioStream?: MediaStream,
   ): Promise<MediaStream[]> {
-    if (!this.sessionId || !this.streamingClient) {
-      throw new Error(
-        'Failed to start stream: session is not started. Have you called startSession?',
-      );
-    }
+    await this.startSessionIfNeeded(personaConfig, userProvidedAudioStream);
     if (this._isStreaming) {
       throw new Error('Already streaming');
     }
@@ -117,16 +151,17 @@ export default class AnamClient {
     videoElementId: string,
     audioElementId: string,
     callbacks: ConnectionCallbacks = {},
+    personaConfig?: PersonaConfig,
+    userProvidedMediaStream?: MediaStream,
   ): Promise<void> {
-    if (!this.sessionId || !this.streamingClient) {
-      throw new Error(
-        'Failed to start stream: session is not started. Have you called startSession?',
-      );
-    }
+    await this.startSessionIfNeeded(personaConfig, userProvidedMediaStream);
     if (this._isStreaming) {
       throw new Error('Already streaming');
     }
     this._isStreaming = true;
+    if (!this.streamingClient) {
+      throw new Error('Failed to stream: streaming client is not available');
+    }
 
     this.streamingClient.setMediaStreamTargetsById(
       videoElementId,
@@ -161,11 +196,21 @@ export default class AnamClient {
   public async stopStreaming(): Promise<void> {
     if (this.streamingClient) {
       this.streamingClient.stopConnection();
+      this.streamingClient = null;
+      this.sessionId = null;
       this._isStreaming = false;
     }
   }
 
   public isStreaming(): boolean {
     return this._isStreaming;
+  }
+
+  public setPersonaConfig(personaConfig: PersonaConfig): void {
+    this.personaConfig = personaConfig;
+  }
+
+  public getPersonaConfig(): PersonaConfig | undefined {
+    return this.personaConfig;
   }
 }

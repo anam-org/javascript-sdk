@@ -1,5 +1,3 @@
-import { PersonaConfig } from '../types';
-
 // Core API
 export const DEFAULT_HEADERS = {
   'Content-Type': 'application/json',
@@ -22,8 +20,3 @@ export const DEFAULT_ICE_SERVERS = [
     urls: 'stun:stun.relay.metered.ca:80',
   },
 ];
-
-// Persona
-export const DEFAULT_PERSONA_CONFIG: PersonaConfig = {
-  personaName: 'eva',
-};
