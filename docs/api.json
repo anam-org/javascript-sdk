@@ -1,0 +1,1756 @@
+{
+  "id": 0,
+  "name": "Anam AI JavaScript SDK",
+  "variant": "project",
+  "kind": 1,
+  "flags": {},
+  "children": [
+    {
+      "id": 11,
+      "name": "AnamClient",
+      "variant": "declaration",
+      "kind": 128,
+      "flags": {},
+      "children": [
+        {
+          "id": 12,
+          "name": "constructor",
+          "variant": "declaration",
+          "kind": 512,
+          "flags": {},
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 20,
+              "character": 2,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L20"
+            }
+          ],
+          "signatures": [
+            {
+              "id": 13,
+              "name": "new AnamClient",
+              "variant": "signature",
+              "kind": 16384,
+              "flags": {},
+              "sources": [
+                {
+                  "fileName": "AnamClient.ts",
+                  "line": 20,
+                  "character": 2,
+                  "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L20"
+                }
+              ],
+              "parameters": [
+                {
+                  "id": 14,
+                  "name": "sessionToken",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {},
+                  "type": {
+                    "type": "union",
+                    "types": [
+                      {
+                        "type": "intrinsic",
+                        "name": "undefined"
+                      },
+                      {
+                        "type": "intrinsic",
+                        "name": "string"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": 15,
+                  "name": "personaConfig",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {},
+                  "type": {
+                    "type": "reference",
+                    "target": 59,
+                    "name": "PersonaConfig",
+                    "package": "@anam-ai/js-sdk"
+                  }
+                },
+                {
+                  "id": 16,
+                  "name": "options",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {
+                    "isOptional": true
+                  },
+                  "type": {
+                    "type": "reference",
+                    "target": {
+                      "sourceFileName": "src/types/AnamClientOptions.ts",
+                      "qualifiedName": "AnamClientOptions"
+                    },
+                    "name": "AnamClientOptions",
+                    "package": "@anam-ai/js-sdk"
+                  }
+                }
+              ],
+              "type": {
+                "type": "reference",
+                "target": 11,
+                "name": "default",
+                "package": "@anam-ai/js-sdk"
+              }
+            }
+          ]
+        },
+        {
+          "id": 23,
+          "name": "_isStreaming",
+          "variant": "declaration",
+          "kind": 1024,
+          "flags": {
+            "isPrivate": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 18,
+              "character": 10,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L18"
+            }
+          ],
+          "type": {
+            "type": "intrinsic",
+            "name": "boolean"
+          },
+          "defaultValue": "false"
+        },
+        {
+          "id": 22,
+          "name": "apiClient",
+          "variant": "declaration",
+          "kind": 1024,
+          "flags": {
+            "isPrivate": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 17,
+              "character": 10,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L17"
+            }
+          ],
+          "type": {
+            "type": "reference",
+            "target": {
+              "sourceFileName": "src/modules/CoreApiRestClient.ts",
+              "qualifiedName": "CoreApiRestClient"
+            },
+            "name": "CoreApiRestClient",
+            "package": "@anam-ai/js-sdk"
+          }
+        },
+        {
+          "id": 18,
+          "name": "apiKey",
+          "variant": "declaration",
+          "kind": 1024,
+          "flags": {
+            "isProtected": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 12,
+              "character": 12,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L12"
+            }
+          ],
+          "type": {
+            "type": "union",
+            "types": [
+              {
+                "type": "intrinsic",
+                "name": "undefined"
+              },
+              {
+                "type": "intrinsic",
+                "name": "string"
+              }
+            ]
+          }
+        },
+        {
+          "id": 19,
+          "name": "personaConfig",
+          "variant": "declaration",
+          "kind": 1024,
+          "flags": {
+            "isPrivate": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 14,
+              "character": 10,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L14"
+            }
+          ],
+          "type": {
+            "type": "union",
+            "types": [
+              {
+                "type": "intrinsic",
+                "name": "undefined"
+              },
+              {
+                "type": "reference",
+                "target": 59,
+                "name": "PersonaConfig",
+                "package": "@anam-ai/js-sdk"
+              }
+            ]
+          }
+        },
+        {
+          "id": 20,
+          "name": "sessionId",
+          "variant": "declaration",
+          "kind": 1024,
+          "flags": {
+            "isPrivate": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 15,
+              "character": 10,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L15"
+            }
+          ],
+          "type": {
+            "type": "union",
+            "types": [
+              {
+                "type": "literal",
+                "value": null
+              },
+              {
+                "type": "intrinsic",
+                "name": "string"
+              }
+            ]
+          },
+          "defaultValue": "null"
+        },
+        {
+          "id": 17,
+          "name": "sessionToken",
+          "variant": "declaration",
+          "kind": 1024,
+          "flags": {
+            "isProtected": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 11,
+              "character": 12,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L11"
+            }
+          ],
+          "type": {
+            "type": "union",
+            "types": [
+              {
+                "type": "intrinsic",
+                "name": "undefined"
+              },
+              {
+                "type": "intrinsic",
+                "name": "string"
+              }
+            ]
+          }
+        },
+        {
+          "id": 21,
+          "name": "streamingClient",
+          "variant": "declaration",
+          "kind": 1024,
+          "flags": {
+            "isPrivate": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 16,
+              "character": 10,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L16"
+            }
+          ],
+          "type": {
+            "type": "union",
+            "types": [
+              {
+                "type": "literal",
+                "value": null
+              },
+              {
+                "type": "reference",
+                "target": {
+                  "sourceFileName": "src/modules/StreamingClient.ts",
+                  "qualifiedName": "StreamingClient"
+                },
+                "name": "StreamingClient",
+                "package": "@anam-ai/js-sdk"
+              }
+            ]
+          },
+          "defaultValue": "null"
+        },
+        {
+          "id": 57,
+          "name": "getPersonaConfig",
+          "variant": "declaration",
+          "kind": 2048,
+          "flags": {
+            "isPublic": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 213,
+              "character": 9,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L213"
+            }
+          ],
+          "signatures": [
+            {
+              "id": 58,
+              "name": "getPersonaConfig",
+              "variant": "signature",
+              "kind": 4096,
+              "flags": {},
+              "sources": [
+                {
+                  "fileName": "AnamClient.ts",
+                  "line": 213,
+                  "character": 9,
+                  "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L213"
+                }
+              ],
+              "type": {
+                "type": "union",
+                "types": [
+                  {
+                    "type": "intrinsic",
+                    "name": "undefined"
+                  },
+                  {
+                    "type": "reference",
+                    "target": 59,
+                    "name": "PersonaConfig",
+                    "package": "@anam-ai/js-sdk"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": 52,
+          "name": "isStreaming",
+          "variant": "declaration",
+          "kind": 2048,
+          "flags": {
+            "isPublic": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 205,
+              "character": 9,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L205"
+            }
+          ],
+          "signatures": [
+            {
+              "id": 53,
+              "name": "isStreaming",
+              "variant": "signature",
+              "kind": 4096,
+              "flags": {},
+              "sources": [
+                {
+                  "fileName": "AnamClient.ts",
+                  "line": 205,
+                  "character": 9,
+                  "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L205"
+                }
+              ],
+              "type": {
+                "type": "intrinsic",
+                "name": "boolean"
+              }
+            }
+          ]
+        },
+        {
+          "id": 47,
+          "name": "sendDataMessage",
+          "variant": "declaration",
+          "kind": 2048,
+          "flags": {
+            "isPublic": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 188,
+              "character": 9,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L188"
+            }
+          ],
+          "signatures": [
+            {
+              "id": 48,
+              "name": "sendDataMessage",
+              "variant": "signature",
+              "kind": 4096,
+              "flags": {},
+              "sources": [
+                {
+                  "fileName": "AnamClient.ts",
+                  "line": 188,
+                  "character": 9,
+                  "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L188"
+                }
+              ],
+              "parameters": [
+                {
+                  "id": 49,
+                  "name": "message",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {},
+                  "type": {
+                    "type": "intrinsic",
+                    "name": "string"
+                  }
+                }
+              ],
+              "type": {
+                "type": "intrinsic",
+                "name": "void"
+              }
+            }
+          ]
+        },
+        {
+          "id": 54,
+          "name": "setPersonaConfig",
+          "variant": "declaration",
+          "kind": 2048,
+          "flags": {
+            "isPublic": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 209,
+              "character": 9,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L209"
+            }
+          ],
+          "signatures": [
+            {
+              "id": 55,
+              "name": "setPersonaConfig",
+              "variant": "signature",
+              "kind": 4096,
+              "flags": {},
+              "sources": [
+                {
+                  "fileName": "AnamClient.ts",
+                  "line": 209,
+                  "character": 9,
+                  "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L209"
+                }
+              ],
+              "parameters": [
+                {
+                  "id": 56,
+                  "name": "personaConfig",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {},
+                  "type": {
+                    "type": "reference",
+                    "target": 59,
+                    "name": "PersonaConfig",
+                    "package": "@anam-ai/js-sdk"
+                  }
+                }
+              ],
+              "type": {
+                "type": "intrinsic",
+                "name": "void"
+              }
+            }
+          ]
+        },
+        {
+          "id": 24,
+          "name": "startSession",
+          "variant": "declaration",
+          "kind": 2048,
+          "flags": {
+            "isPrivate": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 39,
+              "character": 16,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L39"
+            }
+          ],
+          "signatures": [
+            {
+              "id": 25,
+              "name": "startSession",
+              "variant": "signature",
+              "kind": 4096,
+              "flags": {},
+              "sources": [
+                {
+                  "fileName": "AnamClient.ts",
+                  "line": 39,
+                  "character": 16,
+                  "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L39"
+                }
+              ],
+              "parameters": [
+                {
+                  "id": 26,
+                  "name": "personaConfig",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {
+                    "isOptional": true
+                  },
+                  "type": {
+                    "type": "reference",
+                    "target": 59,
+                    "name": "PersonaConfig",
+                    "package": "@anam-ai/js-sdk"
+                  }
+                },
+                {
+                  "id": 27,
+                  "name": "userProvidedAudioStream",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {
+                    "isOptional": true
+                  },
+                  "type": {
+                    "type": "reference",
+                    "target": {
+                      "sourceFileName": "node_modules/typescript/lib/lib.dom.d.ts",
+                      "qualifiedName": "MediaStream"
+                    },
+                    "name": "MediaStream",
+                    "package": "typescript"
+                  }
+                }
+              ],
+              "type": {
+                "type": "reference",
+                "target": {
+                  "sourceFileName": "node_modules/typescript/lib/lib.es5.d.ts",
+                  "qualifiedName": "Promise"
+                },
+                "typeArguments": [
+                  {
+                    "type": "intrinsic",
+                    "name": "string"
+                  }
+                ],
+                "name": "Promise",
+                "package": "typescript"
+              }
+            }
+          ]
+        },
+        {
+          "id": 28,
+          "name": "startSessionIfNeeded",
+          "variant": "declaration",
+          "kind": 2048,
+          "flags": {
+            "isPrivate": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 88,
+              "character": 16,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L88"
+            }
+          ],
+          "signatures": [
+            {
+              "id": 29,
+              "name": "startSessionIfNeeded",
+              "variant": "signature",
+              "kind": 4096,
+              "flags": {},
+              "sources": [
+                {
+                  "fileName": "AnamClient.ts",
+                  "line": 88,
+                  "character": 16,
+                  "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L88"
+                }
+              ],
+              "parameters": [
+                {
+                  "id": 30,
+                  "name": "personaConfig",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {},
+                  "type": {
+                    "type": "union",
+                    "types": [
+                      {
+                        "type": "intrinsic",
+                        "name": "undefined"
+                      },
+                      {
+                        "type": "reference",
+                        "target": 59,
+                        "name": "PersonaConfig",
+                        "package": "@anam-ai/js-sdk"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": 31,
+                  "name": "userProvidedMediaStream",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {
+                    "isOptional": true
+                  },
+                  "type": {
+                    "type": "reference",
+                    "target": {
+                      "sourceFileName": "node_modules/typescript/lib/lib.dom.d.ts",
+                      "qualifiedName": "MediaStream"
+                    },
+                    "name": "MediaStream",
+                    "package": "typescript"
+                  }
+                }
+              ],
+              "type": {
+                "type": "reference",
+                "target": {
+                  "sourceFileName": "node_modules/typescript/lib/lib.es5.d.ts",
+                  "qualifiedName": "Promise"
+                },
+                "typeArguments": [
+                  {
+                    "type": "intrinsic",
+                    "name": "void"
+                  }
+                ],
+                "name": "Promise",
+                "package": "typescript"
+              }
+            }
+          ]
+        },
+        {
+          "id": 50,
+          "name": "stopStreaming",
+          "variant": "declaration",
+          "kind": 2048,
+          "flags": {
+            "isPublic": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 196,
+              "character": 15,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L196"
+            }
+          ],
+          "signatures": [
+            {
+              "id": 51,
+              "name": "stopStreaming",
+              "variant": "signature",
+              "kind": 4096,
+              "flags": {},
+              "sources": [
+                {
+                  "fileName": "AnamClient.ts",
+                  "line": 196,
+                  "character": 15,
+                  "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L196"
+                }
+              ],
+              "type": {
+                "type": "reference",
+                "target": {
+                  "sourceFileName": "node_modules/typescript/lib/lib.es5.d.ts",
+                  "qualifiedName": "Promise"
+                },
+                "typeArguments": [
+                  {
+                    "type": "intrinsic",
+                    "name": "void"
+                  }
+                ],
+                "name": "Promise",
+                "package": "typescript"
+              }
+            }
+          ]
+        },
+        {
+          "id": 32,
+          "name": "stream",
+          "variant": "declaration",
+          "kind": 2048,
+          "flags": {
+            "isPublic": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 111,
+              "character": 15,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L111"
+            }
+          ],
+          "signatures": [
+            {
+              "id": 33,
+              "name": "stream",
+              "variant": "signature",
+              "kind": 4096,
+              "flags": {},
+              "sources": [
+                {
+                  "fileName": "AnamClient.ts",
+                  "line": 111,
+                  "character": 15,
+                  "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L111"
+                }
+              ],
+              "parameters": [
+                {
+                  "id": 34,
+                  "name": "callbacks",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {},
+                  "type": {
+                    "type": "reference",
+                    "target": {
+                      "sourceFileName": "src/types/streaming/ConnectionCallbacks.ts",
+                      "qualifiedName": "ConnectionCallbacks"
+                    },
+                    "name": "ConnectionCallbacks",
+                    "package": "@anam-ai/js-sdk"
+                  },
+                  "defaultValue": "{}"
+                },
+                {
+                  "id": 35,
+                  "name": "personaConfig",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {
+                    "isOptional": true
+                  },
+                  "type": {
+                    "type": "reference",
+                    "target": 59,
+                    "name": "PersonaConfig",
+                    "package": "@anam-ai/js-sdk"
+                  }
+                },
+                {
+                  "id": 36,
+                  "name": "userProvidedAudioStream",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {
+                    "isOptional": true
+                  },
+                  "type": {
+                    "type": "reference",
+                    "target": {
+                      "sourceFileName": "node_modules/typescript/lib/lib.dom.d.ts",
+                      "qualifiedName": "MediaStream"
+                    },
+                    "name": "MediaStream",
+                    "package": "typescript"
+                  }
+                }
+              ],
+              "type": {
+                "type": "reference",
+                "target": {
+                  "sourceFileName": "node_modules/typescript/lib/lib.es5.d.ts",
+                  "qualifiedName": "Promise"
+                },
+                "typeArguments": [
+                  {
+                    "type": "array",
+                    "elementType": {
+                      "type": "reference",
+                      "target": {
+                        "sourceFileName": "node_modules/typescript/lib/lib.dom.d.ts",
+                        "qualifiedName": "MediaStream"
+                      },
+                      "name": "MediaStream",
+                      "package": "typescript"
+                    }
+                  }
+                ],
+                "name": "Promise",
+                "package": "typescript"
+              }
+            }
+          ]
+        },
+        {
+          "id": 37,
+          "name": "streamToVideoAndAudioElements",
+          "variant": "declaration",
+          "kind": 2048,
+          "flags": {
+            "isPublic": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 150,
+              "character": 15,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L150"
+            }
+          ],
+          "signatures": [
+            {
+              "id": 38,
+              "name": "streamToVideoAndAudioElements",
+              "variant": "signature",
+              "kind": 4096,
+              "flags": {},
+              "sources": [
+                {
+                  "fileName": "AnamClient.ts",
+                  "line": 150,
+                  "character": 15,
+                  "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L150"
+                }
+              ],
+              "parameters": [
+                {
+                  "id": 39,
+                  "name": "videoElementId",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {},
+                  "type": {
+                    "type": "intrinsic",
+                    "name": "string"
+                  }
+                },
+                {
+                  "id": 40,
+                  "name": "audioElementId",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {},
+                  "type": {
+                    "type": "intrinsic",
+                    "name": "string"
+                  }
+                },
+                {
+                  "id": 41,
+                  "name": "callbacks",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {},
+                  "type": {
+                    "type": "reference",
+                    "target": {
+                      "sourceFileName": "src/types/streaming/ConnectionCallbacks.ts",
+                      "qualifiedName": "ConnectionCallbacks"
+                    },
+                    "name": "ConnectionCallbacks",
+                    "package": "@anam-ai/js-sdk"
+                  },
+                  "defaultValue": "{}"
+                },
+                {
+                  "id": 42,
+                  "name": "personaConfig",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {
+                    "isOptional": true
+                  },
+                  "type": {
+                    "type": "reference",
+                    "target": 59,
+                    "name": "PersonaConfig",
+                    "package": "@anam-ai/js-sdk"
+                  }
+                },
+                {
+                  "id": 43,
+                  "name": "userProvidedMediaStream",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {
+                    "isOptional": true
+                  },
+                  "type": {
+                    "type": "reference",
+                    "target": {
+                      "sourceFileName": "node_modules/typescript/lib/lib.dom.d.ts",
+                      "qualifiedName": "MediaStream"
+                    },
+                    "name": "MediaStream",
+                    "package": "typescript"
+                  }
+                }
+              ],
+              "type": {
+                "type": "reference",
+                "target": {
+                  "sourceFileName": "node_modules/typescript/lib/lib.es5.d.ts",
+                  "qualifiedName": "Promise"
+                },
+                "typeArguments": [
+                  {
+                    "type": "intrinsic",
+                    "name": "void"
+                  }
+                ],
+                "name": "Promise",
+                "package": "typescript"
+              }
+            }
+          ]
+        },
+        {
+          "id": 44,
+          "name": "talk",
+          "variant": "declaration",
+          "kind": 2048,
+          "flags": {
+            "isPublic": true
+          },
+          "sources": [
+            {
+              "fileName": "AnamClient.ts",
+              "line": 173,
+              "character": 15,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L173"
+            }
+          ],
+          "signatures": [
+            {
+              "id": 45,
+              "name": "talk",
+              "variant": "signature",
+              "kind": 4096,
+              "flags": {},
+              "sources": [
+                {
+                  "fileName": "AnamClient.ts",
+                  "line": 173,
+                  "character": 15,
+                  "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L173"
+                }
+              ],
+              "parameters": [
+                {
+                  "id": 46,
+                  "name": "content",
+                  "variant": "param",
+                  "kind": 32768,
+                  "flags": {},
+                  "type": {
+                    "type": "intrinsic",
+                    "name": "string"
+                  }
+                }
+              ],
+              "type": {
+                "type": "reference",
+                "target": {
+                  "sourceFileName": "node_modules/typescript/lib/lib.es5.d.ts",
+                  "qualifiedName": "Promise"
+                },
+                "typeArguments": [
+                  {
+                    "type": "intrinsic",
+                    "name": "void"
+                  }
+                ],
+                "name": "Promise",
+                "package": "typescript"
+              }
+            }
+          ]
+        }
+      ],
+      "groups": [
+        {
+          "title": "Constructors",
+          "children": [12]
+        },
+        {
+          "title": "Properties",
+          "children": [23, 22, 18, 19, 20, 17, 21]
+        },
+        {
+          "title": "Methods",
+          "children": [57, 52, 47, 54, 24, 28, 50, 32, 37, 44]
+        }
+      ],
+      "sources": [
+        {
+          "fileName": "AnamClient.ts",
+          "line": 10,
+          "character": 21,
+          "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/AnamClient.ts#L10"
+        }
+      ]
+    },
+    {
+      "id": 63,
+      "name": "AnamPublicClientOptions",
+      "variant": "declaration",
+      "kind": 256,
+      "flags": {},
+      "children": [
+        {
+          "id": 64,
+          "name": "api",
+          "variant": "declaration",
+          "kind": 1024,
+          "flags": {
+            "isOptional": true
+          },
+          "sources": [
+            {
+              "fileName": "types/AnamPublicClientOptions.ts",
+              "line": 4,
+              "character": 2,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/types/AnamPublicClientOptions.ts#L4"
+            }
+          ],
+          "type": {
+            "type": "reference",
+            "target": {
+              "sourceFileName": "src/types/coreApi/CoreApiRestClientOptions.ts",
+              "qualifiedName": "CoreApiRestClientOptions"
+            },
+            "name": "CoreApiRestClientOptions",
+            "package": "@anam-ai/js-sdk"
+          }
+        }
+      ],
+      "groups": [
+        {
+          "title": "Properties",
+          "children": [64]
+        }
+      ],
+      "sources": [
+        {
+          "fileName": "types/AnamPublicClientOptions.ts",
+          "line": 3,
+          "character": 17,
+          "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/types/AnamPublicClientOptions.ts#L3"
+        }
+      ]
+    },
+    {
+      "id": 59,
+      "name": "PersonaConfig",
+      "variant": "declaration",
+      "kind": 256,
+      "flags": {},
+      "children": [
+        {
+          "id": 61,
+          "name": "disableBrains",
+          "variant": "declaration",
+          "kind": 1024,
+          "flags": {
+            "isOptional": true
+          },
+          "sources": [
+            {
+              "fileName": "types/PersonaConfig.ts",
+              "line": 3,
+              "character": 2,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/types/PersonaConfig.ts#L3"
+            }
+          ],
+          "type": {
+            "type": "intrinsic",
+            "name": "boolean"
+          }
+        },
+        {
+          "id": 62,
+          "name": "disableFillerPhrases",
+          "variant": "declaration",
+          "kind": 1024,
+          "flags": {
+            "isOptional": true
+          },
+          "sources": [
+            {
+              "fileName": "types/PersonaConfig.ts",
+              "line": 4,
+              "character": 2,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/types/PersonaConfig.ts#L4"
+            }
+          ],
+          "type": {
+            "type": "intrinsic",
+            "name": "boolean"
+          }
+        },
+        {
+          "id": 60,
+          "name": "personaId",
+          "variant": "declaration",
+          "kind": 1024,
+          "flags": {},
+          "sources": [
+            {
+              "fileName": "types/PersonaConfig.ts",
+              "line": 2,
+              "character": 2,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/types/PersonaConfig.ts#L2"
+            }
+          ],
+          "type": {
+            "type": "intrinsic",
+            "name": "string"
+          }
+        }
+      ],
+      "groups": [
+        {
+          "title": "Properties",
+          "children": [61, 62, 60]
+        }
+      ],
+      "sources": [
+        {
+          "fileName": "types/PersonaConfig.ts",
+          "line": 1,
+          "character": 17,
+          "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/types/PersonaConfig.ts#L1"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "createClient",
+      "variant": "declaration",
+      "kind": 64,
+      "flags": {},
+      "sources": [
+        {
+          "fileName": "index.ts",
+          "line": 12,
+          "character": 6,
+          "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/index.ts#L12"
+        }
+      ],
+      "signatures": [
+        {
+          "id": 2,
+          "name": "createClient",
+          "variant": "signature",
+          "kind": 4096,
+          "flags": {},
+          "comment": {
+            "summary": [
+              {
+                "kind": "text",
+                "text": "Create a new Anam client."
+              }
+            ],
+            "blockTags": [
+              {
+                "tag": "@returns",
+                "content": [
+                  {
+                    "kind": "text",
+                    "text": "A new Anam client instance."
+                  }
+                ]
+              }
+            ]
+          },
+          "sources": [
+            {
+              "fileName": "index.ts",
+              "line": 12,
+              "character": 21,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/index.ts#L12"
+            }
+          ],
+          "parameters": [
+            {
+              "id": 3,
+              "name": "sessionToken",
+              "variant": "param",
+              "kind": 32768,
+              "flags": {},
+              "comment": {
+                "summary": [
+                  {
+                    "kind": "text",
+                    "text": "A session token can be obtained from the Anam API."
+                  }
+                ]
+              },
+              "type": {
+                "type": "intrinsic",
+                "name": "string"
+              }
+            },
+            {
+              "id": 4,
+              "name": "personaConfig",
+              "variant": "param",
+              "kind": 32768,
+              "flags": {},
+              "comment": {
+                "summary": [
+                  {
+                    "kind": "text",
+                    "text": "The persona configuration to use."
+                  }
+                ]
+              },
+              "type": {
+                "type": "reference",
+                "target": 59,
+                "name": "PersonaConfig",
+                "package": "@anam-ai/js-sdk"
+              }
+            },
+            {
+              "id": 5,
+              "name": "options",
+              "variant": "param",
+              "kind": 32768,
+              "flags": {
+                "isOptional": true
+              },
+              "comment": {
+                "summary": [
+                  {
+                    "kind": "text",
+                    "text": "Additional options."
+                  }
+                ]
+              },
+              "type": {
+                "type": "reference",
+                "target": 63,
+                "name": "AnamPublicClientOptions",
+                "package": "@anam-ai/js-sdk"
+              }
+            }
+          ],
+          "type": {
+            "type": "reference",
+            "target": 11,
+            "name": "default",
+            "package": "@anam-ai/js-sdk"
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "unsafe_createClientWithApiKey",
+      "variant": "declaration",
+      "kind": 64,
+      "flags": {},
+      "sources": [
+        {
+          "fileName": "index.ts",
+          "line": 29,
+          "character": 6,
+          "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/index.ts#L29"
+        }
+      ],
+      "signatures": [
+        {
+          "id": 7,
+          "name": "unsafe_createClientWithApiKey",
+          "variant": "signature",
+          "kind": 4096,
+          "flags": {},
+          "comment": {
+            "summary": [
+              {
+                "kind": "text",
+                "text": "Create a new Anam client with an API key instead of a session token.\nThis method is unsafe for production environments because it requires exposing your API key to the client side.\nOnly use this method for local testing."
+              }
+            ],
+            "blockTags": [
+              {
+                "tag": "@returns",
+                "content": [
+                  {
+                    "kind": "text",
+                    "text": "A new Anam client instance."
+                  }
+                ]
+              }
+            ]
+          },
+          "sources": [
+            {
+              "fileName": "index.ts",
+              "line": 29,
+              "character": 38,
+              "url": "https://github.com/anam-org/javascript-sdk/blob/79f60f746545b50f2bed4105daf24efbec66aff3/src/index.ts#L29"
+            }
+          ],
+          "parameters": [
+            {
+              "id": 8,
+              "name": "apiKey",
+              "variant": "param",
+              "kind": 32768,
+              "flags": {},
+              "comment": {
+                "summary": [
+                  {
+                    "kind": "text",
+                    "text": "Your Anam API key."
+                  }
+                ]
+              },
+              "type": {
+                "type": "intrinsic",
+                "name": "string"
+              }
+            },
+            {
+              "id": 9,
+              "name": "personaConfig",
+              "variant": "param",
+              "kind": 32768,
+              "flags": {},
+              "comment": {
+                "summary": [
+                  {
+                    "kind": "text",
+                    "text": "The persona configuration to use."
+                  }
+                ]
+              },
+              "type": {
+                "type": "reference",
+                "target": 59,
+                "name": "PersonaConfig",
+                "package": "@anam-ai/js-sdk"
+              }
+            },
+            {
+              "id": 10,
+              "name": "options",
+              "variant": "param",
+              "kind": 32768,
+              "flags": {
+                "isOptional": true
+              },
+              "comment": {
+                "summary": [
+                  {
+                    "kind": "text",
+                    "text": "Additional options."
+                  }
+                ]
+              },
+              "type": {
+                "type": "reference",
+                "target": 63,
+                "name": "AnamPublicClientOptions",
+                "package": "@anam-ai/js-sdk"
+              }
+            }
+          ],
+          "type": {
+            "type": "reference",
+            "target": 11,
+            "name": "default",
+            "package": "@anam-ai/js-sdk"
+          }
+        }
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "title": "Classes",
+      "children": [11]
+    },
+    {
+      "title": "Interfaces",
+      "children": [63, 59]
+    },
+    {
+      "title": "Functions",
+      "children": [1, 6]
+    }
+  ],
+  "packageName": "@anam-ai/js-sdk",
+  "packageVersion": "0.0.0-automated",
+  "readme": [
+    {
+      "kind": "text",
+      "text": "# Anam AI JavaScript SDK\n\nThis is the official JavaScript SDK for integrating Anam AI realtime digital personas into your product. It provides a simple and intuitive API to interact with Anam AI's services.\n\n## Introduction\n\nThe Anam AI JavaScript SDK is designed to help developers integrate Anam AI's digital personas into their JavaScript applications. The SDK provides a set of APIs and utilities to make it easier to create, manage, and interact with digital personas in a realtime environment.\n\n## Prerequisites\n\n### An Anam AI account\n\nPublic account creation is currently unavailable. If you are a design partner your account will be created for you by our team.\n\n### An Anam API key\n\nPublic API keys are not yet available. If you are a design partner an API key will be shared with you during onboarding.\n\n## Getting Started\n\nFirst, install the SDK in your project\n\n"
+    },
+    {
+      "kind": "code",
+      "text": "```zsh\nnpm install @anam-ai/js-sdk\n```"
+    },
+    {
+      "kind": "text",
+      "text": "\n\n### Local development\n\nThe quickest way to start testing the SDK is to use your API key directly with our SDK and choose a default persona from our predefined examples.\nTo use the SDK you first need to create an instance of "
+    },
+    {
+      "kind": "code",
+      "text": "`AnamClient`"
+    },
+    {
+      "kind": "text",
+      "text": ". For local development you can do this using the "
+    },
+    {
+      "kind": "code",
+      "text": "`unsafe_createClientWithApiKey`"
+    },
+    {
+      "kind": "text",
+      "text": " method.\n\n"
+    },
+    {
+      "kind": "code",
+      "text": "```typescript\nimport { unsafe_createClientWithApiKey } from '@anam-ai/js-sdk';\n\nconst anamClient = unsafe_createClientWithApiKey('your-api-key', {\n  personaId: 'chosen-persona-id',\n});\n```"
+    },
+    {
+      "kind": "text",
+      "text": "\n\n**NOTE**: the method "
+    },
+    {
+      "kind": "code",
+      "text": "`unsafe_createClientWithApiKey`"
+    },
+    {
+      "kind": "text",
+      "text": " is unsafe for production use cases because it requires exposing your api key to the client. When deploying to production see [production usage]() first.\n\nOnce you have an instance of the Anam client initialised you can start a session by streaming to audio and video elements in the DOM.\n\n"
+    },
+    {
+      "kind": "code",
+      "text": "```typescript\nawait anamClient.streamToVideoAndAudioElements(\n  'video-element-id',\n  'audio-element-id',\n);\n```"
+    },
+    {
+      "kind": "text",
+      "text": "\n\nThis will start a new session using the pre-configured persona id and start streaming video and audio to the elements in the DOM with the matching element ids."
+    }
+  ],
+  "symbolIdMap": {
+    "0": {
+      "sourceFileName": "src/index.ts",
+      "qualifiedName": ""
+    },
+    "1": {
+      "sourceFileName": "src/index.ts",
+      "qualifiedName": "createClient"
+    },
+    "2": {
+      "sourceFileName": "src/index.ts",
+      "qualifiedName": "createClient"
+    },
+    "3": {
+      "sourceFileName": "src/index.ts",
+      "qualifiedName": "sessionToken"
+    },
+    "4": {
+      "sourceFileName": "src/index.ts",
+      "qualifiedName": "personaConfig"
+    },
+    "5": {
+      "sourceFileName": "src/index.ts",
+      "qualifiedName": "options"
+    },
+    "6": {
+      "sourceFileName": "src/index.ts",
+      "qualifiedName": "unsafe_createClientWithApiKey"
+    },
+    "7": {
+      "sourceFileName": "src/index.ts",
+      "qualifiedName": "unsafe_createClientWithApiKey"
+    },
+    "8": {
+      "sourceFileName": "src/index.ts",
+      "qualifiedName": "apiKey"
+    },
+    "9": {
+      "sourceFileName": "src/index.ts",
+      "qualifiedName": "personaConfig"
+    },
+    "10": {
+      "sourceFileName": "src/index.ts",
+      "qualifiedName": "options"
+    },
+    "11": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default"
+    },
+    "12": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.__constructor"
+    },
+    "13": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default"
+    },
+    "14": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "sessionToken"
+    },
+    "15": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "personaConfig"
+    },
+    "16": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "options"
+    },
+    "17": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.sessionToken"
+    },
+    "18": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.apiKey"
+    },
+    "19": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.personaConfig"
+    },
+    "20": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.sessionId"
+    },
+    "21": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.streamingClient"
+    },
+    "22": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.apiClient"
+    },
+    "23": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default._isStreaming"
+    },
+    "24": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.startSession"
+    },
+    "25": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.startSession"
+    },
+    "26": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "personaConfig"
+    },
+    "27": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "userProvidedAudioStream"
+    },
+    "28": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.startSessionIfNeeded"
+    },
+    "29": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.startSessionIfNeeded"
+    },
+    "30": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "personaConfig"
+    },
+    "31": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "userProvidedMediaStream"
+    },
+    "32": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.stream"
+    },
+    "33": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.stream"
+    },
+    "34": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "callbacks"
+    },
+    "35": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "personaConfig"
+    },
+    "36": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "userProvidedAudioStream"
+    },
+    "37": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.streamToVideoAndAudioElements"
+    },
+    "38": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.streamToVideoAndAudioElements"
+    },
+    "39": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "videoElementId"
+    },
+    "40": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "audioElementId"
+    },
+    "41": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "callbacks"
+    },
+    "42": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "personaConfig"
+    },
+    "43": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "userProvidedMediaStream"
+    },
+    "44": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.talk"
+    },
+    "45": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.talk"
+    },
+    "46": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "content"
+    },
+    "47": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.sendDataMessage"
+    },
+    "48": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.sendDataMessage"
+    },
+    "49": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "message"
+    },
+    "50": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.stopStreaming"
+    },
+    "51": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.stopStreaming"
+    },
+    "52": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.isStreaming"
+    },
+    "53": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.isStreaming"
+    },
+    "54": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.setPersonaConfig"
+    },
+    "55": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.setPersonaConfig"
+    },
+    "56": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "personaConfig"
+    },
+    "57": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.getPersonaConfig"
+    },
+    "58": {
+      "sourceFileName": "src/AnamClient.ts",
+      "qualifiedName": "default.getPersonaConfig"
+    },
+    "59": {
+      "sourceFileName": "src/types/PersonaConfig.ts",
+      "qualifiedName": "PersonaConfig"
+    },
+    "60": {
+      "sourceFileName": "src/types/PersonaConfig.ts",
+      "qualifiedName": "PersonaConfig.personaId"
+    },
+    "61": {
+      "sourceFileName": "src/types/PersonaConfig.ts",
+      "qualifiedName": "PersonaConfig.disableBrains"
+    },
+    "62": {
+      "sourceFileName": "src/types/PersonaConfig.ts",
+      "qualifiedName": "PersonaConfig.disableFillerPhrases"
+    },
+    "63": {
+      "sourceFileName": "src/types/AnamPublicClientOptions.ts",
+      "qualifiedName": "AnamPublicClientOptions"
+    },
+    "64": {
+      "sourceFileName": "src/types/AnamPublicClientOptions.ts",
+      "qualifiedName": "AnamPublicClientOptions.api"
+    }
+  }
+}
