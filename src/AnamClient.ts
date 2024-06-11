@@ -17,13 +17,17 @@ export default class AnamClient {
   private apiClient: CoreApiRestClient;
   private _isStreaming = false;
 
-  constructor(sessionToken?: string, options: AnamClientOptions = {}) {
+  constructor(
+    sessionToken: string | undefined,
+    personaConfig: PersonaConfig,
+    options: AnamClientOptions = {},
+  ) {
     if (!sessionToken && !options.apiKey) {
       throw new Error('Either sessionToken or apiKey must be provided');
     }
     this.sessionToken = sessionToken;
     this.apiKey = options.apiKey;
-    this.personaConfig = options.personaConfig;
+    this.personaConfig = personaConfig;
 
     this.apiClient = new CoreApiRestClient(
       sessionToken,

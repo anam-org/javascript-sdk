@@ -1,6 +1,5 @@
-import { CoreApiRestClientOptions, PersonaConfig } from '../types';
+import { CoreApiRestClientOptions } from '../types';
 
 export interface AnamPublicClientOptions {
-  personaConfig?: PersonaConfig;
   api?: CoreApiRestClientOptions;
 }
