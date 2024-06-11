@@ -4,6 +4,7 @@ export enum SignalMessageAction {
   ICE_CANDIDATE = 'icecandidate',
   END_SESSION = 'endsession',
   HEARTBEAT = 'heartbeat',
+  WARNING = 'warning',
 }
 
 export interface SignalMessage {
