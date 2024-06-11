@@ -5,7 +5,7 @@ import { AnamPublicClientOptions } from './types/AnamPublicClientOptions';
 const createClient = (
   sessionToken: string,
   personaConfig: PersonaConfig,
-  options: AnamPublicClientOptions = {},
+  options?: AnamPublicClientOptions,
 ): AnamClient => {
   return new AnamClient(sessionToken, personaConfig, options);
 };
@@ -13,7 +13,7 @@ const createClient = (
 const unsafe_createClientWithApiKey = (
   apiKey: string,
   personaConfig: PersonaConfig,
-  options: AnamPublicClientOptions = {},
+  options?: AnamPublicClientOptions,
 ): AnamClient => {
   return new AnamClient(undefined, personaConfig, { ...options, apiKey });
 };

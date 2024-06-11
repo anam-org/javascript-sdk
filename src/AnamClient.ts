@@ -20,19 +20,19 @@ export default class AnamClient {
   constructor(
     sessionToken: string | undefined,
     personaConfig: PersonaConfig,
-    options: AnamClientOptions = {},
+    options?: AnamClientOptions,
   ) {
-    if (!sessionToken && !options.apiKey) {
+    if (!sessionToken && !options?.apiKey) {
       throw new Error('Either sessionToken or apiKey must be provided');
     }
     this.sessionToken = sessionToken;
-    this.apiKey = options.apiKey;
+    this.apiKey = options?.apiKey;
     this.personaConfig = personaConfig;
 
     this.apiClient = new CoreApiRestClient(
       sessionToken,
-      options.apiKey,
-      options.api,
+      options?.apiKey,
+      options?.api,
     );
   }
 

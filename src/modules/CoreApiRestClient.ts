@@ -14,15 +14,15 @@ export class CoreApiRestClient {
   constructor(
     sessionToken?: string,
     apiKey?: string,
-    options: CoreApiRestClientOptions = {},
+    options?: CoreApiRestClientOptions,
   ) {
     if (!sessionToken && !apiKey) {
       throw new Error('Either sessionToken or apiKey must be provided');
     }
     this.sessionToken = sessionToken || null;
     this.apiKey = apiKey || null;
-    this.baseUrl = options.baseUrl || DEFAULT_API_BASE_URL;
-    this.apiVersion = options.apiVersion || DEFAULT_API_VERSION;
+    this.baseUrl = options?.baseUrl || DEFAULT_API_BASE_URL;
+    this.apiVersion = options?.apiVersion || DEFAULT_API_VERSION;
   }
 
   public async startSession(
