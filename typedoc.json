@@ -3,7 +3,6 @@
   "out": "docs",
   "json": "docs/api.json",
   "name": "Anam AI JavaScript SDK",
-  "includeVersion": true,
   "readme": "./README.md",
   "plugin": ["typedoc-material-theme"],
   "themeColor": "#FFFFFF"
