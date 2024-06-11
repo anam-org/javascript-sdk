@@ -6,7 +6,6 @@ on:
       - main
       - rc
       - alpha
-  workflow_dispatch:
 
 jobs:
   release:
