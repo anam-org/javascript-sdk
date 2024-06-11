@@ -247,6 +247,10 @@ export class StreamingClient {
         // close the peer connection
         this.shutdown();
         break;
+      case SignalMessageAction.WARNING:
+        const message = signalMessage.payload as string;
+        console.warn('Warning received from server: ' + message);
+        break;
       default:
         console.error(
           'StreamingClient - onSignalMessage: unknown signal message action type',
