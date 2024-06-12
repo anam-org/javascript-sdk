@@ -50,6 +50,12 @@ await anamClient.streamToVideoAndAudioElements(
 
 This will start a new session using the pre-configured persona id and start streaming video and audio to the elements in the DOM with the matching element ids.
 
+To stop a session use the `stopSstopStreaming` method.
+
+```typescript
+anamClient.stopStreaming();
+```
+
 ## Usage in production
 
 When deploying to production it is important not to publically expose your API key. To avoid this issue you should first exchange your API key for a short-lived session token on the server side. Session tokens can then be passed to the client and used to initialise the Anam SDK.
