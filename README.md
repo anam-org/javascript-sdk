@@ -50,7 +50,7 @@ await anamClient.streamToVideoAndAudioElements(
 
 This will start a new session using the pre-configured persona id and start streaming video and audio to the elements in the DOM with the matching element ids.
 
-To stop a session use the `stopSstopStreaming` method.
+To stop a session use the `stopStopStreaming` method.
 
 ```typescript
 anamClient.stopStreaming();
@@ -58,7 +58,7 @@ anamClient.stopStreaming();
 
 ## Usage in production
 
-When deploying to production it is important not to publically expose your API key. To avoid this issue you should first exchange your API key for a short-lived session token on the server side. Session tokens can then be passed to the client and used to initialise the Anam SDK.
+When deploying to production it is important not to publicly expose your API key. To avoid this issue you should first exchange your API key for a short-lived session token on the server side. Session tokens can then be passed to the client and used to initialise the Anam SDK.
 
 **From the server**
 
@@ -74,7 +74,7 @@ const data = await response.json();
 const sessionToken = data.sessionToken;
 ```
 
-Once you have a session token you can use the `createClient` method of the Anam SDK to intialise an Anam client instance.
+Once you have a session token you can use the `createClient` method of the Anam SDK to initialise an Anam client instance.
 
 ```typescript
 import { createClient } from '@anam-ai/js-sdk';
@@ -84,9 +84,9 @@ const anamClient = createClient('your-session-token', {
 });
 ```
 
-Regardless of whether you intialise the client using an API key or session token the client exposes the same set of available methods for streaming.
+Regardless of whether you initialise the client using an API key or session token the client exposes the same set of available methods for streaming.
 
-[See here](#starting-a-session-in-production-environments) for an example squence diagram of starting a session in production environments.
+[See here](#starting-a-session-in-production-environments) for an example sequence diagram of starting a session in production environments.
 
 ## Using the talk command
 
@@ -180,7 +180,7 @@ await anamClient.streamToVideoAndAudioElements(
 
 Available personas are managed via the [Anam API](https://api.anam.ai/api).
 
-> **Note**: The examples below are shown using bash curl syntax. For the best experience we recommend trying queries directly from our [interactive Swagger documentation](https://api.anam.ai/api). To use the interactive Swagger documenation you will first need to authenticate by clicking the Authorize button in the top right and pasting your API key into the displayed box.
+> **Note**: The examples below are shown using bash curl syntax. For the best experience we recommend trying queries directly from our [interactive Swagger documentation](https://api.anam.ai/api). To use the interactive Swagger documentation you will first need to authenticate by clicking the Authorize button in the top right and pasting your API key into the displayed box.
 
 ### Listing Available Personas
 
@@ -205,7 +205,7 @@ curl -X GET "https://api.anam.ai/v1/persona" -H "Authorization: Bearer your-api-
 
 By default each account includes our example persona 'Eva'. The virtual receptionist of the Sunset Hotel.
 
-> **Quickstart**: Make a note of the ID for the Eva persona and use this to initialise the SDK.
+> **Quick start**: Make a note of the ID for the Eva persona and use this to initialise the SDK.
 
 To show more detail about a specific persona you can use the `/v1/persona/{id}` endpoint.
 
@@ -242,7 +242,7 @@ You can create your own custom personas by using the `/v1/persona` endpoint via 
 
 | Brain Parameter | Description                                                                                           |
 | --------------- | ----------------------------------------------------------------------------------------------------- |
-| `systemPrompt`  | The prompt used for initializing LLM interactions, setting the context for the persona's behavior.    |
+| `systemPrompt`  | The prompt used for initializing LLM interactions, setting the context for the persona's behaviour.   |
 | `personality`   | A short description of the persona's character traits which influences the choice of filler phrases.  |
 | `fillerPhrases` | Phrases used to enhance interaction response times, providing immediate feedback before a full reply. |
 
@@ -282,7 +282,7 @@ curl -X POST "https://api.anam.ai/v1/persona" -H "Content-Type: application/json
 
 ## Starting a session in production environments
 
-![Example sequence siagram](media://start-session.png)
+![Example sequence diagram](media://start-session.png)
 
 ## Interaction loop
 
