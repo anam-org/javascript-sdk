@@ -90,7 +90,7 @@ Regardless of whether you intialise the client using an API key or session token
 
 ## Using the talk command
 
-Sometimes during a persona session you may wish to force a respnose from the persona. For example when the user interacts with an element on the page or when you have disabled the Anam LLM in order to use your own. To do this you can use the `talk` method of the Anam client.
+Sometimes during a persona session you may wish to force a response from the persona. For example when the user interacts with an element on the page or when you have disabled the Anam LLM in order to use your own. To do this you can use the `talk` method of the Anam client.
 
 ```typescript
 anamClient.talk('Content to say');
@@ -180,7 +180,7 @@ await anamClient.streamToVideoAndAudioElements(
 
 Available personas are managed via the [Anam API](https://api.anam.ai/api).
 
-> **Note**: The examples below are shown using bash curl syntax. For the best expereince we reccommend trying queries directly from our [interactive Swagger Documentation](https://api.anam.ai/api). To use the ineractive Swagger documenation you will first need to authenticate by clicing the Authorize button in the top right and pasting your API key into the displayed box.
+> **Note**: The examples below are shown using bash curl syntax. For the best experience we recommend trying queries directly from our [interactive Swagger documentation](https://api.anam.ai/api). To use the interactive Swagger documenation you will first need to authenticate by clicking the Authorize button in the top right and pasting your API key into the displayed box.
 
 ### Listing Available Personas
 
