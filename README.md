@@ -123,6 +123,29 @@ const anamClient = createClient('your-session-token', {
 
 > **Note**: the option `disableFillerPhrases` has no effect if `disableBrains` is set to `true`.
 
+### Updating client config after initialisation
+
+If you have already initialised the Anam client but wish to update the persona configuration you can use the `setPersonaConfig` method
+
+```typescript
+import { createClient } from '@anam-ai/js-sdk';
+
+const anamClient = createClient('your-session-token', {
+  personaId: 'chosen-persona-id',
+});
+
+anamClient.setPersonaConfig({
+  personaId: 'chosen-persona-id',
+  disableFillerPhrases: true,
+});
+```
+
+To check the currently set config use the `getPersonaConfig` method.
+
+```typescript
+const config = anamClient.getPersonaConfig();
+```
+
 ## Using Callbacks
 
 When starting a steam you can pass callback functions to the Anam client which will fire on specific events during the session.
