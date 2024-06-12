@@ -1,9 +1,11 @@
 {
   "entryPoints": ["src/index.ts", "resources/docs"],
+  "includes": "resources/images",
   "out": "docs",
   "json": "docs/api.json",
   "name": "Anam AI JavaScript SDK",
   "readme": "./README.md",
   "plugin": ["typedoc-material-theme"],
-  "themeColor": "#FFFFFF"
+  "themeColor": "#FFFFFF",
+  "media": "resources/media"
 }

@@ -59,6 +59,7 @@ anamClient.stopStreaming();
 ## Usage in production
 
 When deploying to production it is important not to publically expose your API key. To avoid this issue you should first exchange your API key for a short-lived session token on the server side. Session tokens can then be passed to the client and used to initialise the Anam SDK.
+
 **From the server**
 
 ```typescript
@@ -84,6 +85,8 @@ const anamClient = createClient('your-session-token', {
 ```
 
 Regardless of whether you intialise the client using an API key or session token the client exposes the same set of available methods for streaming.
+
+[See here](#starting-a-session-in-production-environments) for an example squence diagram of starting a session in production environments.
 
 ## Using the talk command
 
@@ -274,3 +277,17 @@ curl -X POST "https://api.anam.ai/v1/persona" -H "Content-Type: application/json
   }
 }
 ```
+
+# Sequence Diagrams
+
+## Starting a session in production environments
+
+![Example sequence siagram](media://start-session.png)
+
+# Interaction loop
+
+![Example interaction loop](media://interaction-loop.png)
+
+## Interaction loop with custom LLM usage
+
+![Example interaction loop for custom LLM diagram](media://custom-llm-interaction.png)
