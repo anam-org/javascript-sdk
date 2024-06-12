@@ -56,7 +56,7 @@ export class CoreApiRestClient {
     }
     try {
       const response = await fetch(`${this.getApiUrl()}/auth/session-token`, {
-        method: 'POST',
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.apiKey}`,

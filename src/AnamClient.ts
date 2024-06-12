@@ -37,11 +37,10 @@ export default class AnamClient {
   }
 
   private async startSession(
-    personaConfig?: PersonaConfig,
     userProvidedAudioStream?: MediaStream,
   ): Promise<string> {
     try {
-      const config = personaConfig || this.personaConfig;
+      const config = this.personaConfig;
       if (!config) {
         throw new Error(
           'A default persona configuration has not been set and no persona configuration was provided',
@@ -85,16 +84,13 @@ export default class AnamClient {
     }
   }
 
-  private async startSessionIfNeeded(
-    personaConfig: PersonaConfig | undefined,
-    userProvidedMediaStream?: MediaStream,
-  ) {
+  private async startSessionIfNeeded(userProvidedMediaStream?: MediaStream) {
     if (!this.sessionId || !this.streamingClient) {
       console.warn(
         'StreamToVideoAndAudioElements: session is not started. starting a new session',
       );
       try {
-        await this.startSession(personaConfig, userProvidedMediaStream);
+        await this.startSession(userProvidedMediaStream);
       } catch (error) {
         throw new Error(
           'StreamToVideoAndAudioElements: Failed to start session',
@@ -110,10 +106,9 @@ export default class AnamClient {
 
   public async stream(
     callbacks: ConnectionCallbacks = {},
-    personaConfig?: PersonaConfig,
     userProvidedAudioStream?: MediaStream,
   ): Promise<MediaStream[]> {
-    await this.startSessionIfNeeded(personaConfig, userProvidedAudioStream);
+    await this.startSessionIfNeeded(userProvidedAudioStream);
     if (this._isStreaming) {
       throw new Error('Already streaming');
     }
@@ -151,10 +146,9 @@ export default class AnamClient {
     videoElementId: string,
     audioElementId: string,
     callbacks: ConnectionCallbacks = {},
-    personaConfig?: PersonaConfig,
     userProvidedMediaStream?: MediaStream,
   ): Promise<void> {
-    await this.startSessionIfNeeded(personaConfig, userProvidedMediaStream);
+    await this.startSessionIfNeeded(userProvidedMediaStream);
     if (this._isStreaming) {
       throw new Error('Already streaming');
     }
