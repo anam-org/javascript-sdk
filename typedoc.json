@@ -7,5 +7,6 @@
   "readme": "./README.md",
   "plugin": ["typedoc-material-theme"],
   "themeColor": "#FFFFFF",
-  "media": "resources/media"
+  "media": "resources/media",
+  "disableSources": true
 }
