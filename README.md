@@ -284,7 +284,7 @@ curl -X POST "https://api.anam.ai/v1/persona" -H "Content-Type: application/json
 
 ![Example sequence siagram](media://start-session.png)
 
-# Interaction loop
+## Interaction loop
 
 ![Example interaction loop](media://interaction-loop.png)
 
