@@ -16,7 +16,7 @@ Public account creation is currently unavailable. If you are a design partner yo
 
 Public API keys are not yet available. If you are a design partner an API key will be shared with you during onboarding.
 
-## Getting Started
+# Getting Started
 
 First, install the SDK in your project
 
@@ -24,7 +24,7 @@ First, install the SDK in your project
 npm install @anam-ai/js-sdk
 ```
 
-### Local development
+## Local development
 
 The quickest way to start testing the SDK is to use your API key directly with our SDK and [choose a default persona](#listing-personas) from our predefined examples.
 To use the SDK you first need to create an instance of `AnamClient`. For local development you can do this using the `unsafe_createClientWithApiKey` method.
@@ -50,7 +50,7 @@ await anamClient.streamToVideoAndAudioElements(
 
 This will start a new session using the pre-configured persona id and start streaming video and audio to the elements in the DOM with the matching element ids.
 
-### Usage in production
+## Usage in production
 
 When deploying to production it is important not to publically expose your API key. To avoid this issue you should first exchange your API key for a short-lived session token on the server side. Session tokens can then be passed to the client and used to initialise the Anam SDK.
 **From the server**
@@ -79,7 +79,72 @@ const anamClient = createClient('your-session-token', {
 
 Regardless of whether you intialise the client using an API key or session token the client exposes the same set of available methods for streaming.
 
-## Personas
+## Using the talk command
+
+Sometimes during a persona session you may wish to force a respnose from the persona. For example when the user interacts with an element on the page or when you have disabled the Anam LLM in order to use your own. To do this you can use the `talk` method of the Anam client.
+
+```typescript
+anamClient.talk('Content to say');
+```
+
+## Additional Configuration
+
+### Disable brains
+
+You can turn off the Anam LLM by passing the `disableBrains` config option to the client during initialisation. If this option is set to `true` then the persona will wait to receive `talk` commands and will not respond to voice input from the user.
+
+```typescript
+import { createClient } from '@anam-ai/js-sdk';
+
+const anamClient = createClient('your-session-token', {
+  personaId: 'chosen-persona-id',
+  disableBrains: true,
+});
+```
+
+### Disable filler phrases
+
+To turn off the use of filler phrases by the persona you can set the `disableFillerPhrases` option to true.
+
+```typescript
+import { createClient } from '@anam-ai/js-sdk';
+
+const anamClient = createClient('your-session-token', {
+  personaId: 'chosen-persona-id',
+  disableFillerPhrases: true,
+});
+```
+
+> **Note**: the option `disableFillerPhrases` has no effect if `disableBrains` is set to `true`.
+
+## Using Callbacks
+
+When starting a steam you can pass callback functions to the Anam client which will fire on specific events during the session.
+
+```typescript
+await anamClient.streamToVideoAndAudioElements(
+  'video_element_id',
+  'audio_element_id',
+  {
+    onConnectionEstablishedCallback: onConnectionEstablished,
+    onConnectionClosedCallback: onConnectionClosed,
+    onVideoPlayStartedCallback: onVideoPlayStarted,
+    onMessageHistoryUpdatedCallback: onMessageHistoryUpdated,
+  },
+);
+```
+
+### Available Callback Functions
+
+| Callback Name                     | Description                                                                                                                                                           |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `onConnectionEstablishedCallback` | Called when the direct connection between the browser and the Anam Engine has been established.                                                                       |
+| `onConnectionClosedCallback`      | Called when the direct connection between the browser and the Anam Engine has been closed.                                                                            |
+| `onVideoPlayStartedCallback`      | When streaming directly to a video element this callback is called when the first frames start playing. Useful for removing any loading indicators during connection. |
+| `onReceiveMessageCallback`        | Called with the message transcription of the persona speech.                                                                                                          |
+| `onInputAudioStreamStartCallback` | Called with the users input audio stream when microphone input has been initialised.                                                                                  |
+
+# Personas
 
 Available personas are managed via the [Anam API](https://api.anam.ai/api).
 
