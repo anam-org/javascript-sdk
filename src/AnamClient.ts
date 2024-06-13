@@ -2,6 +2,7 @@ import { CoreApiRestClient } from './modules/CoreApiRestClient';
 import { StreamingClient } from './modules/StreamingClient';
 import {
   ConnectionCallbacks,
+  InputAudioState,
   PersonaConfig,
   StartSessionResponse,
 } from './types';
@@ -16,6 +17,7 @@ export default class AnamClient {
   private streamingClient: StreamingClient | null = null;
   private apiClient: CoreApiRestClient;
   private _isStreaming = false;
+  private inputAudioState: InputAudioState = { isMuted: false };
 
   constructor(
     sessionToken: string | undefined,
@@ -75,7 +77,10 @@ export default class AnamClient {
           },
         },
         iceServers,
-        userProvidedMediaStream: userProvidedAudioStream,
+        inputAudio: {
+          inputAudioState: this.inputAudioState,
+          userProvidedMediaStream: userProvidedAudioStream,
+        },
       });
       this.sessionId = sessionId;
       return sessionId;
@@ -86,9 +91,6 @@ export default class AnamClient {
 
   private async startSessionIfNeeded(userProvidedMediaStream?: MediaStream) {
     if (!this.sessionId || !this.streamingClient) {
-      console.warn(
-        'StreamToVideoAndAudioElements: session is not started. starting a new session',
-      );
       try {
         await this.startSession(userProvidedMediaStream);
       } catch (error) {
@@ -206,5 +208,36 @@ export default class AnamClient {
 
   public getPersonaConfig(): PersonaConfig | undefined {
     return this.personaConfig;
+  }
+
+  public getInputAudioState(): InputAudioState {
+    // if streaming client is available, make sure our state is up to date
+    if (this.streamingClient) {
+      this.inputAudioState = this.streamingClient.getInputAudioState();
+    }
+    return this.inputAudioState;
+  }
+  public muteInputAudio(): InputAudioState {
+    if (this.streamingClient) {
+      this.inputAudioState = this.streamingClient.muteInputAudio();
+    } else {
+      this.inputAudioState = {
+        ...this.inputAudioState,
+        isMuted: true,
+      };
+    }
+    return this.inputAudioState;
+  }
+
+  public unmuteInputAudio(): InputAudioState {
+    if (this.streamingClient) {
+      this.inputAudioState = this.streamingClient.unmuteInputAudio();
+    } else {
+      this.inputAudioState = {
+        ...this.inputAudioState,
+        isMuted: false,
+      };
+    }
+    return this.inputAudioState;
   }
 }

@@ -1,4 +1,3 @@
-import { DEFAULT_ENGINE_BASE_URL } from '../lib/constants';
 import {
   SignalMessage,
   SignalMessageAction,
@@ -7,15 +6,6 @@ import {
 
 const DEFAULT_HEARTBEART_INTERVAL_SECONDS = 5;
 const DEFAULT_WS_RECONNECTION_ATTEMPTS = 5;
-
-export const DEFATULT_OPTIONS: SignallingClientOptions = {
-  heartbeatIntervalSeconds: DEFAULT_HEARTBEART_INTERVAL_SECONDS,
-  maxWsReconnectionAttempts: DEFAULT_WS_RECONNECTION_ATTEMPTS,
-  url: {
-    baseUrl: DEFAULT_ENGINE_BASE_URL,
-    protocol: 'ws',
-  },
-};
 
 export class SignallingClient {
   protected url: URL;
@@ -36,7 +26,7 @@ export class SignallingClient {
 
   constructor(
     sessionId: string,
-    options: SignallingClientOptions = DEFATULT_OPTIONS,
+    options: SignallingClientOptions,
     onSignalMessageReceivedCallback?: (
       msg: SignalMessage,
     ) => Promise<void> | void,
