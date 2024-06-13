@@ -37,11 +37,12 @@ jobs:
         # only run on main
         if: github.ref == 'refs/heads/main'
         id: version
-        run: echo "::set-output name=version::$(jq -r .version package.json)"
+        run: |
+          echo "version=$(jq -r .version package.json)" >> $GITHUB_OUTPUT
 
       - name: Notify Slack
-        # only run on main
-        if: github.ref == 'refs/heads/main'
+        # only run on main and if version is not '0.0.0-automated'
+        if: github.ref == 'refs/heads/main' && steps.version.outputs.version != '0.0.0-automated'
         id: slack
         uses: slackapi/slack-github-action@v1.26.0
         with:
@@ -50,7 +51,7 @@ jobs:
               "emoji": ":gandalf-party:",
               "link": "https://www.npmjs.com/package/@anam-ai/js-sdk",
               "version": "${{ steps.version.outputs.version }}",
-              "appName": "**Anam JavaScript SDK**"
+              "appName": "Anam JavaScript SDK"
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_RELEASE_NOTIFICATION_WEBHOOK_URL }}
