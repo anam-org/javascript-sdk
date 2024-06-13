@@ -1,30 +1,18 @@
 import {
-  DEFAULT_ICE_SERVERS,
   PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE,
   PUBLIC_MESSAGE_ON_WEBRTC_FAILURE,
-  DEFAULT_ENGINE_BASE_URL,
 } from '../lib/constants';
+import { InputAudioState } from '../types';
 import { SignalMessage, SignalMessageAction } from '../types/signalling';
 import { ConnectionCallbacks, TextMessageEvent } from '../types/streaming';
 import { StreamingClientOptions } from '../types/streaming/StreamingClientOptions';
 import { EngineApiRestClient } from './EngineApiRestClient';
-import {
-  SignallingClient,
-  DEFATULT_OPTIONS as DEFAULT_SIGNALLING_OPTIONS,
-} from './SignallingClient';
-
-const DEFAULT_OPTIONS: StreamingClientOptions = {
-  engine: {
-    baseUrl: DEFAULT_ENGINE_BASE_URL,
-  },
-  signalling: DEFAULT_SIGNALLING_OPTIONS,
-  iceServers: DEFAULT_ICE_SERVERS,
-};
+import { SignallingClient } from './SignallingClient';
 
 export class StreamingClient {
   protected signallingClient: SignallingClient;
   protected engineApiRestClient: EngineApiRestClient;
-  protected iceServers: RTCIceServer[] = DEFAULT_ICE_SERVERS;
+  protected iceServers: RTCIceServer[];
 
   protected onReceiveMessageCallback?: (messageEvent: TextMessageEvent) => void;
   protected onConnectionEstablishedCallback?: () => void;
@@ -45,13 +33,17 @@ export class StreamingClient {
   private videoStream: MediaStream | null = null;
   private audioElement: HTMLAudioElement | null = null;
   private audioStream: MediaStream | null = null;
+  private inputAudioState: InputAudioState = { isMuted: false };
 
-  constructor(
-    sessionId: string,
-    options: StreamingClientOptions = DEFAULT_OPTIONS,
-  ) {
+  constructor(sessionId: string, options: StreamingClientOptions) {
+    // initialize input audio state
+    const { inputAudio } = options;
+    this.inputAudioState = inputAudio.inputAudioState;
+    if (options.inputAudio.userProvidedMediaStream) {
+      this.inputAudioStream = options.inputAudio.userProvidedMediaStream;
+    }
     // set ice servers
-    this.iceServers = options.iceServers || DEFAULT_ICE_SERVERS;
+    this.iceServers = options.iceServers;
     // initialize signalling client
     this.signallingClient = new SignallingClient(
       sessionId,
@@ -65,9 +57,58 @@ export class StreamingClient {
       options.engine.baseUrl,
       sessionId,
     );
-    if (options.userProvidedMediaStream) {
-      this.inputAudioStream = options.userProvidedMediaStream;
+  }
+
+  private onInputAudioStateChange(
+    oldState: InputAudioState,
+    newState: InputAudioState,
+  ) {
+    // changed microphone mute state
+    if (oldState.isMuted !== newState.isMuted) {
+      if (newState.isMuted) {
+        this.muteAllAudioTracks();
+      } else {
+        this.unmuteAllAudioTracks();
+      }
     }
+  }
+
+  private muteAllAudioTracks() {
+    this.inputAudioStream?.getAudioTracks().forEach((track) => {
+      track.enabled = false;
+    });
+  }
+
+  private unmuteAllAudioTracks() {
+    this.inputAudioStream?.getAudioTracks().forEach((track) => {
+      track.enabled = true;
+    });
+  }
+
+  public muteInputAudio(): InputAudioState {
+    const oldAudioState: InputAudioState = this.inputAudioState;
+    const newAudioState: InputAudioState = {
+      ...this.inputAudioState,
+      isMuted: true,
+    };
+    this.inputAudioState = newAudioState;
+    this.onInputAudioStateChange(oldAudioState, newAudioState);
+    return this.inputAudioState;
+  }
+
+  public unmuteInputAudio(): InputAudioState {
+    const oldAudioState: InputAudioState = this.inputAudioState;
+    const newAudioState: InputAudioState = {
+      ...this.inputAudioState,
+      isMuted: false,
+    };
+    this.inputAudioState = newAudioState;
+    this.onInputAudioStateChange(oldAudioState, newAudioState);
+    return this.inputAudioState;
+  }
+
+  public getInputAudioState(): InputAudioState {
+    return this.inputAudioState;
   }
 
   public getPeerConnection(): RTCPeerConnection | null {
@@ -395,6 +436,10 @@ export class StreamingClient {
       });
     }
 
+    // mute the audio tracks if the user has muted the microphone
+    if (this.inputAudioState.isMuted) {
+      this.muteAllAudioTracks();
+    }
     const audioTrack = this.inputAudioStream.getAudioTracks()[0];
     this.peerConnection.addTrack(audioTrack, this.inputAudioStream);
     // pass the stream to the callback if it exists
