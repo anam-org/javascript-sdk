@@ -32,3 +32,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Get New Version
+        # only run on main
+        if: github.ref == 'refs/heads/main'
+        id: version
+        run: echo "::set-output name=version::$(jq -r .version package.json)"
+
+      - name: Notify Slack
+        # only run on main
+        if: github.ref == 'refs/heads/main'
+        id: slack
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "emoji": ":gandalf-party:",
+              "link": "https://www.npmjs.com/package/@anam-ai/js-sdk",
+              "version": "${{ steps.version.outputs.version }}",
+              "appName": "**Anam JavaScript SDK**"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_RELEASE_NOTIFICATION_WEBHOOK_URL }}
