@@ -96,6 +96,54 @@ Sometimes during a persona session you may wish to force a response from the per
 anamClient.talk('Content to say');
 ```
 
+## Controlling the input audio
+
+### Audio input state
+
+By default the Anam client starts capturing input audio from the users microphone when a session starts and stops capturing the audio when the session ends. For certain use cases however, you may wish to control the input audio state programmatically.
+
+To get the current input audio state.
+
+```typescript
+const audioState: InputAudioState = anamClient.getInputAudioState();
+// { isMuted: false } or { isMuted: true }
+```
+
+To mute the input audio.
+
+```typescript
+const audioState: InputAudioState = anamClient.muteInputAudio();
+// { isMuted: true }
+```
+
+**Note**: If you mute the input audio before starting a stream the session will start with microphone input disabled.
+
+To unmute the input audio.
+
+```typescript
+const audioState: InputAudioState = anamClient.unmuteInputAudio();
+// { isMuted: false }
+```
+
+### Using custom input streams
+
+If you wish to control the microphone input audio capture yourself you can instead pass your own `MediaStream` object when starting a stream.
+
+```typescript
+anamClient.streamToVideoAndAudioElements(
+  'video-element-id',
+  'audio-element-id',
+  {
+    /** register any callbacks **/
+  },
+  userProvidedMediaStream,
+);
+```
+
+The `userProvidedMediaStream` object must be an instance of `MediaStream` and the user input audio should be the first audio track returned from the `MediaStream.getAudioTracks()` method.
+
+**Note**: This is the default behaviour if you are using `navigator.mediaDevices.getUserMedia()`.
+
 ## Additional Configuration
 
 ### Disable brains
