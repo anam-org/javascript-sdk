@@ -48,7 +48,7 @@ jobs:
         with:
           payload: |
             {
-              "emoji": ":gandalf-party:",
+              "emoji": ":npm:",
               "link": "https://www.npmjs.com/package/@anam-ai/js-sdk",
               "version": "${{ steps.version.outputs.version }}",
               "appName": "Anam JavaScript SDK"
