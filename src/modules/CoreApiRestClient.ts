@@ -4,6 +4,7 @@ import {
   PersonaConfig,
   StartSessionResponse,
 } from '../types';
+import { StartSessionOptions } from '../types/coreApi/StartSessionOptions';
 
 export class CoreApiRestClient {
   protected baseUrl: string;
@@ -27,6 +28,7 @@ export class CoreApiRestClient {
 
   public async startSession(
     personaConfig: PersonaConfig,
+    sessionOptions?: StartSessionOptions,
   ): Promise<StartSessionResponse> {
     if (!this.sessionToken) {
       this.sessionToken = await this.unsafe_getSessionToken();
@@ -38,7 +40,7 @@ export class CoreApiRestClient {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.sessionToken}`,
         },
-        body: JSON.stringify({ personaConfig }),
+        body: JSON.stringify({ personaConfig, sessionOptions }),
       });
       const data: StartSessionResponse = await response.json();
       return data;
