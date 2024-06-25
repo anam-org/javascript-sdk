@@ -1,9 +1,9 @@
-import { Message } from '../messageHistory';
+import { Message, MessageStreamEvent } from '../messageHistory';
 import { WebRtcTextMessageEvent } from './WebRtcTextMessageEvent';
 
 export interface ConnectionCallbacks {
   onReceiveMessageCallback?: (messageEvent: WebRtcTextMessageEvent) => void;
-  onStreamMessageEventCallback?: (messageEvent: WebRtcTextMessageEvent) => void;
+  onMessageStreamEventCallback?: (messageEvent: MessageStreamEvent) => void;
   onMessageHistoryUpdatedCallback?: (messages: Message[]) => void;
   onConnectionEstablishedCallback?: () => void;
   onConnectionClosedCallback?: (reason: string) => void;

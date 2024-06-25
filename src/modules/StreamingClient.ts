@@ -215,7 +215,7 @@ export class StreamingClient {
   }
 
   private setConnectionCallbacks({
-    onStreamMessageEventCallback,
+    onMessageStreamEventCallback,
     onMessageHistoryUpdatedCallback,
     onReceiveMessageCallback,
     onConnectionEstablishedCallback,
@@ -225,8 +225,10 @@ export class StreamingClient {
     onVideoPlayStartedCallback,
     onAudioStreamStartCallback,
   }: ConnectionCallbacks) {
-    if (onStreamMessageEventCallback) {
-      this.onStreamMessageEventCallback = onStreamMessageEventCallback;
+    if (onMessageStreamEventCallback) {
+      this.messageHistoryClient.setOnMessageStreamEvent(
+        onMessageStreamEventCallback,
+      );
     }
     if (onMessageHistoryUpdatedCallback) {
       this.messageHistoryClient.setOnMessageHistoryUpdated(
@@ -489,13 +491,6 @@ export class StreamingClient {
     dataChannel.onmessage = (event) => {
       const messageEvent = JSON.parse(event.data) as WebRtcTextMessageEvent;
       this.messageHistoryClient.processWebRtcTextMessageEvent(messageEvent);
-      if (this.onStreamMessageEventCallback) {
-        this.onStreamMessageEventCallback(messageEvent);
-      }
-      // TODO: this callback should be deprecated
-      if (this.onReceiveMessageCallback) {
-        this.onReceiveMessageCallback(messageEvent);
-      }
     };
   }
 

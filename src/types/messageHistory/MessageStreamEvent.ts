@@ -1,8 +1,9 @@
 import { MessageRole } from './MessageRole';
 
-export interface Message {
+export interface MessageStreamEvent {
   id: string;
   content: string;
   role: MessageRole;
-  interrupted?: boolean;
+  endOfSpeech: boolean;
+  interrupted: boolean;
 }
