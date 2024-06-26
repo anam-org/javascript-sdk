@@ -29,23 +29,23 @@ export class MessageHistoryClient {
     };
   }
 
-  private processUserMessage(message: MessageStreamEvent): void {
+  private processUserMessage(messageEvent: MessageStreamEvent): void {
     // each user message is added directly to the history
     // user messages can not be interrupted
     const userMessage: Message = {
-      id: message.id,
-      content: message.content,
-      role: message.role,
+      id: messageEvent.id,
+      content: messageEvent.content,
+      role: messageEvent.role,
     };
     this.messages.push(userMessage);
   }
 
-  private processPersonaMessage(message: Message): void {
+  private processPersonaMessage(messageEvent: MessageStreamEvent): void {
     const personaMessage: Message = {
-      id: message.id,
-      content: message.content,
-      role: message.role,
-      interrupted: message.interrupted,
+      id: messageEvent.id,
+      content: messageEvent.content,
+      role: messageEvent.role,
+      interrupted: messageEvent.interrupted,
     };
     // check for existing message in the history
     const existingMessageIndex = this.messages.findIndex(
@@ -61,7 +61,7 @@ export class MessageHistoryClient {
       };
     } else {
       // add the new persona message to the history
-      this.messages.push(message);
+      this.messages.push(personaMessage);
     }
   }
 
