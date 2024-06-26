@@ -4,17 +4,28 @@ import {
 } from '../lib/constants';
 import { InputAudioState } from '../types';
 import { SignalMessage, SignalMessageAction } from '../types/signalling';
-import { ConnectionCallbacks, TextMessageEvent } from '../types/streaming';
+import {
+  ConnectionCallbacks,
+  WebRtcTextMessageEvent,
+} from '../types/streaming';
 import { StreamingClientOptions } from '../types/streaming/StreamingClientOptions';
 import { EngineApiRestClient } from './EngineApiRestClient';
+import { MessageHistoryClient } from './MessageHistoryClient';
 import { SignallingClient } from './SignallingClient';
 
 export class StreamingClient {
   protected signallingClient: SignallingClient;
   protected engineApiRestClient: EngineApiRestClient;
+  protected messageHistoryClient: MessageHistoryClient;
+
   protected iceServers: RTCIceServer[];
 
-  protected onReceiveMessageCallback?: (messageEvent: TextMessageEvent) => void;
+  protected onReceiveMessageCallback?: (
+    messageEvent: WebRtcTextMessageEvent,
+  ) => void;
+  protected onStreamMessageEventCallback?: (
+    messageEvent: WebRtcTextMessageEvent,
+  ) => void;
   protected onConnectionEstablishedCallback?: () => void;
   protected onConnectionClosedCallback?: (reason: string) => void;
   protected onInputAudioStreamStartCallback?: (
@@ -44,6 +55,8 @@ export class StreamingClient {
     }
     // set ice servers
     this.iceServers = options.iceServers;
+    // initialize message history client
+    this.messageHistoryClient = new MessageHistoryClient();
     // initialize signalling client
     this.signallingClient = new SignallingClient(
       sessionId,
@@ -202,6 +215,8 @@ export class StreamingClient {
   }
 
   private setConnectionCallbacks({
+    onMessageStreamEventCallback,
+    onMessageHistoryUpdatedCallback,
     onReceiveMessageCallback,
     onConnectionEstablishedCallback,
     onConnectionClosedCallback,
@@ -210,6 +225,16 @@ export class StreamingClient {
     onVideoPlayStartedCallback,
     onAudioStreamStartCallback,
   }: ConnectionCallbacks) {
+    if (onMessageStreamEventCallback) {
+      this.messageHistoryClient.setOnMessageStreamEvent(
+        onMessageStreamEventCallback,
+      );
+    }
+    if (onMessageHistoryUpdatedCallback) {
+      this.messageHistoryClient.setOnMessageHistoryUpdated(
+        onMessageHistoryUpdatedCallback,
+      );
+    }
     if (onReceiveMessageCallback) {
       this.onReceiveMessageCallback = onReceiveMessageCallback;
     }
@@ -462,13 +487,10 @@ export class StreamingClient {
     dataChannel.onclose = () => {
       // TODO: should we set the data channel to null here?
     };
-    // pass test messages to the callback
+    // pass text message to the message history client
     dataChannel.onmessage = (event) => {
-      if (this.onReceiveMessageCallback) {
-        this.onReceiveMessageCallback(
-          JSON.parse(event.data) as TextMessageEvent,
-        );
-      }
+      const messageEvent = JSON.parse(event.data) as WebRtcTextMessageEvent;
+      this.messageHistoryClient.processWebRtcTextMessageEvent(messageEvent);
     };
   }
 
