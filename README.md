@@ -197,6 +197,28 @@ To check the currently set config use the `getPersonaConfig` method.
 const config = anamClient.getPersonaConfig();
 ```
 
+## Session Options
+
+Session options are a set of optional parameters that can be adjusted to tweak the behaviour of a session, such as controlling the sensitivity of the Anam voice detection. Session options can be passed to the Anam client during initialisation.
+
+```typescript
+const anamClient = createClient(
+  'your-session-token',
+  {
+    personaId: 'chosen-persona-id',
+  },
+  {
+    voiceDetection: { endOfSpeechSensitivity: 0.7 },
+  },
+);
+```
+
+### Available Session Options
+
+| Option           | Sub-option               | Type   | Description                                             | Status      |
+| ---------------- | ------------------------ | ------ | ------------------------------------------------------- | ----------- |
+| `voiceDetection` | `endOfSpeechSensitivity` | number | Adjusts the sensitivity of the end-of-speech detection. | Coming soon |
+
 ## Using Callbacks
 
 When starting a steam you can pass callback functions to the Anam client which will fire on specific events during the session.
@@ -216,13 +238,14 @@ await anamClient.streamToVideoAndAudioElements(
 
 ### Available Callback Functions
 
-| Callback Name                     | Description                                                                                                                                                           |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `onConnectionEstablishedCallback` | Called when the direct connection between the browser and the Anam Engine has been established.                                                                       |
-| `onConnectionClosedCallback`      | Called when the direct connection between the browser and the Anam Engine has been closed.                                                                            |
-| `onVideoPlayStartedCallback`      | When streaming directly to a video element this callback is called when the first frames start playing. Useful for removing any loading indicators during connection. |
-| `onReceiveMessageCallback`        | Called with the message transcription of the persona speech.                                                                                                          |
-| `onInputAudioStreamStartCallback` | Called with the users input audio stream when microphone input has been initialised.                                                                                  |
+| Callback Name                     | Description                                                                                                                                                                                                                         |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `onConnectionEstablishedCallback` | Called when the direct connection between the browser and the Anam Engine has been established.                                                                                                                                     |
+| `onConnectionClosedCallback`      | Called when the direct connection between the browser and the Anam Engine has been closed.                                                                                                                                          |
+| `onVideoPlayStartedCallback`      | When streaming directly to a video element this callback is called when the first frames start playing. Useful for removing any loading indicators during connection.                                                               |
+| `onMessageHistoryUpdatedCallback` | Called with the message history transcription of the current session each time the user or the persona finishes speaking.                                                                                                           |
+| `onMessageStreamEventCallback`    | For persona speech, this stream is updated with each transcribed speech chunk as the persona is speaking. For the user speech this stream is updated with a complete transcription of the user's sentence once they finish speaking |
+| `onInputAudioStreamStartCallback` | Called with the users input audio stream when microphone input has been initialised.                                                                                                                                                |
 
 # Personas
 
