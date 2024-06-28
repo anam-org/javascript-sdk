@@ -1,17 +1,27 @@
-import { CoreApiRestClient } from './modules/CoreApiRestClient';
-import { StreamingClient } from './modules/StreamingClient';
 import {
-  ConnectionCallbacks,
+  CoreApiRestClient,
+  PublicEventEmitter,
+  StreamingClient,
+  MessageHistoryClient,
+  InternalEventEmitter,
+} from './modules';
+import {
+  AnamEvent,
+  EventCallbacks,
   InputAudioState,
   PersonaConfig,
   StartSessionResponse,
+  AnamClientOptions,
+  StartSessionOptions,
 } from './types';
-import { AnamClientOptions } from './types/AnamClientOptions';
-import { StartSessionOptions } from './types/coreApi/StartSessionOptions';
 
 export default class AnamClient {
+  private publicEventEmitter: PublicEventEmitter;
+  private internalEventEmitter: InternalEventEmitter;
+
   protected sessionToken: string | undefined;
   protected apiKey: string | undefined;
+  protected messageHistoryClient: MessageHistoryClient;
 
   private personaConfig: PersonaConfig | undefined;
   private clientOptions: AnamClientOptions | undefined;
@@ -43,10 +53,17 @@ export default class AnamClient {
     this.personaConfig = personaConfig;
     this.clientOptions = options;
 
+    this.publicEventEmitter = new PublicEventEmitter();
+    this.internalEventEmitter = new InternalEventEmitter();
+
     this.apiClient = new CoreApiRestClient(
       sessionToken,
       options?.apiKey,
       options?.api,
+    );
+    this.messageHistoryClient = new MessageHistoryClient(
+      this.publicEventEmitter,
+      this.internalEventEmitter,
     );
   }
 
@@ -130,25 +147,30 @@ export default class AnamClient {
         iceServers,
       } = clientConfig;
       // create a new streaming client
-      this.streamingClient = new StreamingClient(sessionId, {
-        engine: {
-          baseUrl: `${engineProtocol}://${engineHost}`,
-        },
-        signalling: {
-          heartbeatIntervalSeconds,
-          maxWsReconnectionAttempts,
-          url: {
-            baseUrl: engineHost,
-            protocol: engineProtocol,
-            signallingPath: signallingEndpoint,
+      this.streamingClient = new StreamingClient(
+        sessionId,
+        {
+          engine: {
+            baseUrl: `${engineProtocol}://${engineHost}`,
+          },
+          signalling: {
+            heartbeatIntervalSeconds,
+            maxWsReconnectionAttempts,
+            url: {
+              baseUrl: engineHost,
+              protocol: engineProtocol,
+              signallingPath: signallingEndpoint,
+            },
+          },
+          iceServers,
+          inputAudio: {
+            inputAudioState: this.inputAudioState,
+            userProvidedMediaStream: userProvidedAudioStream,
           },
         },
-        iceServers,
-        inputAudio: {
-          inputAudioState: this.inputAudioState,
-          userProvidedMediaStream: userProvidedAudioStream,
-        },
-      });
+        this.publicEventEmitter,
+        this.internalEventEmitter,
+      );
       this.sessionId = sessionId;
       return sessionId;
     } catch (error) {
@@ -174,7 +196,6 @@ export default class AnamClient {
   }
 
   public async stream(
-    callbacks: ConnectionCallbacks = {},
     userProvidedAudioStream?: MediaStream,
   ): Promise<MediaStream[]> {
     await this.startSessionIfNeeded(userProvidedAudioStream);
@@ -187,8 +208,8 @@ export default class AnamClient {
       const streams: MediaStream[] = [];
       let videoReceived = false;
       let audioReceived = false;
-
-      this.streamingClient?.setOnVideoStreamStartCallback(
+      this.publicEventEmitter.addListener(
+        AnamEvent.VIDEO_STREAM_STARTED,
         (videoStream: MediaStream) => {
           streams.push(videoStream);
           videoReceived = true;
@@ -197,7 +218,8 @@ export default class AnamClient {
           }
         },
       );
-      this.streamingClient?.setOnAudioStreamStartCallback(
+      this.publicEventEmitter.addListener(
+        AnamEvent.AUDIO_STREAM_STARTED,
         (audioStream: MediaStream) => {
           streams.push(audioStream);
           audioReceived = true;
@@ -207,14 +229,13 @@ export default class AnamClient {
         },
       );
       // start streaming
-      this.streamingClient?.startConnection(callbacks);
+      this.streamingClient?.startConnection();
     });
   }
 
   public async streamToVideoAndAudioElements(
     videoElementId: string,
     audioElementId: string,
-    callbacks: ConnectionCallbacks = {},
     userProvidedMediaStream?: MediaStream,
   ): Promise<void> {
     await this.startSessionIfNeeded(userProvidedMediaStream);
@@ -230,7 +251,7 @@ export default class AnamClient {
       videoElementId,
       audioElementId,
     );
-    this.streamingClient.startConnection(callbacks);
+    this.streamingClient.startConnection();
   }
 
   public async talk(content: string): Promise<void> {
@@ -306,5 +327,22 @@ export default class AnamClient {
       };
     }
     return this.inputAudioState;
+  }
+
+  /**
+   * Event handling
+   */
+  public addListener<K extends AnamEvent>(
+    event: K,
+    callback: EventCallbacks[K],
+  ): void {
+    this.publicEventEmitter.addListener(event, callback);
+  }
+
+  public removeListener<K extends AnamEvent>(
+    event: K,
+    callback: EventCallbacks[K],
+  ): void {
+    this.publicEventEmitter.removeListener(event, callback);
   }
 }
