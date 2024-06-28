@@ -16,8 +16,8 @@ import {
 } from './types';
 
 export default class AnamClient {
-  private static publicEventEmitter: PublicEventEmitter;
-  private static internalEventEmitter: InternalEventEmitter;
+  private publicEventEmitter: PublicEventEmitter;
+  private internalEventEmitter: InternalEventEmitter;
 
   protected sessionToken: string | undefined;
   protected apiKey: string | undefined;
@@ -53,26 +53,18 @@ export default class AnamClient {
     this.personaConfig = personaConfig;
     this.clientOptions = options;
 
+    this.publicEventEmitter = new PublicEventEmitter();
+    this.internalEventEmitter = new InternalEventEmitter();
+
     this.apiClient = new CoreApiRestClient(
       sessionToken,
       options?.apiKey,
       options?.api,
     );
-    this.messageHistoryClient = new MessageHistoryClient();
-  }
-
-  public static getPublicEventEmitter(): PublicEventEmitter {
-    if (!AnamClient.publicEventEmitter) {
-      AnamClient.publicEventEmitter = new PublicEventEmitter();
-    }
-    return AnamClient.publicEventEmitter;
-  }
-
-  public static getInternalEventEmitter(): InternalEventEmitter {
-    if (!AnamClient.internalEventEmitter) {
-      AnamClient.internalEventEmitter = new InternalEventEmitter();
-    }
-    return AnamClient.internalEventEmitter;
+    this.messageHistoryClient = new MessageHistoryClient(
+      this.publicEventEmitter,
+      this.internalEventEmitter,
+    );
   }
 
   private validateClientConfig(
@@ -155,25 +147,30 @@ export default class AnamClient {
         iceServers,
       } = clientConfig;
       // create a new streaming client
-      this.streamingClient = new StreamingClient(sessionId, {
-        engine: {
-          baseUrl: `${engineProtocol}://${engineHost}`,
-        },
-        signalling: {
-          heartbeatIntervalSeconds,
-          maxWsReconnectionAttempts,
-          url: {
-            baseUrl: engineHost,
-            protocol: engineProtocol,
-            signallingPath: signallingEndpoint,
+      this.streamingClient = new StreamingClient(
+        sessionId,
+        {
+          engine: {
+            baseUrl: `${engineProtocol}://${engineHost}`,
+          },
+          signalling: {
+            heartbeatIntervalSeconds,
+            maxWsReconnectionAttempts,
+            url: {
+              baseUrl: engineHost,
+              protocol: engineProtocol,
+              signallingPath: signallingEndpoint,
+            },
+          },
+          iceServers,
+          inputAudio: {
+            inputAudioState: this.inputAudioState,
+            userProvidedMediaStream: userProvidedAudioStream,
           },
         },
-        iceServers,
-        inputAudio: {
-          inputAudioState: this.inputAudioState,
-          userProvidedMediaStream: userProvidedAudioStream,
-        },
-      });
+        this.publicEventEmitter,
+        this.internalEventEmitter,
+      );
       this.sessionId = sessionId;
       return sessionId;
     } catch (error) {
@@ -211,7 +208,7 @@ export default class AnamClient {
       const streams: MediaStream[] = [];
       let videoReceived = false;
       let audioReceived = false;
-      AnamClient.getPublicEventEmitter().addListener(
+      this.publicEventEmitter.addListener(
         AnamEvent.VIDEO_STREAM_STARTED,
         (videoStream: MediaStream) => {
           streams.push(videoStream);
@@ -221,7 +218,7 @@ export default class AnamClient {
           }
         },
       );
-      AnamClient.getPublicEventEmitter().addListener(
+      this.publicEventEmitter.addListener(
         AnamEvent.AUDIO_STREAM_STARTED,
         (audioStream: MediaStream) => {
           streams.push(audioStream);
@@ -339,15 +336,13 @@ export default class AnamClient {
     event: K,
     callback: EventCallbacks[K],
   ): void {
-    const instance = AnamClient.getPublicEventEmitter();
-    instance.addListener(event, callback);
+    this.publicEventEmitter.addListener(event, callback);
   }
 
   public removeListener<K extends AnamEvent>(
     event: K,
     callback: EventCallbacks[K],
   ): void {
-    const instance = AnamClient.getPublicEventEmitter();
-    instance.removeListener(event, callback);
+    this.publicEventEmitter.removeListener(event, callback);
   }
 }

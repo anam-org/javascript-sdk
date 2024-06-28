@@ -8,15 +8,19 @@ import {
   WebRtcTextMessageEvent,
   StreamingClientOptions,
 } from '../types';
-import { EngineApiRestClient, SignallingClient } from '../modules';
-import AnamClient from '../AnamClient';
+import {
+  EngineApiRestClient,
+  InternalEventEmitter,
+  PublicEventEmitter,
+  SignallingClient,
+} from '../modules';
 
 export class StreamingClient {
-  protected signallingClient: SignallingClient;
-  protected engineApiRestClient: EngineApiRestClient;
-
-  protected iceServers: RTCIceServer[];
-
+  private publicEventEmitter: PublicEventEmitter;
+  private internalEventEmitter: InternalEventEmitter;
+  private signallingClient: SignallingClient;
+  private engineApiRestClient: EngineApiRestClient;
+  private iceServers: RTCIceServer[];
   private peerConnection: RTCPeerConnection | null = null;
   private connectionReceivedAnswer = false;
   private remoteIceCandidateBuffer: RTCIceCandidate[] = [];
@@ -28,7 +32,14 @@ export class StreamingClient {
   private audioStream: MediaStream | null = null;
   private inputAudioState: InputAudioState = { isMuted: false };
 
-  constructor(sessionId: string, options: StreamingClientOptions) {
+  constructor(
+    sessionId: string,
+    options: StreamingClientOptions,
+    publicEventEmitter: PublicEventEmitter,
+    internalEventEmitter: InternalEventEmitter,
+  ) {
+    this.publicEventEmitter = publicEventEmitter;
+    this.internalEventEmitter = internalEventEmitter;
     // initialize input audio state
     const { inputAudio } = options;
     this.inputAudioState = inputAudio.inputAudioState;
@@ -36,18 +47,23 @@ export class StreamingClient {
       this.inputAudioStream = options.inputAudio.userProvidedMediaStream;
     }
     // register event handlers
-    AnamClient.getInternalEventEmitter().addListener(
+    this.internalEventEmitter.addListener(
       InternalEvent.WEB_SOCKET_OPEN,
       this.onSignallingClientConnected.bind(this),
     );
-    AnamClient.getInternalEventEmitter().addListener(
+    this.internalEventEmitter.addListener(
       InternalEvent.SIGNAL_MESSAGE_RECEIVED,
       this.onSignalMessage.bind(this),
     );
     // set ice servers
     this.iceServers = options.iceServers;
     // initialize signalling client
-    this.signallingClient = new SignallingClient(sessionId, options.signalling);
+    this.signallingClient = new SignallingClient(
+      sessionId,
+      options.signalling,
+      this.publicEventEmitter,
+      this.internalEventEmitter,
+    );
     // initialize engine API client
     this.engineApiRestClient = new EngineApiRestClient(
       options.engine.baseUrl,
@@ -232,10 +248,7 @@ export class StreamingClient {
         break;
       case SignalMessageAction.END_SESSION:
         const reason = signalMessage.payload as string;
-        AnamClient.getPublicEventEmitter().emit(
-          AnamEvent.CONNECTION_CLOSED,
-          reason,
-        );
+        this.publicEventEmitter.emit(AnamEvent.CONNECTION_CLOSED, reason);
         // close the peer connection
         this.shutdown();
         break;
@@ -288,7 +301,7 @@ export class StreamingClient {
       this.peerConnection?.iceConnectionState === 'connected' ||
       this.peerConnection?.iceConnectionState === 'completed'
     ) {
-      AnamClient.getPublicEventEmitter().emit(AnamEvent.CONNECTION_ESTABLISHED);
+      this.publicEventEmitter.emit(AnamEvent.CONNECTION_ESTABLISHED);
     }
   }
 
@@ -313,7 +326,7 @@ export class StreamingClient {
         error,
       );
     }
-    AnamClient.getPublicEventEmitter().emit(
+    this.publicEventEmitter.emit(
       AnamEvent.CONNECTION_CLOSED,
       PUBLIC_MESSAGE_ON_WEBRTC_FAILURE,
     );
@@ -322,7 +335,7 @@ export class StreamingClient {
   private onTrackEventHandler(event: RTCTrackEvent) {
     if (event.track.kind === 'video') {
       this.videoStream = event.streams[0];
-      AnamClient.getPublicEventEmitter().emit(
+      this.publicEventEmitter.emit(
         AnamEvent.VIDEO_STREAM_STARTED,
         this.videoStream,
       );
@@ -331,12 +344,12 @@ export class StreamingClient {
         const handle = this.videoElement.requestVideoFrameCallback(() => {
           // unregister the callback after the first frame
           this.videoElement?.cancelVideoFrameCallback(handle);
-          AnamClient.getPublicEventEmitter().emit(AnamEvent.VIDEO_PLAY_STARTED);
+          this.publicEventEmitter.emit(AnamEvent.VIDEO_PLAY_STARTED);
         });
       }
     } else if (event.track.kind === 'audio') {
       this.audioStream = event.streams[0];
-      AnamClient.getPublicEventEmitter().emit(
+      this.publicEventEmitter.emit(
         AnamEvent.AUDIO_STREAM_STARTED,
         this.audioStream,
       );
@@ -382,7 +395,7 @@ export class StreamingClient {
     const audioTrack = this.inputAudioStream.getAudioTracks()[0];
     this.peerConnection.addTrack(audioTrack, this.inputAudioStream);
     // pass the stream to the callback if it exists
-    AnamClient.getPublicEventEmitter().emit(
+    this.publicEventEmitter.emit(
       AnamEvent.INPUT_AUDIO_STREAM_STARTED,
       this.inputAudioStream,
     );
@@ -406,7 +419,7 @@ export class StreamingClient {
     dataChannel.onmessage = (event) => {
       console.log('Data channel message received: ', event.data);
       const messageEvent = JSON.parse(event.data) as WebRtcTextMessageEvent;
-      AnamClient.getInternalEventEmitter().emit(
+      this.internalEventEmitter.emit(
         InternalEvent.WEBRTC_CHAT_MESSAGE_RECEIVED,
         messageEvent,
       );

@@ -6,24 +6,33 @@ import {
   SignalMessageAction,
   SignallingClientOptions,
 } from '../types';
-import AnamClient from '../AnamClient';
+import { PublicEventEmitter, InternalEventEmitter } from '../modules';
 
 const DEFAULT_HEARTBEART_INTERVAL_SECONDS = 5;
 const DEFAULT_WS_RECONNECTION_ATTEMPTS = 5;
 
 export class SignallingClient {
-  protected url: URL;
-  protected sessionId: string;
-  protected heartbeatIntervalSeconds: number;
-  protected maxWsReconnectionAttempts: number;
-
+  private publicEventEmitter: PublicEventEmitter;
+  private internalEventEmitter: InternalEventEmitter;
+  private url: URL;
+  private sessionId: string;
+  private heartbeatIntervalSeconds: number;
+  private maxWsReconnectionAttempts: number;
   private stopSignal = false;
   private sendingBuffer: SignalMessage[] = [];
   private wsConnectionAttempts = 0;
   private socket: WebSocket | null = null;
   private heartBeatIntervalRef: ReturnType<typeof setInterval> | null = null;
 
-  constructor(sessionId: string, options: SignallingClientOptions) {
+  constructor(
+    sessionId: string,
+    options: SignallingClientOptions,
+    publicEventEmitter: PublicEventEmitter,
+    internalEventEmitter: InternalEventEmitter,
+  ) {
+    this.publicEventEmitter = publicEventEmitter;
+    this.internalEventEmitter = internalEventEmitter;
+
     if (!sessionId) {
       throw new Error('Signalling Client: sessionId is required');
     }
@@ -122,10 +131,10 @@ export class SignallingClient {
       this.flushSendingBuffer();
       this.socket.onmessage = this.onMessage.bind(this);
       this.startSendingHeartBeats();
-      AnamClient.getInternalEventEmitter().emit(InternalEvent.WEB_SOCKET_OPEN);
+      this.internalEventEmitter.emit(InternalEvent.WEB_SOCKET_OPEN);
     } catch (e) {
       console.error('SignallingClient - onOpen: error in onOpen', e);
-      AnamClient.getPublicEventEmitter().emit(
+      this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
         PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE,
       );
@@ -147,7 +156,7 @@ export class SignallingClient {
         clearInterval(this.heartBeatIntervalRef);
         this.heartBeatIntervalRef = null;
       }
-      AnamClient.getPublicEventEmitter().emit(
+      this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
         PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE,
       );
@@ -177,7 +186,7 @@ export class SignallingClient {
 
   private async onMessage(event: MessageEvent) {
     const message: SignalMessage = JSON.parse(event.data);
-    AnamClient.getInternalEventEmitter().emit(
+    this.internalEventEmitter.emit(
       InternalEvent.SIGNAL_MESSAGE_RECEIVED,
       message,
     );

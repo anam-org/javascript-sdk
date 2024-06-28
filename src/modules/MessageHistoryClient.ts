@@ -6,14 +6,22 @@ import {
   InternalEvent,
   AnamEvent,
 } from '../types';
-import AnamClient from '../AnamClient';
+import { PublicEventEmitter, InternalEventEmitter } from '../modules';
 export class MessageHistoryClient {
+  private publicEventEmitter: PublicEventEmitter;
+  private internalEventEmitter: InternalEventEmitter;
+
   private messages: Message[] = [];
 
-  constructor() {
+  constructor(
+    publicEventEmitter: PublicEventEmitter,
+    internalEventEmitter: InternalEventEmitter,
+  ) {
+    this.publicEventEmitter = publicEventEmitter;
+    this.internalEventEmitter = internalEventEmitter;
     console.log('MessageHistoryClient created');
     // register for events
-    AnamClient.getInternalEventEmitter().addListener(
+    this.internalEventEmitter.addListener(
       InternalEvent.WEBRTC_CHAT_MESSAGE_RECEIVED,
       this.processWebRtcTextMessageEvent.bind(this),
     );
@@ -71,7 +79,7 @@ export class MessageHistoryClient {
     const messageStreamEvent: MessageStreamEvent =
       this.webRtcTextMessageEventToMessageStreamEvent(event);
     // pass to callback stream
-    AnamClient.getPublicEventEmitter().emit(
+    this.publicEventEmitter.emit(
       AnamEvent.MESSAGE_STREAM_EVENT_RECEIVED,
       messageStreamEvent,
     );
@@ -85,7 +93,7 @@ export class MessageHistoryClient {
         break;
     }
     if (messageStreamEvent.endOfSpeech) {
-      AnamClient.getPublicEventEmitter().emit(
+      this.publicEventEmitter.emit(
         AnamEvent.MESSAGE_HISTORY_UPDATED,
         this.messages,
       );
