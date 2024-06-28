@@ -1,17 +1,27 @@
-import { CoreApiRestClient } from './modules/CoreApiRestClient';
-import { StreamingClient } from './modules/StreamingClient';
 import {
-  ConnectionCallbacks,
+  CoreApiRestClient,
+  PublicEventEmitter,
+  StreamingClient,
+  MessageHistoryClient,
+  InternalEventEmitter,
+} from './modules';
+import {
+  AnamEvent,
+  EventCallbacks,
   InputAudioState,
   PersonaConfig,
   StartSessionResponse,
+  AnamClientOptions,
+  StartSessionOptions,
 } from './types';
-import { AnamClientOptions } from './types/AnamClientOptions';
-import { StartSessionOptions } from './types/coreApi/StartSessionOptions';
 
 export default class AnamClient {
+  private static publicEventEmitter: PublicEventEmitter;
+  private static internalEventEmitter: InternalEventEmitter;
+
   protected sessionToken: string | undefined;
   protected apiKey: string | undefined;
+  protected messageHistoryClient: MessageHistoryClient;
 
   private personaConfig: PersonaConfig | undefined;
   private clientOptions: AnamClientOptions | undefined;
@@ -48,6 +58,21 @@ export default class AnamClient {
       options?.apiKey,
       options?.api,
     );
+    this.messageHistoryClient = new MessageHistoryClient();
+  }
+
+  public static getPublicEventEmitter(): PublicEventEmitter {
+    if (!AnamClient.publicEventEmitter) {
+      AnamClient.publicEventEmitter = new PublicEventEmitter();
+    }
+    return AnamClient.publicEventEmitter;
+  }
+
+  public static getInternalEventEmitter(): InternalEventEmitter {
+    if (!AnamClient.internalEventEmitter) {
+      AnamClient.internalEventEmitter = new InternalEventEmitter();
+    }
+    return AnamClient.internalEventEmitter;
   }
 
   private validateClientConfig(
@@ -174,7 +199,6 @@ export default class AnamClient {
   }
 
   public async stream(
-    callbacks: ConnectionCallbacks = {},
     userProvidedAudioStream?: MediaStream,
   ): Promise<MediaStream[]> {
     await this.startSessionIfNeeded(userProvidedAudioStream);
@@ -187,8 +211,8 @@ export default class AnamClient {
       const streams: MediaStream[] = [];
       let videoReceived = false;
       let audioReceived = false;
-
-      this.streamingClient?.setOnVideoStreamStartCallback(
+      AnamClient.getPublicEventEmitter().addListener(
+        AnamEvent.VIDEO_STREAM_STARTED,
         (videoStream: MediaStream) => {
           streams.push(videoStream);
           videoReceived = true;
@@ -197,7 +221,8 @@ export default class AnamClient {
           }
         },
       );
-      this.streamingClient?.setOnAudioStreamStartCallback(
+      AnamClient.getPublicEventEmitter().addListener(
+        AnamEvent.AUDIO_STREAM_STARTED,
         (audioStream: MediaStream) => {
           streams.push(audioStream);
           audioReceived = true;
@@ -207,14 +232,13 @@ export default class AnamClient {
         },
       );
       // start streaming
-      this.streamingClient?.startConnection(callbacks);
+      this.streamingClient?.startConnection();
     });
   }
 
   public async streamToVideoAndAudioElements(
     videoElementId: string,
     audioElementId: string,
-    callbacks: ConnectionCallbacks = {},
     userProvidedMediaStream?: MediaStream,
   ): Promise<void> {
     await this.startSessionIfNeeded(userProvidedMediaStream);
@@ -230,7 +254,7 @@ export default class AnamClient {
       videoElementId,
       audioElementId,
     );
-    this.streamingClient.startConnection(callbacks);
+    this.streamingClient.startConnection();
   }
 
   public async talk(content: string): Promise<void> {
@@ -306,5 +330,24 @@ export default class AnamClient {
       };
     }
     return this.inputAudioState;
+  }
+
+  /**
+   * Event handling
+   */
+  public addListener<K extends AnamEvent>(
+    event: K,
+    callback: EventCallbacks[K],
+  ): void {
+    const instance = AnamClient.getPublicEventEmitter();
+    instance.addListener(event, callback);
+  }
+
+  public removeListener<K extends AnamEvent>(
+    event: K,
+    callback: EventCallbacks[K],
+  ): void {
+    const instance = AnamClient.getPublicEventEmitter();
+    instance.removeListener(event, callback);
   }
 }

@@ -3,18 +3,20 @@ import {
   WebRtcTextMessageEvent,
   MessageRole,
   MessageStreamEvent,
+  InternalEvent,
+  AnamEvent,
 } from '../types';
+import AnamClient from '../AnamClient';
 export class MessageHistoryClient {
   private messages: Message[] = [];
 
-  private onMessageHistoryUpdated: ((messages: Message[]) => void) | undefined;
-
-  private onMessageStreamEvent:
-    | ((messageEvent: MessageStreamEvent) => void)
-    | undefined;
-
-  constructor(onMessageHistoryUpdated?: (messages: Message[]) => void) {
-    this.onMessageHistoryUpdated = onMessageHistoryUpdated;
+  constructor() {
+    console.log('MessageHistoryClient created');
+    // register for events
+    AnamClient.getInternalEventEmitter().addListener(
+      InternalEvent.WEBRTC_CHAT_MESSAGE_RECEIVED,
+      this.processWebRtcTextMessageEvent.bind(this),
+    );
   }
 
   private webRtcTextMessageEventToMessageStreamEvent(
@@ -69,9 +71,10 @@ export class MessageHistoryClient {
     const messageStreamEvent: MessageStreamEvent =
       this.webRtcTextMessageEventToMessageStreamEvent(event);
     // pass to callback stream
-    if (this.onMessageStreamEvent) {
-      this.onMessageStreamEvent(messageStreamEvent);
-    }
+    AnamClient.getPublicEventEmitter().emit(
+      AnamEvent.MESSAGE_STREAM_EVENT_RECEIVED,
+      messageStreamEvent,
+    );
     // update the message history
     switch (messageStreamEvent.role) {
       case MessageRole.USER:
@@ -81,20 +84,11 @@ export class MessageHistoryClient {
         this.processPersonaMessage(messageStreamEvent);
         break;
     }
-    if (messageStreamEvent.endOfSpeech && this.onMessageHistoryUpdated) {
-      this.onMessageHistoryUpdated(this.messages);
+    if (messageStreamEvent.endOfSpeech) {
+      AnamClient.getPublicEventEmitter().emit(
+        AnamEvent.MESSAGE_HISTORY_UPDATED,
+        this.messages,
+      );
     }
-  }
-
-  public setOnMessageHistoryUpdated(
-    onMessageHistoryUpdated: (messages: Message[]) => void,
-  ): void {
-    this.onMessageHistoryUpdated = onMessageHistoryUpdated;
-  }
-
-  public setOnMessageStreamEvent(
-    onMessageStreamEvent: (messageEvent: MessageStreamEvent) => void,
-  ): void {
-    this.onMessageStreamEvent = onMessageStreamEvent;
   }
 }

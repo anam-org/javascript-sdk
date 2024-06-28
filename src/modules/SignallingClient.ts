@@ -1,8 +1,12 @@
+import { PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE } from '../lib/constants';
 import {
+  AnamEvent,
+  InternalEvent,
   SignalMessage,
   SignalMessageAction,
   SignallingClientOptions,
 } from '../types';
+import AnamClient from '../AnamClient';
 
 const DEFAULT_HEARTBEART_INTERVAL_SECONDS = 5;
 const DEFAULT_WS_RECONNECTION_ATTEMPTS = 5;
@@ -12,11 +16,6 @@ export class SignallingClient {
   protected sessionId: string;
   protected heartbeatIntervalSeconds: number;
   protected maxWsReconnectionAttempts: number;
-  protected onSignalMessageReceivedCallback?: (
-    msg: SignalMessage,
-  ) => Promise<void> | void;
-  protected onClientConnectedCallback?: () => Promise<void> | void;
-  protected onClientConnectionFailureCallback?: () => Promise<void> | void;
 
   private stopSignal = false;
   private sendingBuffer: SignalMessage[] = [];
@@ -24,30 +23,12 @@ export class SignallingClient {
   private socket: WebSocket | null = null;
   private heartBeatIntervalRef: ReturnType<typeof setInterval> | null = null;
 
-  constructor(
-    sessionId: string,
-    options: SignallingClientOptions,
-    onSignalMessageReceivedCallback?: (
-      msg: SignalMessage,
-    ) => Promise<void> | void,
-    onClientConnectedCallback?: () => Promise<void> | void,
-    onClientConnectionFailureCallback?: () => Promise<void> | void,
-  ) {
+  constructor(sessionId: string, options: SignallingClientOptions) {
     if (!sessionId) {
       throw new Error('Signalling Client: sessionId is required');
     }
     this.sessionId = sessionId;
 
-    if (onSignalMessageReceivedCallback) {
-      this.onSignalMessageReceivedCallback = onSignalMessageReceivedCallback;
-    }
-    if (onClientConnectedCallback) {
-      this.onClientConnectedCallback = onClientConnectedCallback;
-    }
-    if (onClientConnectionFailureCallback) {
-      this.onClientConnectionFailureCallback =
-        onClientConnectionFailureCallback;
-    }
     const { heartbeatIntervalSeconds, maxWsReconnectionAttempts, url } =
       options;
 
@@ -141,14 +122,13 @@ export class SignallingClient {
       this.flushSendingBuffer();
       this.socket.onmessage = this.onMessage.bind(this);
       this.startSendingHeartBeats();
-      if (this.onClientConnectedCallback) {
-        await this.onClientConnectedCallback();
-      }
+      AnamClient.getInternalEventEmitter().emit(InternalEvent.WEB_SOCKET_OPEN);
     } catch (e) {
       console.error('SignallingClient - onOpen: error in onOpen', e);
-      if (this.onClientConnectionFailureCallback) {
-        this.onClientConnectionFailureCallback();
-      }
+      AnamClient.getPublicEventEmitter().emit(
+        AnamEvent.CONNECTION_CLOSED,
+        PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE,
+      );
     }
   }
 
@@ -167,9 +147,10 @@ export class SignallingClient {
         clearInterval(this.heartBeatIntervalRef);
         this.heartBeatIntervalRef = null;
       }
-      if (this.onClientConnectionFailureCallback) {
-        this.onClientConnectionFailureCallback();
-      }
+      AnamClient.getPublicEventEmitter().emit(
+        AnamEvent.CONNECTION_CLOSED,
+        PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE,
+      );
     }
   }
 
@@ -195,10 +176,11 @@ export class SignallingClient {
   }
 
   private async onMessage(event: MessageEvent) {
-    const message = JSON.parse(event.data);
-    if (this.onSignalMessageReceivedCallback) {
-      await this.onSignalMessageReceivedCallback(message);
-    }
+    const message: SignalMessage = JSON.parse(event.data);
+    AnamClient.getInternalEventEmitter().emit(
+      InternalEvent.SIGNAL_MESSAGE_RECEIVED,
+      message,
+    );
   }
 
   private startSendingHeartBeats() {
