@@ -133,9 +133,6 @@ If you wish to control the microphone input audio capture yourself you can inste
 anamClient.streamToVideoAndAudioElements(
   'video-element-id',
   'audio-element-id',
-  {
-    /** register any callbacks **/
-  },
   userProvidedMediaStream,
 );
 ```
@@ -219,33 +216,30 @@ const anamClient = createClient(
 | ---------------- | ------------------------ | ------ | ------------------------------------------------------- | ----------- |
 | `voiceDetection` | `endOfSpeechSensitivity` | number | Adjusts the sensitivity of the end-of-speech detection. | Coming soon |
 
-## Using Callbacks
+## Listening to Events
 
-When starting a steam you can pass callback functions to the Anam client which will fire on specific events during the session.
+After initialising the Anam client you can register any event listeners using the `addListener` method.
 
 ```typescript
-await anamClient.streamToVideoAndAudioElements(
-  'video_element_id',
-  'audio_element_id',
-  {
-    onConnectionEstablishedCallback: onConnectionEstablished,
-    onConnectionClosedCallback: onConnectionClosed,
-    onVideoPlayStartedCallback: onVideoPlayStarted,
-    onMessageHistoryUpdatedCallback: onMessageHistoryUpdated,
-  },
-);
+anamClient.addListener(AnamEvent.CONNECTION_ESTABLISHED, () => {
+  console.log('Connection Established');
+});
+
+anamClient.addListener(AnamEvent.MESSAGE_HISTORY_UPDATED, (messages) => {
+  console.log('Updated Messages: ', messages);
+});
 ```
 
-### Available Callback Functions
+### Event Types
 
-| Callback Name                     | Description                                                                                                                                                                                                                         |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `onConnectionEstablishedCallback` | Called when the direct connection between the browser and the Anam Engine has been established.                                                                                                                                     |
-| `onConnectionClosedCallback`      | Called when the direct connection between the browser and the Anam Engine has been closed.                                                                                                                                          |
-| `onVideoPlayStartedCallback`      | When streaming directly to a video element this callback is called when the first frames start playing. Useful for removing any loading indicators during connection.                                                               |
-| `onMessageHistoryUpdatedCallback` | Called with the message history transcription of the current session each time the user or the persona finishes speaking.                                                                                                           |
-| `onMessageStreamEventCallback`    | For persona speech, this stream is updated with each transcribed speech chunk as the persona is speaking. For the user speech this stream is updated with a complete transcription of the user's sentence once they finish speaking |
-| `onInputAudioStreamStartCallback` | Called with the users input audio stream when microphone input has been initialised.                                                                                                                                                |
+| Event Name                      | Description                                                                                                                                                                                                                         |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONNECTION_ESTABLISHED`        | Called when the direct connection between the browser and the Anam Engine has been established.                                                                                                                                     |
+| `CONNECTION_CLOSED`             | Called when the direct connection between the browser and the Anam Engine has been closed.                                                                                                                                          |
+| `VIDEO_PLAY_STARTED`            | When streaming directly to a video element this event is fired when the first frames start playing. Useful for removing any loading indicators during connection.                                                                   |
+| `MESSAGE_HISTORY_UPDATED`       | Called with the message history transcription of the current session each time the user or the persona finishes speaking.                                                                                                           |
+| `MESSAGE_STREAM_EVENT_RECEIVED` | For persona speech, this stream is updated with each transcribed speech chunk as the persona is speaking. For the user speech this stream is updated with a complete transcription of the user's sentence once they finish speaking |
+| `INPUT_AUDIO_STREAM_STARTED`    | Called with the users input audio stream when microphone input has been initialised.                                                                                                                                                |
 
 # Personas
 
