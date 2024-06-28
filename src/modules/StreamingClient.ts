@@ -1,40 +1,26 @@
+import { PUBLIC_MESSAGE_ON_WEBRTC_FAILURE } from '../lib/constants';
 import {
-  PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE,
-  PUBLIC_MESSAGE_ON_WEBRTC_FAILURE,
-} from '../lib/constants';
-import { InputAudioState } from '../types';
-import { SignalMessage, SignalMessageAction } from '../types/signalling';
-import {
-  ConnectionCallbacks,
+  AnamEvent,
+  InputAudioState,
+  InternalEvent,
+  SignalMessage,
+  SignalMessageAction,
   WebRtcTextMessageEvent,
-} from '../types/streaming';
-import { StreamingClientOptions } from '../types/streaming/StreamingClientOptions';
-import { EngineApiRestClient } from './EngineApiRestClient';
-import { MessageHistoryClient } from './MessageHistoryClient';
-import { SignallingClient } from './SignallingClient';
+  StreamingClientOptions,
+} from '../types';
+import {
+  EngineApiRestClient,
+  InternalEventEmitter,
+  PublicEventEmitter,
+  SignallingClient,
+} from '../modules';
 
 export class StreamingClient {
-  protected signallingClient: SignallingClient;
-  protected engineApiRestClient: EngineApiRestClient;
-  protected messageHistoryClient: MessageHistoryClient;
-
-  protected iceServers: RTCIceServer[];
-
-  protected onReceiveMessageCallback?: (
-    messageEvent: WebRtcTextMessageEvent,
-  ) => void;
-  protected onStreamMessageEventCallback?: (
-    messageEvent: WebRtcTextMessageEvent,
-  ) => void;
-  protected onConnectionEstablishedCallback?: () => void;
-  protected onConnectionClosedCallback?: (reason: string) => void;
-  protected onInputAudioStreamStartCallback?: (
-    audioStream: MediaStream,
-  ) => void;
-  protected onVideoStreamStartCallback?: (videoStream: MediaStream) => void;
-  protected onAudioStreamStartCallback?: (audioStream: MediaStream) => void;
-  protected onVideoPlayStartedCallback?: () => void;
-
+  private publicEventEmitter: PublicEventEmitter;
+  private internalEventEmitter: InternalEventEmitter;
+  private signallingClient: SignallingClient;
+  private engineApiRestClient: EngineApiRestClient;
+  private iceServers: RTCIceServer[];
   private peerConnection: RTCPeerConnection | null = null;
   private connectionReceivedAnswer = false;
   private remoteIceCandidateBuffer: RTCIceCandidate[] = [];
@@ -46,24 +32,37 @@ export class StreamingClient {
   private audioStream: MediaStream | null = null;
   private inputAudioState: InputAudioState = { isMuted: false };
 
-  constructor(sessionId: string, options: StreamingClientOptions) {
+  constructor(
+    sessionId: string,
+    options: StreamingClientOptions,
+    publicEventEmitter: PublicEventEmitter,
+    internalEventEmitter: InternalEventEmitter,
+  ) {
+    this.publicEventEmitter = publicEventEmitter;
+    this.internalEventEmitter = internalEventEmitter;
     // initialize input audio state
     const { inputAudio } = options;
     this.inputAudioState = inputAudio.inputAudioState;
     if (options.inputAudio.userProvidedMediaStream) {
       this.inputAudioStream = options.inputAudio.userProvidedMediaStream;
     }
+    // register event handlers
+    this.internalEventEmitter.addListener(
+      InternalEvent.WEB_SOCKET_OPEN,
+      this.onSignallingClientConnected.bind(this),
+    );
+    this.internalEventEmitter.addListener(
+      InternalEvent.SIGNAL_MESSAGE_RECEIVED,
+      this.onSignalMessage.bind(this),
+    );
     // set ice servers
     this.iceServers = options.iceServers;
-    // initialize message history client
-    this.messageHistoryClient = new MessageHistoryClient();
     // initialize signalling client
     this.signallingClient = new SignallingClient(
       sessionId,
       options.signalling,
-      this.onSignalMessage.bind(this),
-      this.onSignallingClientConnected.bind(this),
-      this.onSignallingClientFailed.bind(this),
+      this.publicEventEmitter,
+      this.internalEventEmitter,
     );
     // initialize engine API client
     this.engineApiRestClient = new EngineApiRestClient(
@@ -140,18 +139,6 @@ export class StreamingClient {
     return this.audioStream;
   }
 
-  public setOnVideoStreamStartCallback(
-    callback: (videoStream: MediaStream) => void,
-  ) {
-    this.onVideoStreamStartCallback = callback;
-  }
-
-  public setOnAudioStreamStartCallback(
-    callback: (audioStream: MediaStream) => void,
-  ) {
-    this.onAudioStreamStartCallback = callback;
-  }
-
   public sendDataMessage(message: string) {
     if (this.dataChannel && this.dataChannel.readyState === 'open') {
       this.dataChannel.send(message);
@@ -183,7 +170,7 @@ export class StreamingClient {
     }
   }
 
-  public startConnection(callbacks: ConnectionCallbacks) {
+  public startConnection() {
     try {
       if (this.peerConnection) {
         console.error(
@@ -191,8 +178,6 @@ export class StreamingClient {
         );
         return;
       }
-      // set callbacks
-      this.setConnectionCallbacks(callbacks);
       // start the connection
       this.signallingClient.connect();
     } catch (error) {
@@ -212,50 +197,6 @@ export class StreamingClient {
     }
     await this.engineApiRestClient.sendTalkCommand(content);
     return;
-  }
-
-  private setConnectionCallbacks({
-    onMessageStreamEventCallback,
-    onMessageHistoryUpdatedCallback,
-    onReceiveMessageCallback,
-    onConnectionEstablishedCallback,
-    onConnectionClosedCallback,
-    onInputAudioStreamStartCallback,
-    onVideoStreamStartCallback,
-    onVideoPlayStartedCallback,
-    onAudioStreamStartCallback,
-  }: ConnectionCallbacks) {
-    if (onMessageStreamEventCallback) {
-      this.messageHistoryClient.setOnMessageStreamEvent(
-        onMessageStreamEventCallback,
-      );
-    }
-    if (onMessageHistoryUpdatedCallback) {
-      this.messageHistoryClient.setOnMessageHistoryUpdated(
-        onMessageHistoryUpdatedCallback,
-      );
-    }
-    if (onReceiveMessageCallback) {
-      this.onReceiveMessageCallback = onReceiveMessageCallback;
-    }
-    if (onConnectionEstablishedCallback) {
-      this.onConnectionEstablishedCallback = onConnectionEstablishedCallback;
-    }
-    if (onConnectionClosedCallback) {
-      this.onConnectionClosedCallback = onConnectionClosedCallback;
-    }
-    if (onInputAudioStreamStartCallback) {
-      this.onInputAudioStreamStartCallback = onInputAudioStreamStartCallback;
-    }
-    if (onVideoStreamStartCallback) {
-      this.onVideoStreamStartCallback = onVideoStreamStartCallback;
-    }
-    if (onVideoPlayStartedCallback) {
-      this.onVideoPlayStartedCallback = onVideoPlayStartedCallback;
-    }
-    if (onAudioStreamStartCallback) {
-      this.onAudioStreamStartCallback = onAudioStreamStartCallback;
-    }
   }
 
   private async initPeerConnection() {
@@ -307,9 +248,7 @@ export class StreamingClient {
         break;
       case SignalMessageAction.END_SESSION:
         const reason = signalMessage.payload as string;
-        if (this.onConnectionClosedCallback) {
-          this.onConnectionClosedCallback(reason);
-        }
+        this.publicEventEmitter.emit(AnamEvent.CONNECTION_CLOSED, reason);
         // close the peer connection
         this.shutdown();
         break;
@@ -339,17 +278,6 @@ export class StreamingClient {
     }
   }
 
-  private onSignallingClientFailed() {
-    console.error(
-      'StreamingClient - onSignallingClientFailed: signalling client failed',
-    );
-    if (this.onConnectionClosedCallback) {
-      this.onConnectionClosedCallback(
-        PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE,
-      );
-    }
-  }
-
   private flushRemoteIceCandidateBuffer() {
     this.remoteIceCandidateBuffer.forEach((candidate) => {
       this.peerConnection?.addIceCandidate(candidate);
@@ -373,9 +301,7 @@ export class StreamingClient {
       this.peerConnection?.iceConnectionState === 'connected' ||
       this.peerConnection?.iceConnectionState === 'completed'
     ) {
-      if (this.onConnectionEstablishedCallback) {
-        this.onConnectionEstablishedCallback();
-      }
+      this.publicEventEmitter.emit(AnamEvent.CONNECTION_ESTABLISHED);
     }
   }
 
@@ -400,32 +326,33 @@ export class StreamingClient {
         error,
       );
     }
-    if (this.onConnectionClosedCallback) {
-      this.onConnectionClosedCallback(PUBLIC_MESSAGE_ON_WEBRTC_FAILURE);
-    }
+    this.publicEventEmitter.emit(
+      AnamEvent.CONNECTION_CLOSED,
+      PUBLIC_MESSAGE_ON_WEBRTC_FAILURE,
+    );
   }
 
   private onTrackEventHandler(event: RTCTrackEvent) {
     if (event.track.kind === 'video') {
       this.videoStream = event.streams[0];
-      if (this.onVideoStreamStartCallback) {
-        this.onVideoStreamStartCallback(this.videoStream);
-      }
+      this.publicEventEmitter.emit(
+        AnamEvent.VIDEO_STREAM_STARTED,
+        this.videoStream,
+      );
       if (this.videoElement) {
         this.videoElement.srcObject = this.videoStream;
         const handle = this.videoElement.requestVideoFrameCallback(() => {
           // unregister the callback after the first frame
           this.videoElement?.cancelVideoFrameCallback(handle);
-          if (this.onVideoPlayStartedCallback) {
-            this.onVideoPlayStartedCallback();
-          }
+          this.publicEventEmitter.emit(AnamEvent.VIDEO_PLAY_STARTED);
         });
       }
     } else if (event.track.kind === 'audio') {
       this.audioStream = event.streams[0];
-      if (this.onAudioStreamStartCallback) {
-        this.onAudioStreamStartCallback(this.audioStream);
-      }
+      this.publicEventEmitter.emit(
+        AnamEvent.AUDIO_STREAM_STARTED,
+        this.audioStream,
+      );
       if (this.audioElement) {
         this.audioElement.srcObject = this.audioStream;
       }
@@ -468,9 +395,10 @@ export class StreamingClient {
     const audioTrack = this.inputAudioStream.getAudioTracks()[0];
     this.peerConnection.addTrack(audioTrack, this.inputAudioStream);
     // pass the stream to the callback if it exists
-    if (this.onInputAudioStreamStartCallback) {
-      this.onInputAudioStreamStartCallback(this.inputAudioStream);
-    }
+    this.publicEventEmitter.emit(
+      AnamEvent.INPUT_AUDIO_STREAM_STARTED,
+      this.inputAudioStream,
+    );
 
     /**
      * Text
@@ -490,7 +418,10 @@ export class StreamingClient {
     // pass text message to the message history client
     dataChannel.onmessage = (event) => {
       const messageEvent = JSON.parse(event.data) as WebRtcTextMessageEvent;
-      this.messageHistoryClient.processWebRtcTextMessageEvent(messageEvent);
+      this.internalEventEmitter.emit(
+        InternalEvent.WEBRTC_CHAT_MESSAGE_RECEIVED,
+        messageEvent,
+      );
     };
   }
 
