@@ -417,7 +417,6 @@ export class StreamingClient {
     };
     // pass text message to the message history client
     dataChannel.onmessage = (event) => {
-      console.log('Data channel message received: ', event.data);
       const messageEvent = JSON.parse(event.data) as WebRtcTextMessageEvent;
       this.internalEventEmitter.emit(
         InternalEvent.WEBRTC_CHAT_MESSAGE_RECEIVED,

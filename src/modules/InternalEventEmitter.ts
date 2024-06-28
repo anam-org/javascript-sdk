@@ -11,7 +11,6 @@ export class InternalEventEmitter {
     event: K,
     callback: InternalEventCallbacks[K],
   ): void {
-    console.log('Adding INTERNAL listener', event, callback);
     if (!this.listeners[event]) {
       (this.listeners[event] as Set<InternalEventCallbacks[K]>) = new Set<
         InternalEventCallbacks[K]
@@ -34,7 +33,6 @@ export class InternalEventEmitter {
       ? P
       : never
   ): void {
-    console.log('Emitting INTERNAL event', event, args);
     if (!this.listeners[event]) return;
     (this.listeners[event] as Set<InternalEventCallbacks[K]>).forEach(
       (callback) => {

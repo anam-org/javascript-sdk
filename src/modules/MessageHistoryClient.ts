@@ -19,7 +19,6 @@ export class MessageHistoryClient {
   ) {
     this.publicEventEmitter = publicEventEmitter;
     this.internalEventEmitter = internalEventEmitter;
-    console.log('MessageHistoryClient created');
     // register for events
     this.internalEventEmitter.addListener(
       InternalEvent.WEBRTC_CHAT_MESSAGE_RECEIVED,

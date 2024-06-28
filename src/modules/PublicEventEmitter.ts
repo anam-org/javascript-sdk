@@ -11,7 +11,6 @@ export class PublicEventEmitter {
     event: K,
     callback: EventCallbacks[K],
   ): void {
-    console.log('Adding listener', event, callback);
     if (!this.listeners[event]) {
       (this.listeners[event] as Set<EventCallbacks[K]>) = new Set<
         EventCallbacks[K]
@@ -32,7 +31,6 @@ export class PublicEventEmitter {
     event: K,
     ...args: EventCallbacks[K] extends (...args: infer P) => any ? P : never
   ): void {
-    console.log('Emitting event', event, args);
     if (!this.listeners[event]) return;
     (this.listeners[event] as Set<EventCallbacks[K]>).forEach((callback) => {
       (callback as (...args: any[]) => void)(...args);
