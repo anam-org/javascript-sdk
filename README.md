@@ -249,11 +249,11 @@ Available personas are managed via the [Anam API](https://api.anam.ai/api).
 
 ### Listing Available Personas
 
-To list all personas available for your account use the `/v1/persona` endpoint.
+To list all personas available for your account use the `/v1/personas` endpoint.
 
 ```bash
 # Example Request
-curl -X GET "https://api.anam.ai/v1/persona" -H "Authorization: Bearer your-api-key"
+curl -X GET "https://api.anam.ai/v1/personas" -H "Authorization: Bearer your-api-key"
 
 # Example Response
 [
@@ -272,11 +272,11 @@ By default each account includes our example persona 'Eva'. The virtual receptio
 
 > **Quick start**: Make a note of the ID for the Eva persona and use this to initialise the SDK.
 
-To show more detail about a specific persona you can use the `/v1/persona/{id}` endpoint.
+To show more detail about a specific persona you can use the `/v1/personas/{id}` endpoint.
 
 ```bash
 # Example Request
-curl -X GET "https://api.anam.ai/v1/persona/3c6025f0-698d-4e8d-b619-9c97a2750584" -H "Authorization: Bearer your-api-key"
+curl -X GET "https://api.anam.ai/v1/personas/3c6025f0-698d-4e8d-b619-9c97a2750584" -H "Authorization: Bearer your-api-key"
 
 # Example Response
 {
@@ -297,7 +297,7 @@ curl -X GET "https://api.anam.ai/v1/persona/3c6025f0-698d-4e8d-b619-9c97a2750584
 
 ### Creating Custom Personas
 
-You can create your own custom personas by using the `/v1/persona` endpoint via a `POST` request which defined the following properties:
+You can create your own custom personas by using the `/v1/personas` endpoint via a `POST` request which defined the following properties:
 | Persona parameter | Description |
 |----------------|---------------------------------------------------------------------------------------------------------|
 | `name` | The name for the persona. This is used as a human-readable identifier for the persona. |
@@ -315,7 +315,7 @@ Example usage
 
 ```bash
 # Example Request
-curl -X POST "https://api.anam.ai/v1/persona" -H "Content-Type: application/json" -H "Authorization: Bearer your-api-key" -d '{
+curl -X POST "https://api.anam.ai/v1/personas" -H "Content-Type: application/json" -H "Authorization: Bearer your-api-key" -d '{
   "name": "Eva",
   "description": "Eva is the virtual receptionist of the Sunset Hotel.",
   "personaPreset": "eva",
