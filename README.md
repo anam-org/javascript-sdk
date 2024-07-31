@@ -315,7 +315,7 @@ You can create your own custom personas by using the `/v1/personas` endpoint via
 |----------------|---------------------------------------------------------------------------------------------------------|
 | `name` | The name for the persona. This is used as a human-readable identifier for the persona. |
 | `description` | A brief description of the persona. This is optional and helps provide context about the persona's role. Not used by calls to the LLM|
-| `personaPreset`| Defines the face and voice of the persona from a list of available presets. Currently the only available preset is `eva` |
+| `personaPreset`| Defines the face and voice of the persona from a list of available presets. Currently the only available presets are `eva`, `nova` and `shimmer` |
 | `brain` | Configuration for the persona's LLM 'brain' including the system prompt, personality, and filler phrases.|
 
 | Brain Parameter | Description                                                                                           |
