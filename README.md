@@ -256,31 +256,44 @@ To list all personas available for your account use the `/v1/personas` endpoint.
 curl -X GET "https://api.anam.ai/v1/personas" -H "Authorization: Bearer your-api-key"
 
 # Example Response
-[
-  {
-    "id": "3c6025f0-698d-4e8d-b619-9c97a2750584",
-    "name": "Eva",
-    "description": "Eva is the virtual receptionist of the Sunset Hotel.",
-    "personaPreset": "eva",
-    "createdAt": "2021-01-01T00:00:00Z",
-    "updatedAt": "2021-01-02T00:00:00Z"
+
+{
+  "data": [
+    {
+      "id": "773a8ca8-efd8-4449-9305-8b8bc1591475",
+      "name": "Eva",
+      "description": "Eva is the virtual receptionist of the Sunset Hotel.",
+      "personaPreset": "eva",
+      "isDefaultPersona": true,
+      "createdAt": "2021-01-01T00:00:00Z",
+      "updatedAt": "2021-01-02T00:00:00Z"
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "lastPage": 0,
+    "currentPage": 1,
+    "perPage": 10,
+    "prev": 0,
+    "next": 0
   }
-]
+}
+
 ```
 
-By default each account includes our example persona 'Eva'. The virtual receptionist of the Sunset Hotel.
+Every Anam account has access to a pre-defined list of 'default personas', identifiable by the `isDefaultPersona` attribute. Currently there is one default persona 'Eva', the virtual receptionist of the Sunset Hotel.
 
-> **Quick start**: Make a note of the ID for the Eva persona and use this to initialise the SDK.
+> **Quick start**: Use the persona id `773a8ca8-efd8-4449-9305-8b8bc1591475` when initialising the SDK if you wish to try out Eva.
 
 To show more detail about a specific persona you can use the `/v1/personas/{id}` endpoint.
 
 ```bash
 # Example Request
-curl -X GET "https://api.anam.ai/v1/personas/3c6025f0-698d-4e8d-b619-9c97a2750584" -H "Authorization: Bearer your-api-key"
+curl -X GET "https://api.anam.ai/v1/personas/773a8ca8-efd8-4449-9305-8b8bc1591475" -H "Authorization: Bearer your-api-key"
 
 # Example Response
 {
-  "id": "3c6025f0-698d-4e8d-b619-9c97a2750584",
+  "id": "773a8ca8-efd8-4449-9305-8b8bc1591475",
   "name": "Eva",
   "description": "Eva is the virtual receptionist of the Sunset Hotel.",
   "personaPreset": "eva",
@@ -302,7 +315,7 @@ You can create your own custom personas by using the `/v1/personas` endpoint via
 |----------------|---------------------------------------------------------------------------------------------------------|
 | `name` | The name for the persona. This is used as a human-readable identifier for the persona. |
 | `description` | A brief description of the persona. This is optional and helps provide context about the persona's role. Not used by calls to the LLM|
-| `personaPreset`| Defines the face and voice of the persona from a list of available presets. Currently the only available preset is `eva` |
+| `personaPreset`| Defines the face and voice of the persona from a list of available presets. Currently the only available presets are `eva`, `nova` and `shimmer` |
 | `brain` | Configuration for the persona's LLM 'brain' including the system prompt, personality, and filler phrases.|
 
 | Brain Parameter | Description                                                                                           |
