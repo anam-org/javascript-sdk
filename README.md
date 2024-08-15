@@ -206,15 +206,19 @@ const anamClient = createClient(
   },
   {
     voiceDetection: { endOfSpeechSensitivity: 0.7 },
+    maxSessionLength: 300,
   },
 );
 ```
 
 ### Available Session Options
 
-| Option           | Sub-option               | Type   | Description                                             | Status      |
-| ---------------- | ------------------------ | ------ | ------------------------------------------------------- | ----------- |
-| `voiceDetection` | `endOfSpeechSensitivity` | number | Adjusts the sensitivity of the end-of-speech detection. | Coming soon |
+All parameters are optional.
+
+| Option             | Sub-option               | Type   | Description                                             | Status      |
+| ------------------ | ------------------------ | ------ | ------------------------------------------------------- | ----------- |
+| `voiceDetection`   | `endOfSpeechSensitivity` | number | Adjusts the sensitivity of the end-of-speech detection. | Coming soon |
+| `maxSessionLength` |                          | number | The maximum allowed length of the session in seconds.   | Available   |
 
 ## Listening to Events
 

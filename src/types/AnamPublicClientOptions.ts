@@ -4,4 +4,5 @@ import { VoiceDetectionOptions } from './VoiceDetectionOptions';
 export interface AnamPublicClientOptions {
   api?: CoreApiRestClientOptions;
   voiceDetection?: VoiceDetectionOptions;
+  maxSessionLength?: number;
 }

@@ -100,6 +100,16 @@ export default class AnamClient {
           return 'End of speech sensitivity must be between 0 and 1';
         }
       }
+
+      // Max session length must be a number greater than 0
+      if (options.maxSessionLength !== undefined) {
+        if (typeof options.maxSessionLength !== 'number') {
+          return 'Max session length must be a number';
+        }
+        if (options.maxSessionLength <= 0) {
+          return 'Max session length must be greater than 0';
+        }
+      }
     }
     return undefined;
   }
@@ -109,6 +119,10 @@ export default class AnamClient {
     if (this.clientOptions?.voiceDetection) {
       sessionOptions.voiceDetection = this.clientOptions.voiceDetection;
     }
+    if (this.clientOptions?.maxSessionLength) {
+      sessionOptions.maxSessionLength = this.clientOptions.maxSessionLength;
+    }
+
     // return undefined if no options are set
     if (Object.keys(sessionOptions).length === 0) {
       return undefined;
