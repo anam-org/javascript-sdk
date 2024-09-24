@@ -261,9 +261,9 @@ curl -X GET "https://api.anam.ai/v1/personas" -H "Authorization: Bearer your-api
   "data": [
     {
       "id": "773a8ca8-efd8-4449-9305-8b8bc1591475",
-      "name": "Eva",
-      "description": "Eva is the virtual receptionist of the Sunset Hotel.",
-      "personaPreset": "eva",
+      "name": "Leo",
+      "description": "Leo is the virtual receptionist of the Sunset Hotel.",
+      "personaPreset": "leo",
       "isDefaultPersona": true,
       "createdAt": "2021-01-01T00:00:00Z",
       "updatedAt": "2021-01-02T00:00:00Z"
@@ -281,9 +281,9 @@ curl -X GET "https://api.anam.ai/v1/personas" -H "Authorization: Bearer your-api
 
 ```
 
-Every Anam account has access to a pre-defined list of 'default personas', identifiable by the `isDefaultPersona` attribute. Currently there is one default persona 'Eva', the virtual receptionist of the Sunset Hotel.
+Every Anam account has access to a pre-defined list of 'default personas', identifiable by the `isDefaultPersona` attribute. Currently there is one default persona 'Leo', the virtual receptionist of the Sunset Hotel.
 
-> **Quick start**: Use the persona id `773a8ca8-efd8-4449-9305-8b8bc1591475` when initialising the SDK if you wish to try out Eva.
+> **Quick start**: Use the persona id `773a8ca8-efd8-4449-9305-8b8bc1591475` when initialising the SDK if you wish to try out Leo.
 
 To show more detail about a specific persona you can use the `/v1/personas/{id}` endpoint.
 
@@ -294,12 +294,12 @@ curl -X GET "https://api.anam.ai/v1/personas/773a8ca8-efd8-4449-9305-8b8bc159147
 # Example Response
 {
   "id": "773a8ca8-efd8-4449-9305-8b8bc1591475",
-  "name": "Eva",
-  "description": "Eva is the virtual receptionist of the Sunset Hotel.",
-  "personaPreset": "eva",
+  "name": "Leo",
+  "description": "Leo is the virtual receptionist of the Sunset Hotel.",
+  "personaPreset": "leo",
   "brain": {
     "id": "3c4525f0-698d-4e8d-b619-8c97a23780512",
-    "personality": "You are role-playing as a text chatbot hotel receptionist at The Sunset Hotel. Your name is Eva.",
+    "personality": "You are role-playing as a text chatbot hotel receptionist at The Sunset Hotel. Your name is Leo.",
     "systemPrompt": "You are role-playing as a text chatbot hotel receptionist at The Sunset Hotel...",
     "fillerPhrases": ["One moment please.", "Let me check that for you."],
     "createdAt": "2021-01-01T00:00:00Z",
@@ -315,7 +315,7 @@ You can create your own custom personas by using the `/v1/personas` endpoint via
 |----------------|---------------------------------------------------------------------------------------------------------|
 | `name` | The name for the persona. This is used as a human-readable identifier for the persona. |
 | `description` | A brief description of the persona. This is optional and helps provide context about the persona's role. Not used by calls to the LLM|
-| `personaPreset`| Defines the face and voice of the persona from a list of available presets. Currently the only available presets are `eva`, `nova` and `shimmer` |
+| `personaPreset`| Defines the face and voice of the persona from a list of available presets. |
 | `brain` | Configuration for the persona's LLM 'brain' including the system prompt, personality, and filler phrases.|
 
 | Brain Parameter | Description                                                                                           |
@@ -329,12 +329,12 @@ Example usage
 ```bash
 # Example Request
 curl -X POST "https://api.anam.ai/v1/personas" -H "Content-Type: application/json" -H "Authorization: Bearer your-api-key" -d '{
-  "name": "Eva",
-  "description": "Eva is the virtual receptionist of the Sunset Hotel.",
-  "personaPreset": "eva",
+  "name": "Leo",
+  "description": "Leo is the virtual receptionist of the Sunset Hotel.",
+  "personaPreset": "leo",
   "brain": {
-    "systemPrompt": "You are Eva, a virtual receptionist...",
-    "personality": "You are role-playing as a text chatbot hotel receptionist at The Sunset Hotel. Your name is Eva.",
+    "systemPrompt": "You are Leo, a virtual receptionist...",
+    "personality": "You are role-playing as a text chatbot hotel receptionist at The Sunset Hotel. Your name is Leo.",
     "fillerPhrases": ["One moment please.", "Let me check that for you."]
   }
 }'
@@ -342,13 +342,13 @@ curl -X POST "https://api.anam.ai/v1/personas" -H "Content-Type: application/jso
 # Example Response
 {
   "id": "new_persona_id",
-  "name": "Eva",
-  "description": "Eva is the virtual receptionist of the Sunset Hotel.",
-  "personaPreset": "eva",
+  "name": "Leo",
+  "description": "Leo is the virtual receptionist of the Sunset Hotel.",
+  "personaPreset": "leo",
   "brain": {
     "id": "new_brain_id",
     "personality": "helpful and friendly",
-    "systemPrompt": "You are Eva, a virtual receptionist...",
+    "systemPrompt": "You are Leo, a virtual receptionist...",
     "fillerPhrases": ["One moment please...", "Let me check that for you..."],
     "createdAt": "2021-01-01T00:00:00Z",
     "updatedAt": "2021-01-02T00:00:00Z"
