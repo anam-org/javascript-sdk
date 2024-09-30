@@ -201,9 +201,7 @@ export class StreamingClient {
     return;
   }
 
-  public async startChatMessageStream(
-    correlationId?: string,
-  ): Promise<ChatMessageStream> {
+  public startChatMessageStream(correlationId?: string): ChatMessageStream {
     if (!correlationId) {
       // generate a random correlation uuid
       correlationId = Math.random().toString(36).substring(2, 15);
