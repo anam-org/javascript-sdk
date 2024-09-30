@@ -7,6 +7,7 @@ import {
   SignallingClientOptions,
 } from '../types';
 import { PublicEventEmitter, InternalEventEmitter } from '../modules';
+import { ChatMessageStreamPayload } from '../types/signalling/ChatMessageStreamPayload';
 
 const DEFAULT_HEARTBEART_INTERVAL_SECONDS = 5;
 const DEFAULT_WS_RECONNECTION_ATTEMPTS = 5;
@@ -109,6 +110,15 @@ export class SignallingClient {
     } else {
       this.sendingBuffer.push(message);
     }
+  }
+
+  public async sendChatMessage(payload: ChatMessageStreamPayload) {
+    const chatMessage: SignalMessage = {
+      actionType: SignalMessageAction.CHAT_STREAM_INPUT,
+      sessionId: this.sessionId,
+      payload: payload,
+    };
+    this.sendSignalMessage(chatMessage);
   }
 
   private closeSocket() {

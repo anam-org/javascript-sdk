@@ -14,6 +14,8 @@ import {
   PublicEventEmitter,
   SignallingClient,
 } from '../modules';
+import { ChatMessageStreamPayload } from '../types/signalling/ChatMessageStreamPayload';
+import { ChatMessageStream } from './ChatMessageStream';
 
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
@@ -199,6 +201,21 @@ export class StreamingClient {
     return;
   }
 
+  public async startChatMessageStream(
+    correlationId?: string,
+  ): Promise<ChatMessageStream> {
+    if (!correlationId) {
+      // generate a random correlation uuid
+      correlationId = Math.random().toString(36).substring(2, 15);
+    }
+    return new ChatMessageStream(
+      correlationId,
+      this.publicEventEmitter,
+      this.internalEventEmitter,
+      this.signallingClient,
+    );
+  }
+
   private async initPeerConnection() {
     this.peerConnection = new RTCPeerConnection({
       iceServers: this.iceServers,
@@ -255,6 +272,9 @@ export class StreamingClient {
       case SignalMessageAction.WARNING:
         const message = signalMessage.payload as string;
         console.warn('Warning received from server: ' + message);
+        break;
+      case SignalMessageAction.CHAT_STREAM_INTERRUPTED:
+        // this is handled in the ChatMessageStream class, if we have an active stream. Otherwise it will be ignored.
         break;
       default:
         console.error(
