@@ -5,7 +5,7 @@ import {
   MessageHistoryClient,
   InternalEventEmitter,
 } from './modules';
-import { ChatMessageStream } from './modules/ChatMessageStream';
+import { ChatMessageStream } from './ChatMessageStream';
 import {
   AnamEvent,
   EventCallbacks,

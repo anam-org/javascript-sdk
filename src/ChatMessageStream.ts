@@ -3,13 +3,13 @@ import {
   InternalEvent,
   SignalMessage,
   SignalMessageAction,
-} from '../types';
-import { ChatStreamState } from '../types/ChatMessageStreamState';
-import { ChatMessageStreamPayload } from '../types/signalling/ChatMessageStreamPayload';
-import { ChatStreamInterruptedSignalMessage } from '../types/signalling/ChatStreamInterruptedSignalMessage';
-import { InternalEventEmitter } from './InternalEventEmitter';
-import { PublicEventEmitter } from './PublicEventEmitter';
-import { SignallingClient } from './SignallingClient';
+} from './types';
+import { ChatStreamState } from './types/ChatMessageStreamState';
+import { ChatMessageStreamPayload } from './types/signalling/ChatMessageStreamPayload';
+import { ChatStreamInterruptedSignalMessage } from './types/signalling/ChatStreamInterruptedSignalMessage';
+import { InternalEventEmitter } from './modules/InternalEventEmitter';
+import { PublicEventEmitter } from './modules/PublicEventEmitter';
+import { SignallingClient } from './modules/SignallingClient';
 
 export class ChatMessageStream {
   private publicEventEmitter: PublicEventEmitter;

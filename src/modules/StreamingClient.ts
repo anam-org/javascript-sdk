@@ -15,7 +15,7 @@ import {
   SignallingClient,
 } from '../modules';
 import { ChatMessageStreamPayload } from '../types/signalling/ChatMessageStreamPayload';
-import { ChatMessageStream } from './ChatMessageStream';
+import { ChatMessageStream } from '../ChatMessageStream';
 
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
