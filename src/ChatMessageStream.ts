@@ -50,19 +50,15 @@ export class ChatMessageStream {
         signalMessage.payload as ChatStreamInterruptedSignalMessage;
       if (message.correlationId === this.correlationId) {
         this.state = ChatStreamState.INTERRUPTED;
-        this.publicEventEmitter.emit(
-          AnamEvent.CHAT_STREAM_INTERRUPTED,
-          message.correlationId,
-        );
         this.onDeactivate();
       }
     }
   }
 
-  public async endStream(): Promise<void> {
+  public async endMessage(): Promise<void> {
     if (this.state === ChatStreamState.ENDED) {
       console.warn(
-        'Chat stream is already ended via end of speech. No need to call endStream.',
+        'Chat stream is already ended via end of speech. No need to call endMessage.',
       );
       return;
     }
@@ -76,13 +72,15 @@ export class ChatMessageStream {
       content: '',
       startOfSpeech: false,
       endOfSpeech: true,
-      frontEndCorrelationId: this.correlationId,
+      correlationId: this.correlationId,
     };
     await this.signallingClient.sendChatMessage(payload);
+    this.state = ChatStreamState.ENDED;
+    this.onDeactivate();
   }
 
-  public async streamMessage(
-    message: string,
+  public async streamPartialMessage(
+    partialMessage: string,
     endOfSpeech: boolean,
   ): Promise<void> {
     if (
@@ -93,10 +91,10 @@ export class ChatMessageStream {
       throw new Error('Chat stream is not in an active state: ' + this.state);
     }
     const payload: ChatMessageStreamPayload = {
-      content: message,
+      content: partialMessage,
       startOfSpeech: this.state === ChatStreamState.UNSTARTED,
       endOfSpeech: endOfSpeech,
-      frontEndCorrelationId: this.correlationId,
+      correlationId: this.correlationId,
     };
     this.state = endOfSpeech
       ? ChatStreamState.ENDED

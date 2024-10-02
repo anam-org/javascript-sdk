@@ -9,7 +9,7 @@ import {
 import { PublicEventEmitter, InternalEventEmitter } from '../modules';
 import { ChatMessageStreamPayload } from '../types/signalling/ChatMessageStreamPayload';
 
-const DEFAULT_HEARTBEART_INTERVAL_SECONDS = 5;
+const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 5;
 const DEFAULT_WS_RECONNECTION_ATTEMPTS = 5;
 
 export class SignallingClient {
@@ -43,7 +43,7 @@ export class SignallingClient {
       options;
 
     this.heartbeatIntervalSeconds =
-      heartbeatIntervalSeconds || DEFAULT_HEARTBEART_INTERVAL_SECONDS;
+      heartbeatIntervalSeconds || DEFAULT_HEARTBEAT_INTERVAL_SECONDS;
 
     this.maxWsReconnectionAttempts =
       maxWsReconnectionAttempts || DEFAULT_WS_RECONNECTION_ATTEMPTS;

@@ -16,6 +16,7 @@ import {
 } from '../modules';
 import { ChatMessageStreamPayload } from '../types/signalling/ChatMessageStreamPayload';
 import { ChatMessageStream } from '../ChatMessageStream';
+import { ChatStreamInterruptedSignalMessage } from '../types/signalling/ChatStreamInterruptedSignalMessage';
 
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
@@ -272,7 +273,12 @@ export class StreamingClient {
         console.warn('Warning received from server: ' + message);
         break;
       case SignalMessageAction.CHAT_STREAM_INTERRUPTED:
-        // this is handled in the ChatMessageStream class, if we have an active stream. Otherwise it will be ignored.
+        const chatMessage =
+          signalMessage.payload as ChatStreamInterruptedSignalMessage;
+        this.publicEventEmitter.emit(
+          AnamEvent.CHAT_STREAM_INTERRUPTED,
+          chatMessage.correlationId,
+        );
         break;
       default:
         console.error(

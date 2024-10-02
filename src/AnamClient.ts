@@ -330,12 +330,18 @@ export default class AnamClient {
     return this.inputAudioState;
   }
 
-  public startChatMessageStream(correlationId?: string): ChatMessageStream {
+  public createChatMessage(correlationId?: string): ChatMessageStream {
     if (!this.streamingClient) {
       throw new Error(
         'Failed to start chat message stream: session is not started.',
       );
     }
+    if (correlationId && correlationId.trim() === '') {
+      throw new Error(
+        'Failed to start chat message stream: correlationId is empty',
+      );
+    }
+
     return this.streamingClient.startChatMessageStream(correlationId);
   }
 
