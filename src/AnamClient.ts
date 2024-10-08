@@ -5,6 +5,7 @@ import {
   MessageHistoryClient,
   InternalEventEmitter,
 } from './modules';
+import { TalkMessageStream } from './types/TalkMessageStream';
 import {
   AnamEvent,
   EventCallbacks,
@@ -327,6 +328,21 @@ export default class AnamClient {
       };
     }
     return this.inputAudioState;
+  }
+
+  public createTalkMessageStream(correlationId?: string): TalkMessageStream {
+    if (!this.streamingClient) {
+      throw new Error(
+        'Failed to start talk message stream: session is not started.',
+      );
+    }
+    if (correlationId && correlationId.trim() === '') {
+      throw new Error(
+        'Failed to start talk message stream: correlationId is empty',
+      );
+    }
+
+    return this.streamingClient.startTalkMessageStream(correlationId);
   }
 
   /**
