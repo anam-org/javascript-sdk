@@ -70,7 +70,7 @@ export class TalkMessageStream {
     this.onDeactivate();
   }
 
-  public async streamPartialMessage(
+  public async streamMessageChunk(
     partialMessage: string,
     endOfSpeech: boolean,
   ): Promise<void> {

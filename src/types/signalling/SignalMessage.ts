@@ -5,7 +5,7 @@ export enum SignalMessageAction {
   END_SESSION = 'endsession',
   HEARTBEAT = 'heartbeat',
   WARNING = 'warning',
-  TALK_STREAM_INTERRUPTED = 'chatinputstreaminterrupted',
+  TALK_STREAM_INTERRUPTED = 'talkinputstreaminterrupted',
   TALK_STREAM_INPUT = 'talkstream',
 }
 

@@ -201,7 +201,7 @@ export class StreamingClient {
     return;
   }
 
-  public startChatMessageStream(correlationId?: string): TalkMessageStream {
+  public startTalkMessageStream(correlationId?: string): TalkMessageStream {
     if (!correlationId) {
       // generate a random correlation uuid
       correlationId = Math.random().toString(36).substring(2, 15);
