@@ -8,11 +8,9 @@ import { ChatStreamState } from './types/ChatMessageStreamState';
 import { ChatMessageStreamPayload } from './types/signalling/ChatMessageStreamPayload';
 import { ChatStreamInterruptedSignalMessage } from './types/signalling/ChatStreamInterruptedSignalMessage';
 import { InternalEventEmitter } from './modules/InternalEventEmitter';
-import { PublicEventEmitter } from './modules/PublicEventEmitter';
 import { SignallingClient } from './modules/SignallingClient';
 
 export class ChatMessageStream {
-  private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
   private state = ChatStreamState.UNSTARTED;
   private correlationId: string;
@@ -20,12 +18,10 @@ export class ChatMessageStream {
 
   constructor(
     correlationId: string,
-    publicEventEmitter: PublicEventEmitter,
     internalEventEmitter: InternalEventEmitter,
     signallingClient: SignallingClient,
   ) {
     this.correlationId = correlationId;
-    this.publicEventEmitter = publicEventEmitter;
     this.internalEventEmitter = internalEventEmitter;
     this.signallingClient = signallingClient;
 

@@ -209,7 +209,6 @@ export class StreamingClient {
     }
     return new ChatMessageStream(
       correlationId,
-      this.publicEventEmitter,
       this.internalEventEmitter,
       this.signallingClient,
     );
