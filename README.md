@@ -88,13 +88,54 @@ Regardless of whether you initialise the client using an API key or session toke
 
 [See here](#starting-a-session-in-production-environments) for an example sequence diagram of starting a session in production environments.
 
-## Using the talk command
+## Using the Talk command to control persona output
 
 Sometimes during a persona session you may wish to force a response from the persona. For example when the user interacts with an element on the page or when you have disabled the Anam LLM in order to use your own. To do this you can use the `talk` method of the Anam client.
 
 ```typescript
 anamClient.talk('Content to say');
 ```
+
+The `talk` method will send a `talk` command to the persona which will respond by speaking the provided content.
+
+## Streaming Talk input
+
+You may want to stream a particular message to the persona in multiple chunks. For example when you are streaming output from a custom LLM and want to reduce latency by sending the message in chunks. To do this you can use the `createTalkMessageStream` method to create a `TalkMessageStream` instance and use the `streamMessageChunk` method to send the message in chunks.
+
+This approach can be useful to reduce latency when streaming output from a custom LLM, however it does introduce some complexity due to the need to handle interrupts and end of speech.
+
+Example usage:
+
+```typescript
+const talkMessageStream = anamClient.createTalkMessageStream();
+const chunks = ['He', 'l', 'lo', ', how are you?'];
+
+for (const chunk of chunks) {
+  if (talkMessageStream.isActive()) {
+    talkMessageStream.streamMessageChunk(
+      chunk,
+      chunk === chunks[chunks.length - 1],
+    );
+  }
+}
+```
+
+If a sentence is not interrupted, you must signal the end of the speech yourself by calling `streamMessageChunk` with the `endOfSpeech` parameter set to `true` or by calling `talkMessageStream.endMessage()`. If a talkMessageStream is already closed, either due to an interrupt or end of speech, you do not need to signal end of speech.
+
+**Important note**: One talkMessageStream represents one "turn" in the conversation. Once that turn is over, the object can no longer be used and you must create a new `TalkMessageStream` using `streamMessageChunk`.
+
+There are two ways a "turn" can end and a `TalkMessageStream` closed:
+
+1. End of speech: `streamMessageChunk` is called with the `endOfSpeech` parameter set to `true` or `endMessage` is called.
+2. Interrupted by user speech: The user speaks during the stream causing an `AnamEvent.TALK_STREAM_INTERRUPTED` event to fire and the `TalkMessageStream` object to be closed automatically.
+
+In both of these cases the `TalkMessageStream` object is closed and no longer usable. If you try to call `streamMessageChunk` or `endMessage` on a closed `TalkMessageStream` object you will be met with an error. To handle this you can check the `isActive()` method of the `TalkMessageStream` object or listen for the `AnamEvent.TALK_STREAM_INTERRUPTED` event.
+
+#### Correlation IDs
+
+The `streamMessageChunk` method accepts an optional `correlationId` parameter. **This should be unique for every `TalkMessageStream` instance.** When a talk stream is interrupted by user speech the interrupted stream's `correlationId` will be sent in the `AnamEvent.TALK_STREAM_INTERRUPTED` event.
+
+Currently only one `TalkMessageStream` can be active at a time, so this is not strictly necessary.
 
 ## Controlling the input audio
 
@@ -232,14 +273,15 @@ anamClient.addListener(AnamEvent.MESSAGE_HISTORY_UPDATED, (messages) => {
 
 ### Event Types
 
-| Event Name                      | Description                                                                                                                                                                                                                         |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CONNECTION_ESTABLISHED`        | Called when the direct connection between the browser and the Anam Engine has been established.                                                                                                                                     |
-| `CONNECTION_CLOSED`             | Called when the direct connection between the browser and the Anam Engine has been closed.                                                                                                                                          |
-| `VIDEO_PLAY_STARTED`            | When streaming directly to a video element this event is fired when the first frames start playing. Useful for removing any loading indicators during connection.                                                                   |
-| `MESSAGE_HISTORY_UPDATED`       | Called with the message history transcription of the current session each time the user or the persona finishes speaking.                                                                                                           |
-| `MESSAGE_STREAM_EVENT_RECEIVED` | For persona speech, this stream is updated with each transcribed speech chunk as the persona is speaking. For the user speech this stream is updated with a complete transcription of the user's sentence once they finish speaking |
-| `INPUT_AUDIO_STREAM_STARTED`    | Called with the users input audio stream when microphone input has been initialised.                                                                                                                                                |
+| Event Name                      | Description                                                                                                                                                                                                                                                                      |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONNECTION_ESTABLISHED`        | Called when the direct connection between the browser and the Anam Engine has been established.                                                                                                                                                                                  |
+| `CONNECTION_CLOSED`             | Called when the direct connection between the browser and the Anam Engine has been closed.                                                                                                                                                                                       |
+| `VIDEO_PLAY_STARTED`            | When streaming directly to a video element this event is fired when the first frames start playing. Useful for removing any loading indicators during connection.                                                                                                                |
+| `MESSAGE_HISTORY_UPDATED`       | Called with the message history transcription of the current session each time the user or the persona finishes speaking.                                                                                                                                                        |
+| `MESSAGE_STREAM_EVENT_RECEIVED` | For persona speech, this stream is updated with each transcribed speech chunk as the persona is speaking. For the user speech this stream is updated with a complete transcription of the user's sentence once they finish speaking                                              |
+| `INPUT_AUDIO_STREAM_STARTED`    | Called with the users input audio stream when microphone input has been initialised.                                                                                                                                                                                             |
+| `TALK_STREAM_INTERRUPTED`       | Called when the user interrupts the current `TalkMessageStream` by speaking. The interrupted stream's `correlationId` will be sent in the event. The TalkMessageStream object is automatically closed by the SDK but this event is provided to allow for any additional actions. |
 
 # Personas
 
