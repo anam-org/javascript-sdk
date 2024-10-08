@@ -1,4 +1,4 @@
-export interface ChatMessageStreamPayload {
+export interface TalkMessageStreamPayload {
   content: string;
   startOfSpeech: boolean;
   endOfSpeech: boolean;

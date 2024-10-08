@@ -11,5 +11,5 @@ export type EventCallbacks = {
   [AnamEvent.VIDEO_STREAM_STARTED]: (videoStream: MediaStream) => void;
   [AnamEvent.VIDEO_PLAY_STARTED]: () => void;
   [AnamEvent.AUDIO_STREAM_STARTED]: (audioStream: MediaStream) => void;
-  [AnamEvent.CHAT_STREAM_INTERRUPTED]: (correlationId: string) => void;
+  [AnamEvent.TALK_STREAM_INTERRUPTED]: (correlationId: string) => void;
 };

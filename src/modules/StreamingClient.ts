@@ -14,9 +14,8 @@ import {
   PublicEventEmitter,
   SignallingClient,
 } from '../modules';
-import { ChatMessageStreamPayload } from '../types/signalling/ChatMessageStreamPayload';
-import { ChatMessageStream } from '../ChatMessageStream';
-import { ChatStreamInterruptedSignalMessage } from '../types/signalling/ChatStreamInterruptedSignalMessage';
+import { TalkMessageStream } from '../types/TalkMessageStream';
+import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
 
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
@@ -202,12 +201,12 @@ export class StreamingClient {
     return;
   }
 
-  public startChatMessageStream(correlationId?: string): ChatMessageStream {
+  public startChatMessageStream(correlationId?: string): TalkMessageStream {
     if (!correlationId) {
       // generate a random correlation uuid
       correlationId = Math.random().toString(36).substring(2, 15);
     }
-    return new ChatMessageStream(
+    return new TalkMessageStream(
       correlationId,
       this.internalEventEmitter,
       this.signallingClient,
@@ -271,11 +270,11 @@ export class StreamingClient {
         const message = signalMessage.payload as string;
         console.warn('Warning received from server: ' + message);
         break;
-      case SignalMessageAction.CHAT_STREAM_INTERRUPTED:
+      case SignalMessageAction.TALK_STREAM_INTERRUPTED:
         const chatMessage =
-          signalMessage.payload as ChatStreamInterruptedSignalMessage;
+          signalMessage.payload as TalkStreamInterruptedSignalMessage;
         this.publicEventEmitter.emit(
-          AnamEvent.CHAT_STREAM_INTERRUPTED,
+          AnamEvent.TALK_STREAM_INTERRUPTED,
           chatMessage.correlationId,
         );
         break;

@@ -5,7 +5,7 @@ import {
   MessageHistoryClient,
   InternalEventEmitter,
 } from './modules';
-import { ChatMessageStream } from './ChatMessageStream';
+import { TalkMessageStream } from './types/TalkMessageStream';
 import {
   AnamEvent,
   EventCallbacks,
@@ -330,7 +330,7 @@ export default class AnamClient {
     return this.inputAudioState;
   }
 
-  public createChatMessage(correlationId?: string): ChatMessageStream {
+  public createChatMessage(correlationId?: string): TalkMessageStream {
     if (!this.streamingClient) {
       throw new Error(
         'Failed to start chat message stream: session is not started.',

@@ -7,7 +7,7 @@ import {
   SignallingClientOptions,
 } from '../types';
 import { PublicEventEmitter, InternalEventEmitter } from '../modules';
-import { ChatMessageStreamPayload } from '../types/signalling/ChatMessageStreamPayload';
+import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamPayload';
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 5;
 const DEFAULT_WS_RECONNECTION_ATTEMPTS = 5;
@@ -112,9 +112,9 @@ export class SignallingClient {
     }
   }
 
-  public async sendChatMessage(payload: ChatMessageStreamPayload) {
+  public async sendChatMessage(payload: TalkMessageStreamPayload) {
     const chatMessage: SignalMessage = {
-      actionType: SignalMessageAction.CHAT_STREAM_INPUT,
+      actionType: SignalMessageAction.TALK_STREAM_INPUT,
       sessionId: this.sessionId,
       payload: payload,
     };

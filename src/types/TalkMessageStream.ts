@@ -1,18 +1,13 @@
-import {
-  AnamEvent,
-  InternalEvent,
-  SignalMessage,
-  SignalMessageAction,
-} from './types';
-import { ChatStreamState } from './types/ChatMessageStreamState';
-import { ChatMessageStreamPayload } from './types/signalling/ChatMessageStreamPayload';
-import { ChatStreamInterruptedSignalMessage } from './types/signalling/ChatStreamInterruptedSignalMessage';
-import { InternalEventEmitter } from './modules/InternalEventEmitter';
-import { SignallingClient } from './modules/SignallingClient';
+import { InternalEvent, SignalMessage, SignalMessageAction } from '.';
+import { TalkMessageStreamState } from './TalkMessageStreamState';
+import { TalkMessageStreamPayload } from './signalling/TalkMessageStreamPayload';
+import { TalkStreamInterruptedSignalMessage } from './signalling/TalkStreamInterruptedSignalMessage';
+import { InternalEventEmitter } from '../modules/InternalEventEmitter';
+import { SignallingClient } from '../modules/SignallingClient';
 
-export class ChatMessageStream {
+export class TalkMessageStream {
   private internalEventEmitter: InternalEventEmitter;
-  private state = ChatStreamState.UNSTARTED;
+  private state = TalkMessageStreamState.UNSTARTED;
   private correlationId: string;
   private signallingClient: any; // Define the type as needed
 
@@ -40,38 +35,38 @@ export class ChatMessageStream {
 
   private async onSignalMessage(signalMessage: SignalMessage) {
     if (
-      signalMessage.actionType === SignalMessageAction.CHAT_STREAM_INTERRUPTED
+      signalMessage.actionType === SignalMessageAction.TALK_STREAM_INTERRUPTED
     ) {
       const message =
-        signalMessage.payload as ChatStreamInterruptedSignalMessage;
+        signalMessage.payload as TalkStreamInterruptedSignalMessage;
       if (message.correlationId === this.correlationId) {
-        this.state = ChatStreamState.INTERRUPTED;
+        this.state = TalkMessageStreamState.INTERRUPTED;
         this.onDeactivate();
       }
     }
   }
 
   public async endMessage(): Promise<void> {
-    if (this.state === ChatStreamState.ENDED) {
+    if (this.state === TalkMessageStreamState.ENDED) {
       console.warn(
         'Chat stream is already ended via end of speech. No need to call endMessage.',
       );
       return;
     }
 
-    if (this.state !== ChatStreamState.STREAMING) {
+    if (this.state !== TalkMessageStreamState.STREAMING) {
       console.warn('Chat stream is not active state: ' + this.state);
       return;
     }
 
-    const payload: ChatMessageStreamPayload = {
+    const payload: TalkMessageStreamPayload = {
       content: '',
       startOfSpeech: false,
       endOfSpeech: true,
       correlationId: this.correlationId,
     };
     await this.signallingClient.sendChatMessage(payload);
-    this.state = ChatStreamState.ENDED;
+    this.state = TalkMessageStreamState.ENDED;
     this.onDeactivate();
   }
 
@@ -80,22 +75,22 @@ export class ChatMessageStream {
     endOfSpeech: boolean,
   ): Promise<void> {
     if (
-      this.state !== ChatStreamState.STREAMING &&
-      this.state !== ChatStreamState.UNSTARTED
+      this.state !== TalkMessageStreamState.STREAMING &&
+      this.state !== TalkMessageStreamState.UNSTARTED
     ) {
       // throw error
       throw new Error('Chat stream is not in an active state: ' + this.state);
     }
-    const payload: ChatMessageStreamPayload = {
+    const payload: TalkMessageStreamPayload = {
       content: partialMessage,
-      startOfSpeech: this.state === ChatStreamState.UNSTARTED,
+      startOfSpeech: this.state === TalkMessageStreamState.UNSTARTED,
       endOfSpeech: endOfSpeech,
       correlationId: this.correlationId,
     };
     this.state = endOfSpeech
-      ? ChatStreamState.ENDED
-      : ChatStreamState.STREAMING;
-    if (this.state === ChatStreamState.ENDED) {
+      ? TalkMessageStreamState.ENDED
+      : TalkMessageStreamState.STREAMING;
+    if (this.state === TalkMessageStreamState.ENDED) {
       this.onDeactivate();
     }
 
@@ -109,12 +104,12 @@ export class ChatMessageStream {
 
   public isActive(): boolean {
     return (
-      this.state === ChatStreamState.STREAMING ||
-      this.state === ChatStreamState.UNSTARTED
+      this.state === TalkMessageStreamState.STREAMING ||
+      this.state === TalkMessageStreamState.UNSTARTED
     );
   }
 
-  public getState(): ChatStreamState {
+  public getState(): TalkMessageStreamState {
     return this.state;
   }
 }

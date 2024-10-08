@@ -1,4 +1,4 @@
-export enum ChatStreamState {
+export enum TalkMessageStreamState {
   UNSTARTED,
   STREAMING,
   INTERRUPTED,
