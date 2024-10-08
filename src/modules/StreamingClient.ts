@@ -14,6 +14,8 @@ import {
   PublicEventEmitter,
   SignallingClient,
 } from '../modules';
+import { TalkMessageStream } from '../types/TalkMessageStream';
+import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
 
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
@@ -199,6 +201,18 @@ export class StreamingClient {
     return;
   }
 
+  public startTalkMessageStream(correlationId?: string): TalkMessageStream {
+    if (!correlationId) {
+      // generate a random correlation uuid
+      correlationId = Math.random().toString(36).substring(2, 15);
+    }
+    return new TalkMessageStream(
+      correlationId,
+      this.internalEventEmitter,
+      this.signallingClient,
+    );
+  }
+
   private async initPeerConnection() {
     this.peerConnection = new RTCPeerConnection({
       iceServers: this.iceServers,
@@ -255,6 +269,14 @@ export class StreamingClient {
       case SignalMessageAction.WARNING:
         const message = signalMessage.payload as string;
         console.warn('Warning received from server: ' + message);
+        break;
+      case SignalMessageAction.TALK_STREAM_INTERRUPTED:
+        const chatMessage =
+          signalMessage.payload as TalkStreamInterruptedSignalMessage;
+        this.publicEventEmitter.emit(
+          AnamEvent.TALK_STREAM_INTERRUPTED,
+          chatMessage.correlationId,
+        );
         break;
       default:
         console.error(
