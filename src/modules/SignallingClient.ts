@@ -112,7 +112,7 @@ export class SignallingClient {
     }
   }
 
-  public async sendChatMessage(payload: TalkMessageStreamPayload) {
+  public async sendTalkMessage(payload: TalkMessageStreamPayload) {
     const chatMessage: SignalMessage = {
       actionType: SignalMessageAction.TALK_STREAM_INPUT,
       sessionId: this.sessionId,

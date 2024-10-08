@@ -333,12 +333,12 @@ export default class AnamClient {
   public createTalkMessageStream(correlationId?: string): TalkMessageStream {
     if (!this.streamingClient) {
       throw new Error(
-        'Failed to start chat message stream: session is not started.',
+        'Failed to start talk message stream: session is not started.',
       );
     }
     if (correlationId && correlationId.trim() === '') {
       throw new Error(
-        'Failed to start chat message stream: correlationId is empty',
+        'Failed to start talk message stream: correlationId is empty',
       );
     }
 

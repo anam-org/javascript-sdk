@@ -9,7 +9,7 @@ export class TalkMessageStream {
   private internalEventEmitter: InternalEventEmitter;
   private state = TalkMessageStreamState.UNSTARTED;
   private correlationId: string;
-  private signallingClient: any; // Define the type as needed
+  private signallingClient: SignallingClient;
 
   constructor(
     correlationId: string,
@@ -49,13 +49,13 @@ export class TalkMessageStream {
   public async endMessage(): Promise<void> {
     if (this.state === TalkMessageStreamState.ENDED) {
       console.warn(
-        'Chat stream is already ended via end of speech. No need to call endMessage.',
+        'Talk stream is already ended via end of speech. No need to call endMessage.',
       );
       return;
     }
 
     if (this.state !== TalkMessageStreamState.STREAMING) {
-      console.warn('Chat stream is not active state: ' + this.state);
+      console.warn('Talk stream is not active state: ' + this.state);
       return;
     }
 
@@ -65,7 +65,7 @@ export class TalkMessageStream {
       endOfSpeech: true,
       correlationId: this.correlationId,
     };
-    await this.signallingClient.sendChatMessage(payload);
+    await this.signallingClient.sendTalkMessage(payload);
     this.state = TalkMessageStreamState.ENDED;
     this.onDeactivate();
   }
@@ -79,7 +79,7 @@ export class TalkMessageStream {
       this.state !== TalkMessageStreamState.UNSTARTED
     ) {
       // throw error
-      throw new Error('Chat stream is not in an active state: ' + this.state);
+      throw new Error('Talk stream is not in an active state: ' + this.state);
     }
     const payload: TalkMessageStreamPayload = {
       content: partialMessage,
@@ -95,7 +95,7 @@ export class TalkMessageStream {
     }
 
     // send message to signalling client
-    await this.signallingClient.sendChatMessage(payload);
+    await this.signallingClient.sendTalkMessage(payload);
   }
 
   public getCorrelationId(): string {
