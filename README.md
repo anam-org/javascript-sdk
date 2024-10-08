@@ -122,7 +122,7 @@ for (const chunk of chunks) {
 
 If a sentence is not interrupted, you must signal the end of the speech yourself by calling `streamMessageChunk` with the `endOfSpeech` parameter set to `true` or by calling `talkMessageStream.endMessage()`. If a talkMessageStream is already closed, either due to an interrupt or end of speech, you do not need to signal end of speech.
 
-**Important note**: One talkMessageStream represents one "turn" in the conversation. Once that turn is over, the object can no longer be used and you must create a new `TalkMessageStream` using `streamMessageChunk`.
+**Important note**: One talkMessageStream represents one "turn" in the conversation. Once that turn is over, the object can no longer be used and you must create a new `TalkMessageStream` using `anamClient.createTalkMessageStream()`.
 
 There are two ways a "turn" can end and a `TalkMessageStream` closed:
 
