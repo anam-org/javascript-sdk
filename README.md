@@ -305,7 +305,7 @@ curl -X GET "https://api.anam.ai/v1/personas" -H "Authorization: Bearer your-api
       "id": "773a8ca8-efd8-4449-9305-8b8bc1591475",
       "name": "Leo",
       "description": "Leo is the virtual receptionist of the Sunset Hotel.",
-      "personaPreset": "leo",
+      "personaPreset": "leo_desk",
       "isDefaultPersona": true,
       "createdAt": "2021-01-01T00:00:00Z",
       "updatedAt": "2021-01-02T00:00:00Z"
@@ -338,7 +338,7 @@ curl -X GET "https://api.anam.ai/v1/personas/773a8ca8-efd8-4449-9305-8b8bc159147
   "id": "773a8ca8-efd8-4449-9305-8b8bc1591475",
   "name": "Leo",
   "description": "Leo is the virtual receptionist of the Sunset Hotel.",
-  "personaPreset": "leo",
+  "personaPreset": "leo_desk",
   "brain": {
     "id": "3c4525f0-698d-4e8d-b619-8c97a23780512",
     "personality": "You are role-playing as a text chatbot hotel receptionist at The Sunset Hotel. Your name is Leo.",
@@ -373,7 +373,7 @@ Example usage
 curl -X POST "https://api.anam.ai/v1/personas" -H "Content-Type: application/json" -H "Authorization: Bearer your-api-key" -d '{
   "name": "Leo",
   "description": "Leo is the virtual receptionist of the Sunset Hotel.",
-  "personaPreset": "leo",
+  "personaPreset": "leo_desk",
   "brain": {
     "systemPrompt": "You are Leo, a virtual receptionist...",
     "personality": "You are role-playing as a text chatbot hotel receptionist at The Sunset Hotel. Your name is Leo.",
@@ -386,7 +386,7 @@ curl -X POST "https://api.anam.ai/v1/personas" -H "Content-Type: application/jso
   "id": "new_persona_id",
   "name": "Leo",
   "description": "Leo is the virtual receptionist of the Sunset Hotel.",
-  "personaPreset": "leo",
+  "personaPreset": "leo_desk",
   "brain": {
     "id": "new_brain_id",
     "personality": "helpful and friendly",
