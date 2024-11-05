@@ -404,12 +404,12 @@ curl -X POST "https://api.anam.ai/v1/personas" -H "Content-Type: application/jso
 
 ## Starting a session in production environments
 
-![Example sequence diagram](media://resources/media/start-session.png)
+![Example sequence diagram](resources/media/start-session.png)
 
 ## Interaction loop
 
-![Example interaction loop](media://resources/media/interaction-loop.png)
+![Example interaction loop](resources/media/interaction-loop.png)
 
 ## Interaction loop with custom LLM usage
 
-![Example interaction loop for custom LLM diagram](media://resources/media/custom-llm-interaction.png)
+![Example interaction loop for custom LLM diagram](resources/media/custom-llm-interaction.png)
