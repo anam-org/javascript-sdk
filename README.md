@@ -50,7 +50,7 @@ await anamClient.streamToVideoAndAudioElements(
 
 This will start a new session using the pre-configured persona id and start streaming video and audio to the elements in the DOM with the matching element ids.
 
-To stop a session use the `stopStopStreaming` method.
+To stop a session use the `stopStreaming` method.
 
 ```typescript
 anamClient.stopStreaming();
@@ -262,6 +262,8 @@ const anamClient = createClient(
 After initialising the Anam client you can register any event listeners using the `addListener` method.
 
 ```typescript
+import { AnamEvent } from "@anam-ai/js-sdk/dist/module/types";
+
 anamClient.addListener(AnamEvent.CONNECTION_ESTABLISHED, () => {
   console.log('Connection Established');
 });
@@ -279,7 +281,7 @@ anamClient.addListener(AnamEvent.MESSAGE_HISTORY_UPDATED, (messages) => {
 | `CONNECTION_CLOSED`             | Called when the direct connection between the browser and the Anam Engine has been closed.                                                                                                                                                                                       |
 | `VIDEO_PLAY_STARTED`            | When streaming directly to a video element this event is fired when the first frames start playing. Useful for removing any loading indicators during connection.                                                                                                                |
 | `MESSAGE_HISTORY_UPDATED`       | Called with the message history transcription of the current session each time the user or the persona finishes speaking.                                                                                                                                                        |
-| `MESSAGE_STREAM_EVENT_RECEIVED` | For persona speech, this stream is updated with each transcribed speech chunk as the persona is speaking. For the user speech this stream is updated with a complete transcription of the user's sentence once they finish speaking                                              |
+| `MESSAGE_STREAM_EVENT_RECEIVED` | For persona speech, this stream is updated with each transcribed speech chunk as the persona is speaking. For the user speech this stream is updated with a complete transcription of the user's sentence once they finish speaking.                                             |
 | `INPUT_AUDIO_STREAM_STARTED`    | Called with the users input audio stream when microphone input has been initialised.                                                                                                                                                                                             |
 | `TALK_STREAM_INTERRUPTED`       | Called when the user interrupts the current `TalkMessageStream` by speaking. The interrupted stream's `correlationId` will be sent in the event. The TalkMessageStream object is automatically closed by the SDK but this event is provided to allow for any additional actions. |
 
@@ -356,9 +358,9 @@ You can create your own custom personas by using the `/v1/personas` endpoint via
 | Persona parameter | Description |
 |----------------|---------------------------------------------------------------------------------------------------------|
 | `name` | The name for the persona. This is used as a human-readable identifier for the persona. |
-| `description` | A brief description of the persona. This is optional and helps provide context about the persona's role. Not used by calls to the LLM|
+| `description` | A brief description of the persona. This is optional and helps provide context about the persona's role. Not used by calls to the LLM. |
 | `personaPreset`| Defines the face and voice of the persona from a list of available presets. |
-| `brain` | Configuration for the persona's LLM 'brain' including the system prompt, personality, and filler phrases.|
+| `brain` | Configuration for the persona's LLM 'brain' including the system prompt, personality, and filler phrases. |
 
 | Brain Parameter | Description                                                                                           |
 | --------------- | ----------------------------------------------------------------------------------------------------- |
@@ -402,12 +404,12 @@ curl -X POST "https://api.anam.ai/v1/personas" -H "Content-Type: application/jso
 
 ## Starting a session in production environments
 
-![Example sequence diagram](media://start-session.png)
+![Example sequence diagram](media://resources/media/start-session.png)
 
 ## Interaction loop
 
-![Example interaction loop](media://interaction-loop.png)
+![Example interaction loop](media://resources/media/interaction-loop.png)
 
 ## Interaction loop with custom LLM usage
 
-![Example interaction loop for custom LLM diagram](media://custom-llm-interaction.png)
+![Example interaction loop for custom LLM diagram](media://resources/media/custom-llm-interaction.png)
