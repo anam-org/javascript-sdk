@@ -400,6 +400,127 @@ curl -X POST "https://api.anam.ai/v1/personas" -H "Content-Type: application/jso
 }
 ```
 
+# Frequently Asked Questions
+
+### What personas are currently available?
+There are 6 default personas available in various backgrounds:
+- Leo (leo_desk, leo_windowdesk, leo_windowsofacorner)
+- Alister (alister_desk, alister_windowdesk, alister_windowsofa)
+- Astrid (astrid_desk, astrid_windowdesk, astrid_windowsofacorner)
+- Cara (cara_desk, cara_windowdesk, cara_windowsofa)
+- Evelyn (evelyn_desk)
+- Pablo (pablo_desk, pablo_windowdesk, pablo_windowsofa)
+
+You can list available personas using the `/v1/personas` endpoint or view them in the Anam Lab.
+
+### How is usage time calculated and billed?
+Usage time starts when you call the `stream()` method and ends when that specific stream closes. The time is tracked in seconds and billed per minute. The starter plan includes:
+- 60 free minutes per month
+- $0.18/minute for overages
+- Up to 3 concurrent conversations
+- Access to 6 personas and multiple backgrounds
+- Usage is billed retrospectively at the end of each month
+
+### What causes latency and how can I optimize it?
+Latency can come from several sources:
+- Connection setup time (usually 1-2 seconds, but can be up to 5 seconds)
+- LLM processing time
+- TTS generation
+- Network conditions
+
+To optimize latency:
+- Use shorter initial sentences in responses
+- Take advantage of phrase caching (repeated phrases will be faster)
+- Consider using our turnkey solution instead of custom LLM for lowest latency
+- Use the streaming API for custom LLM implementations
+
+### How do I handle multilingual conversations?
+Current language support:
+- Speech recognition currently struggles outside of English and will often translate non-English speech to English
+- We have language selection coming soon to fix this
+- TTS supports multiple languages but voice quality may vary
+- System prompts can be set to specific languages
+- Language handling is primarily controlled via the system prompt
+- Auto-language detection is planned for future releases
+
+### Can I interrupt the persona while it's speaking?
+Yes, you can interrupt the persona in two ways:
+1. Send a new `talk()` command which will override the current speech
+2. When using streaming, user speech will automatically interrupt the current stream
+
+Note: Currently there isn't a way to completely silence the persona mid-speech, but sending a short punctuation mark (like "." or "!") through the talk command can achieve a similar effect.
+
+### How do I integrate my own LLM?
+To use your own LLM:
+1. Initialize the client with `disableBrains: true`
+2. Handle speech-to-text events via `MESSAGE_HISTORY_UPDATED`
+3. Process the text through your LLM
+4. Send responses using the `talk()` method (or for better latency try `createTalkMessageStream()`) 
+
+```javascript
+const anamClient = createClient(sessionToken, {
+  personaId: 'your-persona-id',
+  disableBrains: true,
+});
+
+anamClient.addListener(AnamEvent.MESSAGE_HISTORY_UPDATED, (messages) => {
+  // Process with your LLM
+  // Send response with anamClient.talk()
+});
+```
+
+### What are the browser compatibility requirements?
+The SDK requires:
+- Modern browser with WebRTC support
+- Microphone permissions for audio input
+- Autoplay capabilities for video/audio
+- WebAssembly support
+
+Safari/iOS notes:
+- Requires explicit user interaction for audio playback
+- May have additional security policy requirements
+- WebKit engine has specific autoplay restrictions
+
+### How do I monitor current usage?
+Usage tracking options:
+- Available in Anam Lab
+- API endpoint for usage stats coming soon
+- Session logs available on request
+
+### What's the difference between development and production setup?
+Development:
+```javascript
+const client = unsafe_createClientWithApiKey('your-api-key', {
+  personaId: 'chosen-persona-id',
+});
+```
+
+Production:
+1. Exchange API key for session token server-side
+2. Pass session token to client
+```javascript
+const client = createClient('session-token', {
+  personaId: 'chosen-persona-id',
+});
+```
+
+### How do I handle connection issues?
+Common issues and solutions:
+- For "403 Forbidden" errors, verify API key/session token
+- If video doesn't appear, check element IDs match exactly
+- Connection timeouts may require retry logic
+- Session tokens expire and need refresh
+- Monitor `CONNECTION_CLOSED` events for network issues
+
+### What features are coming soon?
+Near-term roadmap includes:
+- One-shot model for custom persona creation
+- Improved streaming support for custom LLMs
+- Usage dashboard and analytics
+- Enhanced multilingual support
+- Function calling capabilities
+- Additional persona options
+
 # Sequence Diagrams
 
 ## Starting a session in production environments
