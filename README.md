@@ -50,7 +50,7 @@ await anamClient.streamToVideoAndAudioElements(
 
 This will start a new session using the pre-configured persona id and start streaming video and audio to the elements in the DOM with the matching element ids.
 
-To stop a session use the `stopStopStreaming` method.
+To stop a session use the `stopStreaming` method.
 
 ```typescript
 anamClient.stopStreaming();
@@ -122,7 +122,7 @@ for (const chunk of chunks) {
 
 If a sentence is not interrupted, you must signal the end of the speech yourself by calling `streamMessageChunk` with the `endOfSpeech` parameter set to `true` or by calling `talkMessageStream.endMessage()`. If a talkMessageStream is already closed, either due to an interrupt or end of speech, you do not need to signal end of speech.
 
-**Important note**: One talkMessageStream represents one "turn" in the conversation. Once that turn is over, the object can no longer be used and you must create a new `TalkMessageStream` using `streamMessageChunk`.
+**Important note**: One talkMessageStream represents one "turn" in the conversation. Once that turn is over, the object can no longer be used and you must create a new `TalkMessageStream` using `anamClient.createTalkMessageStream()`.
 
 There are two ways a "turn" can end and a `TalkMessageStream` closed:
 
@@ -262,6 +262,8 @@ const anamClient = createClient(
 After initialising the Anam client you can register any event listeners using the `addListener` method.
 
 ```typescript
+import { AnamEvent } from "@anam-ai/js-sdk/dist/module/types";
+
 anamClient.addListener(AnamEvent.CONNECTION_ESTABLISHED, () => {
   console.log('Connection Established');
 });
@@ -279,7 +281,7 @@ anamClient.addListener(AnamEvent.MESSAGE_HISTORY_UPDATED, (messages) => {
 | `CONNECTION_CLOSED`             | Called when the direct connection between the browser and the Anam Engine has been closed.                                                                                                                                                                                       |
 | `VIDEO_PLAY_STARTED`            | When streaming directly to a video element this event is fired when the first frames start playing. Useful for removing any loading indicators during connection.                                                                                                                |
 | `MESSAGE_HISTORY_UPDATED`       | Called with the message history transcription of the current session each time the user or the persona finishes speaking.                                                                                                                                                        |
-| `MESSAGE_STREAM_EVENT_RECEIVED` | For persona speech, this stream is updated with each transcribed speech chunk as the persona is speaking. For the user speech this stream is updated with a complete transcription of the user's sentence once they finish speaking                                              |
+| `MESSAGE_STREAM_EVENT_RECEIVED` | For persona speech, this stream is updated with each transcribed speech chunk as the persona is speaking. For the user speech this stream is updated with a complete transcription of the user's sentence once they finish speaking.                                             |
 | `INPUT_AUDIO_STREAM_STARTED`    | Called with the users input audio stream when microphone input has been initialised.                                                                                                                                                                                             |
 | `TALK_STREAM_INTERRUPTED`       | Called when the user interrupts the current `TalkMessageStream` by speaking. The interrupted stream's `correlationId` will be sent in the event. The TalkMessageStream object is automatically closed by the SDK but this event is provided to allow for any additional actions. |
 
@@ -305,7 +307,7 @@ curl -X GET "https://api.anam.ai/v1/personas" -H "Authorization: Bearer your-api
       "id": "773a8ca8-efd8-4449-9305-8b8bc1591475",
       "name": "Leo",
       "description": "Leo is the virtual receptionist of the Sunset Hotel.",
-      "personaPreset": "leo",
+      "personaPreset": "leo_desk",
       "isDefaultPersona": true,
       "createdAt": "2021-01-01T00:00:00Z",
       "updatedAt": "2021-01-02T00:00:00Z"
@@ -338,7 +340,7 @@ curl -X GET "https://api.anam.ai/v1/personas/773a8ca8-efd8-4449-9305-8b8bc159147
   "id": "773a8ca8-efd8-4449-9305-8b8bc1591475",
   "name": "Leo",
   "description": "Leo is the virtual receptionist of the Sunset Hotel.",
-  "personaPreset": "leo",
+  "personaPreset": "leo_desk",
   "brain": {
     "id": "3c4525f0-698d-4e8d-b619-8c97a23780512",
     "personality": "You are role-playing as a text chatbot hotel receptionist at The Sunset Hotel. Your name is Leo.",
@@ -356,9 +358,9 @@ You can create your own custom personas by using the `/v1/personas` endpoint via
 | Persona parameter | Description |
 |----------------|---------------------------------------------------------------------------------------------------------|
 | `name` | The name for the persona. This is used as a human-readable identifier for the persona. |
-| `description` | A brief description of the persona. This is optional and helps provide context about the persona's role. Not used by calls to the LLM|
+| `description` | A brief description of the persona. This is optional and helps provide context about the persona's role. Not used by calls to the LLM. |
 | `personaPreset`| Defines the face and voice of the persona from a list of available presets. |
-| `brain` | Configuration for the persona's LLM 'brain' including the system prompt, personality, and filler phrases.|
+| `brain` | Configuration for the persona's LLM 'brain' including the system prompt, personality, and filler phrases. |
 
 | Brain Parameter | Description                                                                                           |
 | --------------- | ----------------------------------------------------------------------------------------------------- |
@@ -373,7 +375,7 @@ Example usage
 curl -X POST "https://api.anam.ai/v1/personas" -H "Content-Type: application/json" -H "Authorization: Bearer your-api-key" -d '{
   "name": "Leo",
   "description": "Leo is the virtual receptionist of the Sunset Hotel.",
-  "personaPreset": "leo",
+  "personaPreset": "leo_desk",
   "brain": {
     "systemPrompt": "You are Leo, a virtual receptionist...",
     "personality": "You are role-playing as a text chatbot hotel receptionist at The Sunset Hotel. Your name is Leo.",
@@ -386,7 +388,7 @@ curl -X POST "https://api.anam.ai/v1/personas" -H "Content-Type: application/jso
   "id": "new_persona_id",
   "name": "Leo",
   "description": "Leo is the virtual receptionist of the Sunset Hotel.",
-  "personaPreset": "leo",
+  "personaPreset": "leo_desk",
   "brain": {
     "id": "new_brain_id",
     "personality": "helpful and friendly",
@@ -398,16 +400,137 @@ curl -X POST "https://api.anam.ai/v1/personas" -H "Content-Type: application/jso
 }
 ```
 
+# Frequently Asked Questions
+
+### What personas are currently available?
+There are 6 default personas available in various backgrounds:
+- Leo (leo_desk, leo_windowdesk, leo_windowsofacorner)
+- Alister (alister_desk, alister_windowdesk, alister_windowsofa)
+- Astrid (astrid_desk, astrid_windowdesk, astrid_windowsofacorner)
+- Cara (cara_desk, cara_windowdesk, cara_windowsofa)
+- Evelyn (evelyn_desk)
+- Pablo (pablo_desk, pablo_windowdesk, pablo_windowsofa)
+
+You can list available personas using the `/v1/personas` endpoint or view them in the Anam Lab.
+
+### How is usage time calculated and billed?
+Usage time starts when you call the `stream()` method and ends when that specific stream closes. The time is tracked in seconds and billed per minute. The starter plan includes:
+- 60 free minutes per month
+- $0.18/minute for overages
+- Up to 3 concurrent conversations
+- Access to 6 personas and multiple backgrounds
+- Usage is billed retrospectively at the end of each month
+
+### What causes latency and how can I optimize it?
+Latency can come from several sources:
+- Connection setup time (usually 1-2 seconds, but can be up to 5 seconds)
+- LLM processing time
+- TTS generation
+- Network conditions
+
+To optimize latency:
+- Use shorter initial sentences in responses
+- Take advantage of phrase caching (repeated phrases will be faster)
+- Consider using our turnkey solution instead of custom LLM for lowest latency
+- Use the streaming API for custom LLM implementations
+
+### How do I handle multilingual conversations?
+Current language support:
+- Speech recognition currently struggles outside of English and will often translate non-English speech to English
+- We have language selection coming soon to fix this
+- TTS supports multiple languages but voice quality may vary
+- System prompts can be set to specific languages
+- Language handling is primarily controlled via the system prompt
+- Auto-language detection is planned for future releases
+
+### Can I interrupt the persona while it's speaking?
+Yes, you can interrupt the persona in two ways:
+1. Send a new `talk()` command which will override the current speech
+2. When using streaming, user speech will automatically interrupt the current stream
+
+Note: Currently there isn't a way to completely silence the persona mid-speech, but sending a short punctuation mark (like "." or "!") through the talk command can achieve a similar effect.
+
+### How do I integrate my own LLM?
+To use your own LLM:
+1. Initialize the client with `disableBrains: true`
+2. Handle speech-to-text events via `MESSAGE_HISTORY_UPDATED`
+3. Process the text through your LLM
+4. Send responses using the `talk()` method (or for better latency try `createTalkMessageStream()`) 
+
+```javascript
+const anamClient = createClient(sessionToken, {
+  personaId: 'your-persona-id',
+  disableBrains: true,
+});
+
+anamClient.addListener(AnamEvent.MESSAGE_HISTORY_UPDATED, (messages) => {
+  // Process with your LLM
+  // Send response with anamClient.talk()
+});
+```
+
+### What are the browser compatibility requirements?
+The SDK requires:
+- Modern browser with WebRTC support
+- Microphone permissions for audio input
+- Autoplay capabilities for video/audio
+- WebAssembly support
+
+Safari/iOS notes:
+- Requires explicit user interaction for audio playback
+- May have additional security policy requirements
+- WebKit engine has specific autoplay restrictions
+
+### How do I monitor current usage?
+Usage tracking options:
+- Available in Anam Lab
+- API endpoint for usage stats coming soon
+- Session logs available on request
+
+### What's the difference between development and production setup?
+Development:
+```javascript
+const client = unsafe_createClientWithApiKey('your-api-key', {
+  personaId: 'chosen-persona-id',
+});
+```
+
+Production:
+1. Exchange API key for session token server-side
+2. Pass session token to client
+```javascript
+const client = createClient('session-token', {
+  personaId: 'chosen-persona-id',
+});
+```
+
+### How do I handle connection issues?
+Common issues and solutions:
+- For "403 Forbidden" errors, verify API key/session token
+- If video doesn't appear, check element IDs match exactly
+- Connection timeouts may require retry logic
+- Session tokens expire and need refresh
+- Monitor `CONNECTION_CLOSED` events for network issues
+
+### What features are coming soon?
+Near-term roadmap includes:
+- One-shot model for custom persona creation
+- Improved streaming support for custom LLMs
+- Usage dashboard and analytics
+- Enhanced multilingual support
+- Function calling capabilities
+- Additional persona options
+
 # Sequence Diagrams
 
 ## Starting a session in production environments
 
-![Example sequence diagram](media://start-session.png)
+![Example sequence diagram](resources/media/start-session.png)
 
 ## Interaction loop
 
-![Example interaction loop](media://interaction-loop.png)
+![Example interaction loop](resources/media/interaction-loop.png)
 
 ## Interaction loop with custom LLM usage
 
-![Example interaction loop for custom LLM diagram](media://custom-llm-interaction.png)
+![Example interaction loop for custom LLM diagram](resources/media/custom-llm-interaction.png)

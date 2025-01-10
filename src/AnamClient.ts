@@ -361,4 +361,8 @@ export default class AnamClient {
   ): void {
     this.publicEventEmitter.removeListener(event, callback);
   }
+
+  public getActiveSessionId(): string | null {
+    return this.sessionId;
+  }
 }
