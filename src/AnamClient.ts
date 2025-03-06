@@ -37,7 +37,7 @@ export default class AnamClient {
 
   constructor(
     sessionToken: string | undefined,
-    personaConfig: PersonaConfig,
+    personaConfig?: PersonaConfig,
     options?: AnamClientOptions,
   ) {
     const configError: string | undefined = this.validateClientConfig(
@@ -68,9 +68,19 @@ export default class AnamClient {
     );
   }
 
+  private decodeJwt(token: string): any {
+    try {
+      const base64Payload = token.split('.')[1];
+      const payload = JSON.parse(atob(base64Payload));
+      return payload;
+    } catch (error) {
+      throw new Error('Invalid session token format');
+    }
+  }
+
   private validateClientConfig(
     sessionToken: string | undefined,
-    personaConfig: PersonaConfig,
+    personaConfig?: PersonaConfig,
     options?: AnamClientOptions,
   ): string | undefined {
     // Validate authentication configuration
@@ -80,13 +90,28 @@ export default class AnamClient {
     if (options?.apiKey && sessionToken) {
       return 'Only one of sessionToken or apiKey should be used';
     }
-    // Validate persona configuration
-    if (!personaConfig) {
-      return 'Persona configuration must be provided';
+
+    // Validate persona configuration based on session token
+    if (sessionToken) {
+      const decodedToken = this.decodeJwt(sessionToken);
+      const tokenType = decodedToken.type?.toLowerCase();
+
+      if (tokenType === 'legacy') {
+        if (!personaConfig || !('personaId' in personaConfig)) {
+          return 'Both session token and client are missing a persona configuration. Please provide a persona ID of a saved persona in the personaConfig parameter.';
+        }
+      } else if (tokenType === 'ephemeral' || tokenType === 'stateful') {
+        if (personaConfig) {
+          return 'This session token already contains a persona configuration. Please remove the personaConfig parameter.';
+        }
+      }
+    } else {
+      // No session token (using apiKey)
+      if (!personaConfig) {
+        return 'Missing persona config. Persona configuration must be provided when using apiKey';
+      }
     }
-    if (personaConfig.personaId === '' || !personaConfig.personaId) {
-      return 'Persona ID must be provided in persona configuration';
-    }
+
     // Validate voice detection configuration
     if (options?.voiceDetection) {
       // End of speech sensitivity must be a number between 0 and 1
@@ -122,11 +147,6 @@ export default class AnamClient {
   ): Promise<string> {
     try {
       const config = this.personaConfig;
-      if (!config) {
-        throw new Error(
-          'A default persona configuration has not been set and no persona configuration was provided',
-        );
-      }
       // build session options from client options
       const sessionOptions: StartSessionOptions | undefined =
         this.buildStartSessionOptionsForClient();
