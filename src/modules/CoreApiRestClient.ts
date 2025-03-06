@@ -5,6 +5,7 @@ import {
   StartSessionResponse,
 } from '../types';
 import { StartSessionOptions } from '../types/coreApi/StartSessionOptions';
+import { isCustomPersonaConfig } from '../types/PersonaConfig';
 
 export class CoreApiRestClient {
   protected baseUrl: string;
@@ -27,11 +28,16 @@ export class CoreApiRestClient {
   }
 
   public async startSession(
-    personaConfig: PersonaConfig,
+    personaConfig?: PersonaConfig,
     sessionOptions?: StartSessionOptions,
   ): Promise<StartSessionResponse> {
     if (!this.sessionToken) {
-      this.sessionToken = await this.unsafe_getSessionToken();
+      if (!personaConfig) {
+        throw new Error(
+          'Persona configuration must be provided when using apiKey',
+        );
+      }
+      this.sessionToken = await this.unsafe_getSessionToken(personaConfig);
     }
     try {
       const response = await fetch(`${this.getApiUrl()}/engine/session`, {
@@ -49,20 +55,29 @@ export class CoreApiRestClient {
     }
   }
 
-  public async unsafe_getSessionToken(): Promise<string> {
+  public async unsafe_getSessionToken(
+    personaConfig: PersonaConfig,
+  ): Promise<string> {
     console.warn(
       'Using unsecure method. This method should not be used in production.',
     );
     if (!this.apiKey) {
       throw new Error('No apiKey provided');
     }
+    let body: { clientLabel: string; personaConfig?: PersonaConfig } = {
+      clientLabel: 'js-sdk-api-key',
+    };
+    if (isCustomPersonaConfig(personaConfig)) {
+      body = { ...body, personaConfig };
+    }
     try {
       const response = await fetch(`${this.getApiUrl()}/auth/session-token`, {
-        method: 'GET',
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.apiKey}`,
         },
+        body: JSON.stringify(body),
       });
       const data = await response.json();
       return data.sessionToken;
