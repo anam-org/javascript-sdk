@@ -1,6 +1,7 @@
 import AnamClient from './AnamClient';
 import { PersonaConfig } from './types';
 import { AnamPublicClientOptions } from './types/AnamPublicClientOptions';
+import { SavedPersonaConfig } from './types/PersonaConfig';
 
 /**
  * Create a new Anam client.
@@ -11,7 +12,7 @@ import { AnamPublicClientOptions } from './types/AnamPublicClientOptions';
  */
 const createClient = (
   sessionToken: string,
-  personaConfig: PersonaConfig,
+  personaConfig?: SavedPersonaConfig,
   options?: AnamPublicClientOptions,
 ): AnamClient => {
   return new AnamClient(sessionToken, personaConfig, options);
