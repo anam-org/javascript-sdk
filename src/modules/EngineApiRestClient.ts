@@ -1,6 +1,6 @@
 export class EngineApiRestClient {
-  protected baseUrl: string;
-  protected sessionId: string;
+  private baseUrl: string;
+  private sessionId: string;
 
   constructor(baseUrl: string, sessionId: string) {
     this.baseUrl = baseUrl;

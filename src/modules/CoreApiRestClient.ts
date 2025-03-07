@@ -8,10 +8,10 @@ import { StartSessionOptions } from '../types/coreApi/StartSessionOptions';
 import { isCustomPersonaConfig } from '../types/PersonaConfig';
 
 export class CoreApiRestClient {
-  protected baseUrl: string;
-  protected apiVersion: string;
-  protected apiKey: string | null;
-  protected sessionToken: string | null;
+  private baseUrl: string;
+  private apiVersion: string;
+  private apiKey: string | null;
+  private sessionToken: string | null;
 
   constructor(
     sessionToken?: string,

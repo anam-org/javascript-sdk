@@ -20,9 +20,7 @@ export default class AnamClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
 
-  protected sessionToken: string | undefined;
-  protected apiKey: string | undefined;
-  protected messageHistoryClient: MessageHistoryClient;
+  private readonly messageHistoryClient: MessageHistoryClient;
 
   private personaConfig: PersonaConfig | undefined;
   private clientOptions: AnamClientOptions | undefined;
@@ -49,8 +47,6 @@ export default class AnamClient {
       throw new Error(configError);
     }
 
-    this.sessionToken = sessionToken;
-    this.apiKey = options?.apiKey;
     this.personaConfig = personaConfig;
     this.clientOptions = options;
 
