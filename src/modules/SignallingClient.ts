@@ -118,6 +118,10 @@ export class SignallingClient {
       sessionId: this.sessionId,
       payload: payload,
     };
+    console.log(
+      'SignallingClient instance: Sending talk message over webRTC signalling channel, chatMessage: ',
+      JSON.stringify(chatMessage),
+    );
     this.sendSignalMessage(chatMessage);
   }
 

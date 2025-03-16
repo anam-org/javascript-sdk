@@ -358,6 +358,11 @@ export default class AnamClient {
       );
     }
 
+    console.log(
+      'Anam SDK: createTalkMessageStream with correlationId: ',
+      correlationId,
+    );
+
     return this.streamingClient.startTalkMessageStream(correlationId);
   }
 

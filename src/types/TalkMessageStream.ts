@@ -16,6 +16,10 @@ export class TalkMessageStream {
     internalEventEmitter: InternalEventEmitter,
     signallingClient: SignallingClient,
   ) {
+    console.log(
+      'TalkMessageStream constructor: correlationId: ',
+      correlationId,
+    );
     this.correlationId = correlationId;
     this.internalEventEmitter = internalEventEmitter;
     this.signallingClient = signallingClient;
@@ -27,6 +31,7 @@ export class TalkMessageStream {
   }
 
   private onDeactivate() {
+    console.log('TalkMessageStream onDeactivate, removing listeners');
     this.internalEventEmitter.removeListener(
       InternalEvent.SIGNAL_MESSAGE_RECEIVED,
       this.onSignalMessage.bind(this),
@@ -37,9 +42,18 @@ export class TalkMessageStream {
     if (
       signalMessage.actionType === SignalMessageAction.TALK_STREAM_INTERRUPTED
     ) {
+      console.log(
+        'TalkMessageStream instance: Received TALK_STREAM_INTERRUPTED signal message, correlationId: ',
+        this.correlationId,
+        'signalMessage: ',
+        JSON.stringify(signalMessage),
+      );
       const message =
         signalMessage.payload as TalkStreamInterruptedSignalMessage;
       if (message.correlationId === this.correlationId) {
+        console.log(
+          'the interrupt event is for this TalkMessageStream instance as correlationId matches, so closing this talk message stream instance. Please create a new one if needed.',
+        );
         this.state = TalkMessageStreamState.INTERRUPTED;
         this.onDeactivate();
       }
@@ -65,6 +79,12 @@ export class TalkMessageStream {
       endOfSpeech: true,
       correlationId: this.correlationId,
     };
+    console.log(
+      'TalkMessageStream instance: Sending end of speech message, correlationId: ',
+      this.correlationId,
+      'payload: ',
+      JSON.stringify(payload),
+    );
     await this.signallingClient.sendTalkMessage(payload);
     this.state = TalkMessageStreamState.ENDED;
     this.onDeactivate();
@@ -87,10 +107,20 @@ export class TalkMessageStream {
       endOfSpeech: endOfSpeech,
       correlationId: this.correlationId,
     };
+    console.log(
+      'TalkMessageStream instance: Sending stream message chunk, correlationId: ',
+      this.correlationId,
+      'payload: ',
+      JSON.stringify(payload),
+    );
     this.state = endOfSpeech
       ? TalkMessageStreamState.ENDED
       : TalkMessageStreamState.STREAMING;
     if (this.state === TalkMessageStreamState.ENDED) {
+      console.log(
+        'TalkMessageStream instance: Talk stream ended, so deactivating, correlationId: ',
+        this.correlationId,
+      );
       this.onDeactivate();
     }
 

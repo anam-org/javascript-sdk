@@ -203,6 +203,9 @@ export class StreamingClient {
 
   public startTalkMessageStream(correlationId?: string): TalkMessageStream {
     if (!correlationId) {
+      console.log(
+        'StreamingClient - startTalkMessageStream: correlationId is not provided, generating a random one',
+      );
       // generate a random correlation uuid
       correlationId = Math.random().toString(36).substring(2, 15);
     }
