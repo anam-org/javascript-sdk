@@ -1,3 +1,4 @@
+import { ClientError, ErrorCode } from './lib/ClientError';
 import {
   CoreApiRestClient,
   InternalEventEmitter,
@@ -141,7 +142,6 @@ export default class AnamClient {
   private async startSession(
     userProvidedAudioStream?: MediaStream,
   ): Promise<string> {
-    try {
       const config = this.personaConfig;
       // build session options from client options
       const sessionOptions: StartSessionOptions | undefined =
@@ -189,27 +189,14 @@ export default class AnamClient {
         this.internalEventEmitter,
       );
       this.sessionId = sessionId;
+
       return sessionId;
-    } catch (error) {
-      console.error('Failed to start session:', error);
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw new Error('Failed to start session: ' + String(error));
-    }
   }
 
   private async startSessionIfNeeded(userProvidedMediaStream?: MediaStream) {
     if (!this.sessionId || !this.streamingClient) {
-      try {
-        await this.startSession(userProvidedMediaStream);
-      } catch (error) {
-        console.error('Failed to start session:', error);
-        if (error instanceof Error) {
-          throw new Error(`Failed to start session: ${error.message}`);
-        }
-        throw new Error(`Failed to start session: ${String(error)}`);
-      }
+      await this.startSession(userProvidedMediaStream);
+
       if (!this.sessionId || !this.streamingClient) {
         throw new Error(
           'Session ID or streaming client is not available after starting session',
@@ -261,7 +248,16 @@ export default class AnamClient {
     audioElementId: string,
     userProvidedMediaStream?: MediaStream,
   ): Promise<void> {
-    await this.startSessionIfNeeded(userProvidedMediaStream);
+    try {
+      await this.startSessionIfNeeded(userProvidedMediaStream);
+    } catch (error) {
+      if (error instanceof ClientError) {
+        throw error;
+      }
+      throw new ClientError('Failed to start session', ErrorCode.SERVER_ERROR, 500, {
+        cause: error instanceof Error ? error.message : String(error),
+      });
+    }
     if (this._isStreaming) {
       throw new Error('Already streaming');
     }
