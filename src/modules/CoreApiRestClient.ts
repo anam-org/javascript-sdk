@@ -1,3 +1,4 @@
+import { ClientError, ErrorCode } from '../lib/ClientError';
 import { DEFAULT_API_BASE_URL, DEFAULT_API_VERSION } from '../lib/constants';
 import {
   CoreApiRestClientOptions,
@@ -33,24 +34,71 @@ export class CoreApiRestClient {
   ): Promise<StartSessionResponse> {
     if (!this.sessionToken) {
       if (!personaConfig) {
-        throw new Error(
+        throw new ClientError(
           'Persona configuration must be provided when using apiKey',
+          ErrorCode.VALIDATION_ERROR,
+          400,
         );
       }
+      // TODO: why do we need to get the unsafe session token here?
       this.sessionToken = await this.unsafe_getSessionToken(personaConfig);
     }
     
-    const response = await fetch(`${this.getApiUrl()}/engine/session`, {
-      method: 'POST',
-      headers: {
+    try {
+      const response = await fetch(`${this.getApiUrl()}/engine/session`, {
+        method: 'POST',
+        headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.sessionToken}`,
       },
-      body: JSON.stringify({ personaConfig, sessionOptions }),
-    });
-    const data: StartSessionResponse = await response.json();
+        body: JSON.stringify({ personaConfig, sessionOptions }),
+      });
+      const data: StartSessionResponse = await response.json();
+      return data;
+    } catch (error) {
+      if (error instanceof Response || (error instanceof Error && 'status' in error)) {
+        const status = 'status' in error ? error.status : 500;
+        
+        switch (status) {
+          case 400:
+            throw new ClientError(
+              'Invalid request to start session',
+              ErrorCode.VALIDATION_ERROR,
+              400,
+              { cause: error instanceof Error ? error.message : String(error) }
+            );
+          case 401:
+          case 403:
+            throw new ClientError(
+              'Authentication failed when starting session',
+              ErrorCode.AUTHENTICATION_ERROR,
+              status,
+              { cause: error instanceof Error ? error.message : String(error) }
+            );
+          case 429:
+            throw new ClientError(
+              'Out of credits, please upgrade your plan',
+              ErrorCode.USAGE_LIMIT_REACHED,
+              status,
+              { cause: error instanceof Error ? error.message : String(error) }
+            );
+          case 500:
+            throw new ClientError(
+              'Server error when starting session',
+              ErrorCode.SERVER_ERROR,
+              status,
+              { cause: error instanceof Error ? error.message : String(error) }
+            );
+        }
 
-    return data;
+        throw new ClientError(
+          'Failed to start session',
+            ErrorCode.SERVER_ERROR,
+          500,
+          { cause: error instanceof Error ? error.message : String(error) }
+        );
+      }
+    }
   }
 
   public async unsafe_getSessionToken(

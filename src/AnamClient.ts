@@ -163,7 +163,8 @@ export default class AnamClient {
         maxWsReconnectionAttempts,
         iceServers,
       } = clientConfig;
-      // create a new streaming client
+
+      try {
       this.streamingClient = new StreamingClient(
         sessionId,
         {
@@ -188,8 +189,16 @@ export default class AnamClient {
         this.publicEventEmitter,
         this.internalEventEmitter,
       );
+      } catch (error) {
+        throw new ClientError(
+          'Failed to initialize streaming client',
+          ErrorCode.SERVER_ERROR,
+          500,
+          { cause: error instanceof Error ? error.message : String(error) }
+        );
+      }
+      
       this.sessionId = sessionId;
-
       return sessionId;
   }
 
@@ -198,8 +207,13 @@ export default class AnamClient {
       await this.startSession(userProvidedMediaStream);
 
       if (!this.sessionId || !this.streamingClient) {
-        throw new Error(
+        throw new ClientError(
           'Session ID or streaming client is not available after starting session',
+          ErrorCode.SERVER_ERROR,
+          500,
+          {
+            cause: 'Failed to initialize session properly'
+          }
         );
       }
     }
