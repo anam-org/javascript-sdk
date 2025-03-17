@@ -191,6 +191,7 @@ export default class AnamClient {
       this.sessionId = sessionId;
       return sessionId;
     } catch (error) {
+      console.error('Failed to start session:', error);
       if (error instanceof Error) {
         throw error;
       }
@@ -203,6 +204,7 @@ export default class AnamClient {
       try {
         await this.startSession(userProvidedMediaStream);
       } catch (error) {
+        console.error('Failed to start session:', error);
         if (error instanceof Error) {
           throw new Error(`Failed to start session: ${error.message}`);
         }
