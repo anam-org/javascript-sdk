@@ -54,40 +54,59 @@ export class CoreApiRestClient {
         body: JSON.stringify({ personaConfig, sessionOptions }),
       });
 
+      const data = await response.json();
+
       switch (response.status) {
         case 200:
-          const data: StartSessionResponse = await response.json();
-          return data;
+          return data as StartSessionResponse;
         case 400:
           throw new ClientError(
             'Invalid request to start session',
             ErrorCode.VALIDATION_ERROR,
             400,
+            { cause: data.message },
           );
         case 401:
           throw new ClientError(
             'Authentication failed when starting session',
             ErrorCode.AUTHENTICATION_ERROR,
             401,
+            { cause: data.message },
+          );
+        case 402:
+          throw new ClientError(
+            'Please sign up for a plan to start a session',
+            ErrorCode.NO_PLAN_FOUND,
+            402,
+            { cause: data.message },
           );
         case 403:
           throw new ClientError(
             'Authentication failed when starting session',
             ErrorCode.AUTHENTICATION_ERROR,
             403,
+            { cause: data.message },
           );
         case 429:
           throw new ClientError(
             'Out of credits, please upgrade your plan',
             ErrorCode.USAGE_LIMIT_REACHED,
             429,
+            { cause: data.message },
+          );
+        case 503:
+          throw new ClientError(
+            'There are no available personas, please try again later',
+            ErrorCode.SERVICE_BUSY,
+            503,
+            { cause: data.message },
           );
         default:
           throw new ClientError(
             'Unknown error when starting session',
             ErrorCode.SERVER_ERROR,
             500,
-            { cause: response.statusText },
+            { cause: data.message },
           );
       }
     } catch (error) {
