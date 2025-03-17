@@ -90,14 +90,13 @@ export class CoreApiRestClient {
               { cause: error instanceof Error ? error.message : String(error) }
             );
         }
-
-        throw new ClientError(
-          'Failed to start session',
-            ErrorCode.SERVER_ERROR,
-          500,
-          { cause: error instanceof Error ? error.message : String(error) }
-        );
       }
+      throw new ClientError(
+        'Failed to start session',
+          ErrorCode.SERVER_ERROR,
+        500,
+        { cause: error instanceof Error ? error.message : String(error) }
+      );
     }
   }
 
