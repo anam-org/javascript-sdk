@@ -39,20 +39,18 @@ export class CoreApiRestClient {
       }
       this.sessionToken = await this.unsafe_getSessionToken(personaConfig);
     }
-    try {
-      const response = await fetch(`${this.getApiUrl()}/engine/session`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.sessionToken}`,
-        },
-        body: JSON.stringify({ personaConfig, sessionOptions }),
-      });
-      const data: StartSessionResponse = await response.json();
-      return data;
-    } catch (error) {
-      throw new Error('Failed to start session');
-    }
+    
+    const response = await fetch(`${this.getApiUrl()}/engine/session`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.sessionToken}`,
+      },
+      body: JSON.stringify({ personaConfig, sessionOptions }),
+    });
+    const data: StartSessionResponse = await response.json();
+
+    return data;
   }
 
   public async unsafe_getSessionToken(

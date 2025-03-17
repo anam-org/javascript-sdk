@@ -1,20 +1,20 @@
 import {
   CoreApiRestClient,
+  InternalEventEmitter,
+  MessageHistoryClient,
   PublicEventEmitter,
   StreamingClient,
-  MessageHistoryClient,
-  InternalEventEmitter,
 } from './modules';
-import { TalkMessageStream } from './types/TalkMessageStream';
 import {
+  AnamClientOptions,
   AnamEvent,
   EventCallbacks,
   InputAudioState,
   PersonaConfig,
-  StartSessionResponse,
-  AnamClientOptions,
   StartSessionOptions,
+  StartSessionResponse,
 } from './types';
+import { TalkMessageStream } from './types/TalkMessageStream';
 
 export default class AnamClient {
   private publicEventEmitter: PublicEventEmitter;
@@ -191,7 +191,10 @@ export default class AnamClient {
       this.sessionId = sessionId;
       return sessionId;
     } catch (error) {
-      throw new Error('Failed to start session');
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Failed to start session: ' + String(error));
     }
   }
 
@@ -200,13 +203,14 @@ export default class AnamClient {
       try {
         await this.startSession(userProvidedMediaStream);
       } catch (error) {
-        throw new Error(
-          'StreamToVideoAndAudioElements: Failed to start session',
-        );
+        if (error instanceof Error) {
+          throw new Error(`Failed to start session: ${error.message}`);
+        }
+        throw new Error(`Failed to start session: ${String(error)}`);
       }
       if (!this.sessionId || !this.streamingClient) {
         throw new Error(
-          'StreamToVideoAndAudioElements: session Id or streaming client is not available after starting session',
+          'Session ID or streaming client is not available after starting session'
         );
       }
     }
