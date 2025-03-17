@@ -212,7 +212,7 @@ export default class AnamClient {
       }
       if (!this.sessionId || !this.streamingClient) {
         throw new Error(
-          'Session ID or streaming client is not available after starting session'
+          'Session ID or streaming client is not available after starting session',
         );
       }
     }
@@ -363,11 +363,6 @@ export default class AnamClient {
         'Failed to start talk message stream: correlationId is empty',
       );
     }
-
-    console.log(
-      'Anam SDK: createTalkMessageStream with correlationId: ',
-      correlationId,
-    );
 
     return this.streamingClient.startTalkMessageStream(correlationId);
   }
