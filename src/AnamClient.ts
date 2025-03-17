@@ -142,29 +142,26 @@ export default class AnamClient {
   private async startSession(
     userProvidedAudioStream?: MediaStream,
   ): Promise<string> {
-      const config = this.personaConfig;
-      // build session options from client options
-      const sessionOptions: StartSessionOptions | undefined =
-        this.buildStartSessionOptionsForClient();
-      // start a new session
-      const response: StartSessionResponse = await this.apiClient.startSession(
-        config,
-        sessionOptions,
-      );
-      const {
-        sessionId,
-        clientConfig,
-        engineHost,
-        engineProtocol,
-        signallingEndpoint,
-      } = response;
-      const {
-        heartbeatIntervalSeconds,
-        maxWsReconnectionAttempts,
-        iceServers,
-      } = clientConfig;
+    const config = this.personaConfig;
+    // build session options from client options
+    const sessionOptions: StartSessionOptions | undefined =
+      this.buildStartSessionOptionsForClient();
+    // start a new session
+    const response: StartSessionResponse = await this.apiClient.startSession(
+      config,
+      sessionOptions,
+    );
+    const {
+      sessionId,
+      clientConfig,
+      engineHost,
+      engineProtocol,
+      signallingEndpoint,
+    } = response;
+    const { heartbeatIntervalSeconds, maxWsReconnectionAttempts, iceServers } =
+      clientConfig;
 
-      try {
+    try {
       this.streamingClient = new StreamingClient(
         sessionId,
         {
@@ -189,17 +186,17 @@ export default class AnamClient {
         this.publicEventEmitter,
         this.internalEventEmitter,
       );
-      } catch (error) {
-        throw new ClientError(
-          'Failed to initialize streaming client',
-          ErrorCode.SERVER_ERROR,
-          500,
-          { cause: error instanceof Error ? error.message : String(error) }
-        );
-      }
-      
-      this.sessionId = sessionId;
-      return sessionId;
+    } catch (error) {
+      throw new ClientError(
+        'Failed to initialize streaming client',
+        ErrorCode.SERVER_ERROR,
+        500,
+        { cause: error instanceof Error ? error.message : String(error) },
+      );
+    }
+
+    this.sessionId = sessionId;
+    return sessionId;
   }
 
   private async startSessionIfNeeded(userProvidedMediaStream?: MediaStream) {
@@ -212,8 +209,8 @@ export default class AnamClient {
           ErrorCode.SERVER_ERROR,
           500,
           {
-            cause: 'Failed to initialize session properly'
-          }
+            cause: 'Failed to initialize session properly',
+          },
         );
       }
     }
@@ -268,10 +265,17 @@ export default class AnamClient {
       if (error instanceof ClientError) {
         throw error;
       }
-      throw new ClientError('Failed to start session', ErrorCode.SERVER_ERROR, 500, {
-        cause: error instanceof Error ? error.message : String(error),
-      });
+
+      throw new ClientError(
+        'Failed to start session',
+        ErrorCode.SERVER_ERROR,
+        500,
+        {
+          cause: error instanceof Error ? error.message : String(error),
+        },
+      );
     }
+
     if (this._isStreaming) {
       throw new Error('Already streaming');
     }

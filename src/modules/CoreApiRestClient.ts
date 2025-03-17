@@ -43,59 +43,62 @@ export class CoreApiRestClient {
       // TODO: why do we need to get the unsafe session token here?
       this.sessionToken = await this.unsafe_getSessionToken(personaConfig);
     }
-    
+
     try {
       const response = await fetch(`${this.getApiUrl()}/engine/session`, {
         method: 'POST',
         headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.sessionToken}`,
-      },
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.sessionToken}`,
+        },
         body: JSON.stringify({ personaConfig, sessionOptions }),
       });
-      const data: StartSessionResponse = await response.json();
-      return data;
+
+      switch (response.status) {
+        case 200:
+          const data: StartSessionResponse = await response.json();
+          return data;
+        case 400:
+          throw new ClientError(
+            'Invalid request to start session',
+            ErrorCode.VALIDATION_ERROR,
+            400,
+          );
+        case 401:
+          throw new ClientError(
+            'Authentication failed when starting session',
+            ErrorCode.AUTHENTICATION_ERROR,
+            401,
+          );
+        case 403:
+          throw new ClientError(
+            'Authentication failed when starting session',
+            ErrorCode.AUTHENTICATION_ERROR,
+            403,
+          );
+        case 429:
+          throw new ClientError(
+            'Out of credits, please upgrade your plan',
+            ErrorCode.USAGE_LIMIT_REACHED,
+            429,
+          );
+        default:
+          throw new ClientError(
+            'Unknown error when starting session',
+            ErrorCode.SERVER_ERROR,
+            500,
+            { cause: response.statusText },
+          );
+      }
     } catch (error) {
-      if (error instanceof Response || (error instanceof Error && 'status' in error)) {
-        const status = 'status' in error ? error.status : 500;
-        
-        switch (status) {
-          case 400:
-            throw new ClientError(
-              'Invalid request to start session',
-              ErrorCode.VALIDATION_ERROR,
-              400,
-              { cause: error instanceof Error ? error.message : String(error) }
-            );
-          case 401:
-          case 403:
-            throw new ClientError(
-              'Authentication failed when starting session',
-              ErrorCode.AUTHENTICATION_ERROR,
-              status,
-              { cause: error instanceof Error ? error.message : String(error) }
-            );
-          case 429:
-            throw new ClientError(
-              'Out of credits, please upgrade your plan',
-              ErrorCode.USAGE_LIMIT_REACHED,
-              status,
-              { cause: error instanceof Error ? error.message : String(error) }
-            );
-          case 500:
-            throw new ClientError(
-              'Server error when starting session',
-              ErrorCode.SERVER_ERROR,
-              status,
-              { cause: error instanceof Error ? error.message : String(error) }
-            );
-        }
+      if (error instanceof ClientError) {
+        throw error;
       }
       throw new ClientError(
         'Failed to start session',
-          ErrorCode.SERVER_ERROR,
+        ErrorCode.SERVER_ERROR,
         500,
-        { cause: error instanceof Error ? error.message : String(error) }
+        { cause: error instanceof Error ? error.message : String(error) },
       );
     }
   }

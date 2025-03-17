@@ -10,19 +10,18 @@ export class ClientError extends Error {
   statusCode: number;
   details?: any;
 
-  constructor(message: string, code: ErrorCode, statusCode: number = 500, details?: any) {
+  constructor(
+    message: string,
+    code: ErrorCode,
+    statusCode: number = 500,
+    details?: any,
+  ) {
     super(message);
-    this.name = 'AppError';
+    this.name = 'ClientError';
     this.code = code;
     this.statusCode = statusCode;
     this.details = details;
-    
-    Object.setPrototypeOf(this, ClientError.prototype);
-  }
-}
 
-export class UsageLimitReachedError extends ClientError {
-  constructor(message: string, details?: any) {
-    super(message, ErrorCode.USAGE_LIMIT_REACHED, 429, details);
+    Object.setPrototypeOf(this, ClientError.prototype);
   }
 }
