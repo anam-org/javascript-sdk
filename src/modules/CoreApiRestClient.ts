@@ -1,3 +1,4 @@
+import { ClientError, ErrorCode } from '../lib/ClientError';
 import { DEFAULT_API_BASE_URL, DEFAULT_API_VERSION } from '../lib/constants';
 import {
   CoreApiRestClientOptions,
@@ -8,10 +9,10 @@ import { StartSessionOptions } from '../types/coreApi/StartSessionOptions';
 import { isCustomPersonaConfig } from '../types/PersonaConfig';
 
 export class CoreApiRestClient {
-  protected baseUrl: string;
-  protected apiVersion: string;
-  protected apiKey: string | null;
-  protected sessionToken: string | null;
+  private baseUrl: string;
+  private apiVersion: string;
+  private apiKey: string | null;
+  private sessionToken: string | null;
 
   constructor(
     sessionToken?: string,
@@ -33,12 +34,16 @@ export class CoreApiRestClient {
   ): Promise<StartSessionResponse> {
     if (!this.sessionToken) {
       if (!personaConfig) {
-        throw new Error(
+        throw new ClientError(
           'Persona configuration must be provided when using apiKey',
+          ErrorCode.VALIDATION_ERROR,
+          400,
         );
       }
+      // TODO: why do we need to get the unsafe session token here?
       this.sessionToken = await this.unsafe_getSessionToken(personaConfig);
     }
+
     try {
       const response = await fetch(`${this.getApiUrl()}/engine/session`, {
         method: 'POST',
@@ -48,10 +53,72 @@ export class CoreApiRestClient {
         },
         body: JSON.stringify({ personaConfig, sessionOptions }),
       });
-      const data: StartSessionResponse = await response.json();
-      return data;
+
+      const data = await response.json();
+
+      switch (response.status) {
+        case 200:
+          return data as StartSessionResponse;
+        case 400:
+          throw new ClientError(
+            'Invalid request to start session',
+            ErrorCode.VALIDATION_ERROR,
+            400,
+            { cause: data.message },
+          );
+        case 401:
+          throw new ClientError(
+            'Authentication failed when starting session',
+            ErrorCode.AUTHENTICATION_ERROR,
+            401,
+            { cause: data.message },
+          );
+        case 402:
+          throw new ClientError(
+            'Please sign up for a plan to start a session',
+            ErrorCode.NO_PLAN_FOUND,
+            402,
+            { cause: data.message },
+          );
+        case 403:
+          throw new ClientError(
+            'Authentication failed when starting session',
+            ErrorCode.AUTHENTICATION_ERROR,
+            403,
+            { cause: data.message },
+          );
+        case 429:
+          throw new ClientError(
+            'Out of credits, please upgrade your plan',
+            ErrorCode.USAGE_LIMIT_REACHED,
+            429,
+            { cause: data.message },
+          );
+        case 503:
+          throw new ClientError(
+            'There are no available personas, please try again later',
+            ErrorCode.SERVICE_BUSY,
+            503,
+            { cause: data.message },
+          );
+        default:
+          throw new ClientError(
+            'Unknown error when starting session',
+            ErrorCode.SERVER_ERROR,
+            500,
+            { cause: data.message },
+          );
+      }
     } catch (error) {
-      throw new Error('Failed to start session');
+      if (error instanceof ClientError) {
+        throw error;
+      }
+      throw new ClientError(
+        'Failed to start session',
+        ErrorCode.SERVER_ERROR,
+        500,
+        { cause: error instanceof Error ? error.message : String(error) },
+      );
     }
   }
 

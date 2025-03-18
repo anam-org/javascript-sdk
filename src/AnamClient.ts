@@ -1,28 +1,27 @@
+import { ClientError, ErrorCode } from './lib/ClientError';
 import {
   CoreApiRestClient,
+  InternalEventEmitter,
+  MessageHistoryClient,
   PublicEventEmitter,
   StreamingClient,
-  MessageHistoryClient,
-  InternalEventEmitter,
 } from './modules';
-import { TalkMessageStream } from './types/TalkMessageStream';
 import {
+  AnamClientOptions,
   AnamEvent,
   EventCallbacks,
   InputAudioState,
   PersonaConfig,
-  StartSessionResponse,
-  AnamClientOptions,
   StartSessionOptions,
+  StartSessionResponse,
 } from './types';
+import { TalkMessageStream } from './types/TalkMessageStream';
 
 export default class AnamClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
 
-  protected sessionToken: string | undefined;
-  protected apiKey: string | undefined;
-  protected messageHistoryClient: MessageHistoryClient;
+  private readonly messageHistoryClient: MessageHistoryClient;
 
   private personaConfig: PersonaConfig | undefined;
   private clientOptions: AnamClientOptions | undefined;
@@ -49,8 +48,6 @@ export default class AnamClient {
       throw new Error(configError);
     }
 
-    this.sessionToken = sessionToken;
-    this.apiKey = options?.apiKey;
     this.personaConfig = personaConfig;
     this.clientOptions = options;
 
@@ -145,29 +142,26 @@ export default class AnamClient {
   private async startSession(
     userProvidedAudioStream?: MediaStream,
   ): Promise<string> {
+    const config = this.personaConfig;
+    // build session options from client options
+    const sessionOptions: StartSessionOptions | undefined =
+      this.buildStartSessionOptionsForClient();
+    // start a new session
+    const response: StartSessionResponse = await this.apiClient.startSession(
+      config,
+      sessionOptions,
+    );
+    const {
+      sessionId,
+      clientConfig,
+      engineHost,
+      engineProtocol,
+      signallingEndpoint,
+    } = response;
+    const { heartbeatIntervalSeconds, maxWsReconnectionAttempts, iceServers } =
+      clientConfig;
+
     try {
-      const config = this.personaConfig;
-      // build session options from client options
-      const sessionOptions: StartSessionOptions | undefined =
-        this.buildStartSessionOptionsForClient();
-      // start a new session
-      const response: StartSessionResponse = await this.apiClient.startSession(
-        config,
-        sessionOptions,
-      );
-      const {
-        sessionId,
-        clientConfig,
-        engineHost,
-        engineProtocol,
-        signallingEndpoint,
-      } = response;
-      const {
-        heartbeatIntervalSeconds,
-        maxWsReconnectionAttempts,
-        iceServers,
-      } = clientConfig;
-      // create a new streaming client
       this.streamingClient = new StreamingClient(
         sessionId,
         {
@@ -192,25 +186,31 @@ export default class AnamClient {
         this.publicEventEmitter,
         this.internalEventEmitter,
       );
-      this.sessionId = sessionId;
-      return sessionId;
     } catch (error) {
-      throw new Error('Failed to start session');
+      throw new ClientError(
+        'Failed to initialize streaming client',
+        ErrorCode.SERVER_ERROR,
+        500,
+        { cause: error instanceof Error ? error.message : String(error) },
+      );
     }
+
+    this.sessionId = sessionId;
+    return sessionId;
   }
 
   private async startSessionIfNeeded(userProvidedMediaStream?: MediaStream) {
     if (!this.sessionId || !this.streamingClient) {
-      try {
-        await this.startSession(userProvidedMediaStream);
-      } catch (error) {
-        throw new Error(
-          'StreamToVideoAndAudioElements: Failed to start session',
-        );
-      }
+      await this.startSession(userProvidedMediaStream);
+
       if (!this.sessionId || !this.streamingClient) {
-        throw new Error(
-          'StreamToVideoAndAudioElements: session Id or streaming client is not available after starting session',
+        throw new ClientError(
+          'Session ID or streaming client is not available after starting session',
+          ErrorCode.SERVER_ERROR,
+          500,
+          {
+            cause: 'Failed to initialize session properly',
+          },
         );
       }
     }
@@ -259,7 +259,23 @@ export default class AnamClient {
     audioElementId: string,
     userProvidedMediaStream?: MediaStream,
   ): Promise<void> {
-    await this.startSessionIfNeeded(userProvidedMediaStream);
+    try {
+      await this.startSessionIfNeeded(userProvidedMediaStream);
+    } catch (error) {
+      if (error instanceof ClientError) {
+        throw error;
+      }
+
+      throw new ClientError(
+        'Failed to start session',
+        ErrorCode.SERVER_ERROR,
+        500,
+        {
+          cause: error instanceof Error ? error.message : String(error),
+        },
+      );
+    }
+
     if (this._isStreaming) {
       throw new Error('Already streaming');
     }
