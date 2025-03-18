@@ -58,6 +58,7 @@ export class CoreApiRestClient {
 
       switch (response.status) {
         case 200:
+        case 201:
           return data as StartSessionResponse;
         case 400:
           throw new ClientError(
