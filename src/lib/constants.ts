@@ -11,3 +11,5 @@ export const PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE =
   'There was a problem connecting to our servers. Please try again.';
 export const PUBLIC_MESSAGE_ON_WEBRTC_FAILURE =
   'There was an issue connecting to our servers. Please try again.';
+export const PUBLIC_MESSAGE_ON_MICROPHONE_PERMISSION_DENIED =
+  'Microphone browser permission denied';
