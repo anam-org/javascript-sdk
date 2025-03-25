@@ -9,14 +9,14 @@ export enum ErrorCode {
   CLIENT_ERROR_CODE_UNKNOWN_ERROR = 'CLIENT_ERROR_CODE_UNKNOWN_ERROR',
 }
 
-// Function to send error metrics to API
+// TODO: Move to CoreApiRestClient if we have a pattern for not exposing this
 export const sendErrorMetric = async (
   name: string,
   value: string,
   tags?: Record<string, string | number>,
 ) => {
   try {
-    await fetch('http://localhost:5001/v1/metrics/client', {
+    await fetch('https://api.anam.ai/v1/metrics/client', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
