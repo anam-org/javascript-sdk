@@ -6,8 +6,11 @@ export const DEFAULT_HEADERS = {
 export const DEFAULT_API_BASE_URL = 'https://api.anam.ai';
 export const DEFAULT_API_VERSION = '/v1'; // include the leading slash
 
-// Error messages
-export const PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE =
-  'There was a problem connecting to our servers. Please try again.';
-export const PUBLIC_MESSAGE_ON_WEBRTC_FAILURE =
-  'There was an issue connecting to our servers. Please try again.';
+// Connection closed codes
+export const CONNECTION_CLOSED_CODE_NORMAL = 'CONNECTION_CLOSED_CODE_NORMAL';
+export const CONNECTION_CLOSED_CODE_MICROPHONE_PERMISSION_DENIED =
+  'CONNECTION_CLOSED_CODE_MICROPHONE_PERMISSION_DENIED';
+export const CONNECTION_CLOSED_CODE_SIGNALLING_CLIENT_CONNECTION_FAILURE =
+  'CONNECTION_CLOSED_CODE_SIGNALLING_CLIENT_CONNECTION_FAILURE';
+export const CONNECTION_CLOSED_CODE_WEBRTC_FAILURE =
+  'CONNECTION_CLOSED_CODE_WEBRTC_FAILURE';

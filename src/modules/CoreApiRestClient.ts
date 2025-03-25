@@ -36,7 +36,7 @@ export class CoreApiRestClient {
       if (!personaConfig) {
         throw new ClientError(
           'Persona configuration must be provided when using apiKey',
-          ErrorCode.VALIDATION_ERROR,
+          ErrorCode.CLIENT_ERROR_CODE_VALIDATION_ERROR,
           400,
         );
       }
@@ -63,49 +63,49 @@ export class CoreApiRestClient {
         case 400:
           throw new ClientError(
             'Invalid request to start session',
-            ErrorCode.VALIDATION_ERROR,
+            ErrorCode.CLIENT_ERROR_CODE_VALIDATION_ERROR,
             400,
             { cause: data.message },
           );
         case 401:
           throw new ClientError(
             'Authentication failed when starting session',
-            ErrorCode.AUTHENTICATION_ERROR,
+            ErrorCode.CLIENT_ERROR_CODE_AUTHENTICATION_ERROR,
             401,
             { cause: data.message },
           );
         case 402:
           throw new ClientError(
             'Please sign up for a plan to start a session',
-            ErrorCode.NO_PLAN_FOUND,
+            ErrorCode.CLIENT_ERROR_CODE_NO_PLAN_FOUND,
             402,
             { cause: data.message },
           );
         case 403:
           throw new ClientError(
             'Authentication failed when starting session',
-            ErrorCode.AUTHENTICATION_ERROR,
+            ErrorCode.CLIENT_ERROR_CODE_AUTHENTICATION_ERROR,
             403,
             { cause: data.message },
           );
         case 429:
           throw new ClientError(
             'Out of credits, please upgrade your plan',
-            ErrorCode.USAGE_LIMIT_REACHED,
+            ErrorCode.CLIENT_ERROR_CODE_USAGE_LIMIT_REACHED,
             429,
             { cause: data.message },
           );
         case 503:
           throw new ClientError(
             'There are no available personas, please try again later',
-            ErrorCode.SERVICE_BUSY,
+            ErrorCode.CLIENT_ERROR_CODE_SERVICE_BUSY,
             503,
             { cause: data.message },
           );
         default:
           throw new ClientError(
             'Unknown error when starting session',
-            ErrorCode.SERVER_ERROR,
+            ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
             500,
             { cause: data.message },
           );
@@ -116,7 +116,7 @@ export class CoreApiRestClient {
       }
       throw new ClientError(
         'Failed to start session',
-        ErrorCode.SERVER_ERROR,
+        ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
         500,
         { cause: error instanceof Error ? error.message : String(error) },
       );

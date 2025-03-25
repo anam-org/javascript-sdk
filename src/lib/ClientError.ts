@@ -1,12 +1,36 @@
 export enum ErrorCode {
-  USAGE_LIMIT_REACHED = 'USAGE_LIMIT_REACHED',
-  VALIDATION_ERROR = 'VALIDATION_ERROR',
-  AUTHENTICATION_ERROR = 'AUTHENTICATION_ERROR',
-  SERVER_ERROR = 'SERVER_ERROR',
-  MAX_CONCURRENT_SESSIONS_REACHED = 'MAX_CONCURRENT_SESSIONS_REACHED',
-  SERVICE_BUSY = 'SERVICE_BUSY',
-  NO_PLAN_FOUND = 'NO_PLAN_FOUND',
+  CLIENT_ERROR_CODE_USAGE_LIMIT_REACHED = 'CLIENT_ERROR_CODE_USAGE_LIMIT_REACHED',
+  CLIENT_ERROR_CODE_VALIDATION_ERROR = 'CLIENT_ERROR_CODE_VALIDATION_ERROR',
+  CLIENT_ERROR_CODE_AUTHENTICATION_ERROR = 'CLIENT_ERROR_CODE_AUTHENTICATION_ERROR',
+  CLIENT_ERROR_CODE_SERVER_ERROR = 'CLIENT_ERROR_CODE_SERVER_ERROR',
+  CLIENT_ERROR_CODE_MAX_CONCURRENT_SESSIONS_REACHED = 'CLIENT_ERROR_CODE_MAX_CONCURRENT_SESSIONS_REACHED',
+  CLIENT_ERROR_CODE_SERVICE_BUSY = 'CLIENT_ERROR_CODE_SERVICE_BUSY',
+  CLIENT_ERROR_CODE_NO_PLAN_FOUND = 'CLIENT_ERROR_CODE_NO_PLAN_FOUND',
+  CLIENT_ERROR_CODE_UNKNOWN_ERROR = 'CLIENT_ERROR_CODE_UNKNOWN_ERROR',
 }
+
+// TODO: Move to CoreApiRestClient if we have a pattern for not exposing this
+export const sendErrorMetric = async (
+  name: string,
+  value: string,
+  tags?: Record<string, string | number>,
+) => {
+  try {
+    await fetch('https://api.anam.ai/v1/metrics/client', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name,
+        value,
+        tags,
+      }),
+    });
+  } catch (error) {
+    console.error('Failed to send error metric:', error);
+  }
+};
 
 export class ClientError extends Error {
   code: ErrorCode;
@@ -26,5 +50,11 @@ export class ClientError extends Error {
     this.details = details;
 
     Object.setPrototypeOf(this, ClientError.prototype);
+
+    // Send error metric when error is created
+    sendErrorMetric('client_error', code, {
+      details,
+      statusCode,
+    });
   }
 }

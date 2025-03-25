@@ -1,19 +1,23 @@
-import { PUBLIC_MESSAGE_ON_WEBRTC_FAILURE } from '../lib/constants';
 import {
-  AnamEvent,
-  InputAudioState,
-  InternalEvent,
-  SignalMessage,
-  SignalMessageAction,
-  WebRtcTextMessageEvent,
-  StreamingClientOptions,
-} from '../types';
+  CONNECTION_CLOSED_CODE_MICROPHONE_PERMISSION_DENIED,
+  CONNECTION_CLOSED_CODE_NORMAL,
+  CONNECTION_CLOSED_CODE_WEBRTC_FAILURE,
+} from '../lib/constants';
 import {
   EngineApiRestClient,
   InternalEventEmitter,
   PublicEventEmitter,
   SignallingClient,
 } from '../modules';
+import {
+  AnamEvent,
+  InputAudioState,
+  InternalEvent,
+  SignalMessage,
+  SignalMessageAction,
+  StreamingClientOptions,
+  WebRtcTextMessageEvent,
+} from '../types';
 import { TalkMessageStream } from '../types/TalkMessageStream';
 import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
 
@@ -183,6 +187,7 @@ export class StreamingClient {
       // start the connection
       this.signallingClient.connect();
     } catch (error) {
+      console.log('StreamingClient - startConnection: error', error);
       this.handleWebrtcFailure(error);
     }
   }
@@ -262,7 +267,11 @@ export class StreamingClient {
         break;
       case SignalMessageAction.END_SESSION:
         const reason = signalMessage.payload as string;
-        this.publicEventEmitter.emit(AnamEvent.CONNECTION_CLOSED, reason);
+        console.log('StreamingClient - onSignalMessage: reason', reason);
+        this.publicEventEmitter.emit(
+          AnamEvent.CONNECTION_CLOSED,
+          CONNECTION_CLOSED_CODE_NORMAL,
+        );
         // close the peer connection
         this.shutdown();
         break;
@@ -339,7 +348,19 @@ export class StreamingClient {
   }
 
   private handleWebrtcFailure(err: any) {
-    console.error('StreamingClient - handleWebrtcFailure: ', err);
+    console.error({ message: 'StreamingClient - handleWebrtcFailure: ', err });
+    if (err.name === 'NotAllowedError' && err.message === 'Permission denied') {
+      this.publicEventEmitter.emit(
+        AnamEvent.CONNECTION_CLOSED,
+        CONNECTION_CLOSED_CODE_MICROPHONE_PERMISSION_DENIED,
+      );
+    } else {
+      this.publicEventEmitter.emit(
+        AnamEvent.CONNECTION_CLOSED,
+        CONNECTION_CLOSED_CODE_WEBRTC_FAILURE,
+      );
+    }
+
     try {
       this.stopConnection();
     } catch (error) {
@@ -348,10 +369,6 @@ export class StreamingClient {
         error,
       );
     }
-    this.publicEventEmitter.emit(
-      AnamEvent.CONNECTION_CLOSED,
-      PUBLIC_MESSAGE_ON_WEBRTC_FAILURE,
-    );
   }
 
   private onTrackEventHandler(event: RTCTrackEvent) {
@@ -458,9 +475,17 @@ export class StreamingClient {
     }
 
     // create offer and set local description
-    const offer: RTCSessionDescriptionInit =
-      await this.peerConnection.createOffer();
-    await this.peerConnection.setLocalDescription(offer);
+    try {
+      const offer: RTCSessionDescriptionInit =
+        await this.peerConnection.createOffer();
+      await this.peerConnection.setLocalDescription(offer);
+    } catch (error) {
+      console.error(
+        'StreamingClient - initPeerConnectionAndSendOffer: error creating offer',
+        error,
+      );
+    }
+
     if (!this.peerConnection.localDescription) {
       throw new Error(
         'StreamingClient - initPeerConnectionAndSendOffer: local description is null',
