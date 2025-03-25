@@ -16,6 +16,7 @@ export const sendErrorMetric = async (
   tags?: Record<string, string | number>,
 ) => {
   try {
+    // TODO: Don't send this in dev
     await fetch('https://api.anam.ai/v1/metrics/client', {
       method: 'POST',
       headers: {
