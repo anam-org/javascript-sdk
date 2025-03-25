@@ -1,4 +1,5 @@
-import { PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE } from '../lib/constants';
+import { CONNECTION_CLOSED_CODE_SIGNALLING_CLIENT_CONNECTION_FAILURE } from '../lib/constants';
+import { InternalEventEmitter, PublicEventEmitter } from '../modules';
 import {
   AnamEvent,
   InternalEvent,
@@ -6,7 +7,6 @@ import {
   SignalMessageAction,
   SignallingClientOptions,
 } from '../types';
-import { PublicEventEmitter, InternalEventEmitter } from '../modules';
 import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamPayload';
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 5;
@@ -146,7 +146,7 @@ export class SignallingClient {
       console.error('SignallingClient - onOpen: error in onOpen', e);
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
-        PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE,
+        CONNECTION_CLOSED_CODE_SIGNALLING_CLIENT_CONNECTION_FAILURE,
       );
     }
   }
@@ -168,7 +168,7 @@ export class SignallingClient {
       }
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
-        PUBLIC_MESSAGE_ON_SIGNALLING_CLIENT_CONNECTION_FAILURE,
+        CONNECTION_CLOSED_CODE_SIGNALLING_CLIENT_CONNECTION_FAILURE,
       );
     }
   }

@@ -189,7 +189,7 @@ export default class AnamClient {
     } catch (error) {
       throw new ClientError(
         'Failed to initialize streaming client',
-        ErrorCode.SERVER_ERROR,
+        ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
         500,
         { cause: error instanceof Error ? error.message : String(error) },
       );
@@ -206,7 +206,7 @@ export default class AnamClient {
       if (!this.sessionId || !this.streamingClient) {
         throw new ClientError(
           'Session ID or streaming client is not available after starting session',
-          ErrorCode.SERVER_ERROR,
+          ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
           500,
           {
             cause: 'Failed to initialize session properly',
@@ -268,7 +268,7 @@ export default class AnamClient {
 
       throw new ClientError(
         'Failed to start session',
-        ErrorCode.SERVER_ERROR,
+        ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
         500,
         {
           cause: error instanceof Error ? error.message : String(error),

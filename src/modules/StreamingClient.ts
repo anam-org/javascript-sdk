@@ -1,6 +1,7 @@
 import {
-  PUBLIC_MESSAGE_ON_MICROPHONE_PERMISSION_DENIED,
-  PUBLIC_MESSAGE_ON_WEBRTC_FAILURE,
+  CONNECTION_CLOSED_CODE_MICROPHONE_PERMISSION_DENIED,
+  CONNECTION_CLOSED_CODE_NORMAL,
+  CONNECTION_CLOSED_CODE_WEBRTC_FAILURE,
 } from '../lib/constants';
 import {
   EngineApiRestClient,
@@ -266,7 +267,11 @@ export class StreamingClient {
         break;
       case SignalMessageAction.END_SESSION:
         const reason = signalMessage.payload as string;
-        this.publicEventEmitter.emit(AnamEvent.CONNECTION_CLOSED, reason);
+        console.log('StreamingClient - onSignalMessage: reason', reason);
+        this.publicEventEmitter.emit(
+          AnamEvent.CONNECTION_CLOSED,
+          CONNECTION_CLOSED_CODE_NORMAL,
+        );
         // close the peer connection
         this.shutdown();
         break;
@@ -345,18 +350,14 @@ export class StreamingClient {
   private handleWebrtcFailure(err: any) {
     console.error({ message: 'StreamingClient - handleWebrtcFailure: ', err });
     if (err.name === 'NotAllowedError' && err.message === 'Permission denied') {
-      // throw new ClientError(
-      //   'Microphone browser permission denied',
-      //   ErrorCode.MIC_PERMISSION_DENIED,
-      // );
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
-        PUBLIC_MESSAGE_ON_MICROPHONE_PERMISSION_DENIED,
+        CONNECTION_CLOSED_CODE_MICROPHONE_PERMISSION_DENIED,
       );
     } else {
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
-        PUBLIC_MESSAGE_ON_WEBRTC_FAILURE,
+        CONNECTION_CLOSED_CODE_WEBRTC_FAILURE,
       );
     }
 
