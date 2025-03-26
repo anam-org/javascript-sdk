@@ -37,6 +37,7 @@ export class StreamingClient {
   private audioElement: HTMLAudioElement | null = null;
   private audioStream: MediaStream | null = null;
   private inputAudioState: InputAudioState = { isMuted: false };
+  private isReactNative: boolean = false;
 
   constructor(
     sessionId: string,
@@ -46,6 +47,11 @@ export class StreamingClient {
   ) {
     this.publicEventEmitter = publicEventEmitter;
     this.internalEventEmitter = internalEventEmitter;
+
+    // Detect if running in React Native environment
+    this.isReactNative =
+      typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
+
     // initialize input audio state
     const { inputAudio } = options;
     this.inputAudioState = inputAudio.inputAudioState;
@@ -155,6 +161,11 @@ export class StreamingClient {
     videoElementId: string,
     audioElementId: string,
   ) {
+    // Only attempt to set DOM elements in web environment
+    if (this.isReactNative) {
+      return;
+    }
+
     // set up streaming targets
     if (videoElementId) {
       const videoElement = document.getElementById(videoElementId);
@@ -173,6 +184,27 @@ export class StreamingClient {
         );
       }
       this.audioElement = audioElement as HTMLAudioElement;
+    }
+  }
+
+  public setMediaStreamTargets(
+    videoElement?: HTMLVideoElement | null,
+    audioElement?: HTMLAudioElement | null,
+  ) {
+    if (videoElement) {
+      this.videoElement = videoElement;
+      // If we already have a video stream, set it as the source
+      if (this.videoStream && this.videoElement) {
+        this.videoElement.srcObject = this.videoStream;
+      }
+    }
+
+    if (audioElement) {
+      this.audioElement = audioElement;
+      // If we already have an audio stream, set it as the source
+      if (this.audioStream && this.audioElement) {
+        this.audioElement.srcObject = this.audioStream;
+      }
     }
   }
 
@@ -378,13 +410,23 @@ export class StreamingClient {
         AnamEvent.VIDEO_STREAM_STARTED,
         this.videoStream,
       );
-      if (this.videoElement) {
+      if (this.videoElement && !this.isReactNative) {
         this.videoElement.srcObject = this.videoStream;
-        const handle = this.videoElement.requestVideoFrameCallback(() => {
-          // unregister the callback after the first frame
-          this.videoElement?.cancelVideoFrameCallback(handle);
-          this.publicEventEmitter.emit(AnamEvent.VIDEO_PLAY_STARTED);
-        });
+        if (this.videoElement.requestVideoFrameCallback) {
+          const handle = this.videoElement.requestVideoFrameCallback(() => {
+            // unregister the callback after the first frame
+            this.videoElement?.cancelVideoFrameCallback?.(handle);
+            this.publicEventEmitter.emit(AnamEvent.VIDEO_PLAY_STARTED);
+          });
+        } else {
+          // Fallback for browsers or environments that don't support requestVideoFrameCallback
+          this.videoElement.onloadeddata = () => {
+            this.publicEventEmitter.emit(AnamEvent.VIDEO_PLAY_STARTED);
+          };
+        }
+      } else {
+        // For React Native, just emit the event since we don't have direct DOM access
+        this.publicEventEmitter.emit(AnamEvent.VIDEO_PLAY_STARTED);
       }
     } else if (event.track.kind === 'audio') {
       this.audioStream = event.streams[0];
@@ -392,7 +434,7 @@ export class StreamingClient {
         AnamEvent.AUDIO_STREAM_STARTED,
         this.audioStream,
       );
-      if (this.audioElement) {
+      if (this.audioElement && !this.isReactNative) {
         this.audioElement.srcObject = this.audioStream;
       }
     }
@@ -420,11 +462,25 @@ export class StreamingClient {
         );
       }
     } else {
-      this.inputAudioStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-        },
-      });
+      // Get user media in a way that works in both web and React Native
+      try {
+        if (this.isReactNative) {
+          // In React Native, we expect the audio stream to be provided externally
+          throw new Error(
+            'StreamingClient - setupDataChannels: React Native requires a user provided audio stream',
+          );
+        } else {
+          // In web browsers, we can request access to the microphone
+          this.inputAudioStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+            },
+          });
+        }
+      } catch (error) {
+        console.error('Failed to get user media:', error);
+        throw error;
+      }
     }
 
     // mute the audio tracks if the user has muted the microphone

@@ -7,4 +7,5 @@ export interface StreamingClientOptions {
   signalling: SignallingClientOptions;
   iceServers: RTCIceServer[];
   inputAudio: InputAudioOptions;
+  isReactNative: boolean;
 }
