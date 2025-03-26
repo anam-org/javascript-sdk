@@ -33,6 +33,7 @@ export default class AnamClient {
   private apiClient: CoreApiRestClient;
 
   private _isStreaming = false;
+  private isReactNative = false;
 
   constructor(
     sessionToken: string | undefined,
@@ -50,6 +51,10 @@ export default class AnamClient {
 
     this.personaConfig = personaConfig;
     this.clientOptions = options;
+
+    // Detect if running in React Native environment
+    this.isReactNative =
+      typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
 
     this.publicEventEmitter = new PublicEventEmitter();
     this.internalEventEmitter = new InternalEventEmitter();
@@ -183,6 +188,7 @@ export default class AnamClient {
             userProvidedMediaStream: userProvidedAudioStream,
             audioDeviceId: this.clientOptions?.audioDeviceId,
           },
+          isReactNative: this.isReactNative,
         },
         this.publicEventEmitter,
         this.internalEventEmitter,
@@ -254,12 +260,17 @@ export default class AnamClient {
       this.streamingClient?.startConnection();
     });
   }
-
   public async streamToVideoAndAudioElements(
     videoElementId: string,
     audioElementId: string,
     userProvidedMediaStream?: MediaStream,
   ): Promise<void> {
+    if (this.isReactNative) {
+      throw new Error(
+        'streamToVideoAndAudioElements is not supported in React Native. Use stream() instead and handle the MediaStreams directly.',
+      );
+    }
+
     try {
       await this.startSessionIfNeeded(userProvidedMediaStream);
     } catch (error) {
@@ -289,6 +300,46 @@ export default class AnamClient {
       videoElementId,
       audioElementId,
     );
+    this.streamingClient.startConnection();
+  }
+
+  public async streamToReactNativeElements(
+    videoRef: any,
+    audioRef: any,
+    userProvidedMediaStream?: MediaStream,
+  ): Promise<void> {
+    if (!this.isReactNative) {
+      throw new Error(
+        'streamToReactNativeElements is only supported in React Native. Use streamToVideoAndAudioElements() instead for web applications.',
+      );
+    }
+
+    try {
+      await this.startSessionIfNeeded(userProvidedMediaStream);
+    } catch (error) {
+      if (error instanceof ClientError) {
+        throw error;
+      }
+
+      throw new ClientError(
+        'Failed to start session',
+        ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
+        500,
+        {
+          cause: error instanceof Error ? error.message : String(error),
+        },
+      );
+    }
+
+    if (this._isStreaming) {
+      throw new Error('Already streaming');
+    }
+    this._isStreaming = true;
+    if (!this.streamingClient) {
+      throw new Error('Failed to stream: streaming client is not available');
+    }
+
+    this.streamingClient.setMediaStreamTargets(videoRef, audioRef);
     this.streamingClient.startConnection();
   }
 
