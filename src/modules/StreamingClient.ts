@@ -37,6 +37,7 @@ export class StreamingClient {
   private audioElement: HTMLAudioElement | null = null;
   private audioStream: MediaStream | null = null;
   private inputAudioState: InputAudioState = { isMuted: false };
+  private audioDeviceId: string | undefined;
 
   constructor(
     sessionId: string,
@@ -75,6 +76,7 @@ export class StreamingClient {
       options.engine.baseUrl,
       sessionId,
     );
+    this.audioDeviceId = options.inputAudio.audioDeviceId;
   }
 
   private onInputAudioStateChange(
@@ -420,10 +422,19 @@ export class StreamingClient {
         );
       }
     } else {
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+      };
+
+      // If an audio device ID is provided in the options, use it
+      if (this.audioDeviceId) {
+        audioConstraints.deviceId = {
+          exact: this.audioDeviceId,
+        };
+      }
+
       this.inputAudioStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-        },
+        audio: audioConstraints,
       });
     }
 
