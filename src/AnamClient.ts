@@ -181,6 +181,7 @@ export default class AnamClient {
           inputAudio: {
             inputAudioState: this.inputAudioState,
             userProvidedMediaStream: userProvidedAudioStream,
+            audioDeviceId: this.clientOptions?.audioDeviceId,
           },
         },
         this.publicEventEmitter,
