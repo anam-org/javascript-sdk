@@ -8,11 +8,10 @@ export interface SavedPersonaConfig {
 
 export interface CustomPersonaConfig {
   name: string;
-  personaPreset: string;
+  avatarId: string;
+  voiceId: string;
   brainType: string;
   systemPrompt?: string;
-  personality: string;
-  fillerPhrases: string[];
   maxSessionLengthSeconds?: number;
   languageCode?: string;
 }
