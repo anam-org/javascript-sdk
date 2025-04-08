@@ -16,7 +16,7 @@ import {
   StartSessionResponse,
 } from './types';
 import { TalkMessageStream } from './types/TalkMessageStream';
-
+import { Buffer } from 'buffer';
 export default class AnamClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
@@ -68,7 +68,10 @@ export default class AnamClient {
   private decodeJwt(token: string): any {
     try {
       const base64Payload = token.split('.')[1];
-      const payload = JSON.parse(atob(base64Payload));
+      const payloadString = Buffer.from(base64Payload, 'base64').toString(
+        'utf8',
+      );
+      const payload = JSON.parse(payloadString);
       return payload;
     } catch (error) {
       throw new Error('Invalid session token format');
