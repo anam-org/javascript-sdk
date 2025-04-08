@@ -36,4 +36,5 @@ const unsafe_createClientWithApiKey = (
 };
 
 export { createClient, unsafe_createClientWithApiKey };
-export type { AnamClient, PersonaConfig, AnamPublicClientOptions };
+export type { AnamClient };
+export * from './types';

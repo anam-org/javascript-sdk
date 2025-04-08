@@ -24,5 +24,13 @@ module.exports = {
   },
   resolve: {
     extensions: ['.ts', '.js', '.json'],
+    fallback: {
+      buffer: require.resolve('buffer/'),
+    },
   },
+  plugins: [
+    new webpack.ProvidePlugin({
+      Buffer: ['buffer', 'Buffer'],
+    }),
+  ],
 };
