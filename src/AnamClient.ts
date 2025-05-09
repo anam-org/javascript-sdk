@@ -45,7 +45,11 @@ export default class AnamClient {
       options,
     );
     if (configError) {
-      throw new Error(configError);
+      throw new ClientError(
+        configError,
+        ErrorCode.CLIENT_ERROR_CODE_CONFIGURATION_ERROR,
+        400,
+      );
     }
 
     this.personaConfig = personaConfig;
@@ -114,6 +118,9 @@ export default class AnamClient {
 
     // Validate voice detection configuration
     if (options?.voiceDetection) {
+      if (options.disableInputAudio) {
+        return 'Voice detection is disabled because input audio is disabled. Please set disableInputAudio to false to enable voice detection.';
+      }
       // End of speech sensitivity must be a number between 0 and 1
       if (options.voiceDetection.endOfSpeechSensitivity !== undefined) {
         if (typeof options.voiceDetection.endOfSpeechSensitivity !== 'number') {
@@ -183,8 +190,11 @@ export default class AnamClient {
           iceServers,
           inputAudio: {
             inputAudioState: this.inputAudioState,
-            userProvidedMediaStream: userProvidedAudioStream,
+            userProvidedMediaStream: this.clientOptions?.disableInputAudio
+              ? undefined
+              : userProvidedAudioStream,
             audioDeviceId: this.clientOptions?.audioDeviceId,
+            disableInputAudio: this.clientOptions?.disableInputAudio,
           },
         },
         this.publicEventEmitter,
@@ -203,9 +213,9 @@ export default class AnamClient {
     return sessionId;
   }
 
-  private async startSessionIfNeeded(userProvidedMediaStream?: MediaStream) {
+  private async startSessionIfNeeded(userProvidedAudioStream?: MediaStream) {
     if (!this.sessionId || !this.streamingClient) {
-      await this.startSession(userProvidedMediaStream);
+      await this.startSession(userProvidedAudioStream);
 
       if (!this.sessionId || !this.streamingClient) {
         throw new ClientError(
@@ -223,6 +233,11 @@ export default class AnamClient {
   public async stream(
     userProvidedAudioStream?: MediaStream,
   ): Promise<MediaStream[]> {
+    if (this.clientOptions?.disableInputAudio && userProvidedAudioStream) {
+      console.warn(
+        'AnamClient:Input audio is disabled. User provided audio stream will be ignored.',
+      );
+    }
     await this.startSessionIfNeeded(userProvidedAudioStream);
     if (this._isStreaming) {
       throw new Error('Already streaming');
@@ -261,10 +276,15 @@ export default class AnamClient {
   public async streamToVideoAndAudioElements(
     videoElementId: string,
     audioElementId: string,
-    userProvidedMediaStream?: MediaStream,
+    userProvidedAudioStream?: MediaStream,
   ): Promise<void> {
+    if (this.clientOptions?.disableInputAudio && userProvidedAudioStream) {
+      console.warn(
+        'AnamClient:Input audio is disabled. User provided audio stream will be ignored.',
+      );
+    }
     try {
-      await this.startSessionIfNeeded(userProvidedMediaStream);
+      await this.startSessionIfNeeded(userProvidedAudioStream);
     } catch (error) {
       if (error instanceof ClientError) {
         throw error;
@@ -340,6 +360,11 @@ export default class AnamClient {
   }
 
   public getInputAudioState(): InputAudioState {
+    if (this.clientOptions?.disableInputAudio) {
+      console.warn(
+        'AnamClient: Audio state will not be used because input audio is disabled.',
+      );
+    }
     // if streaming client is available, make sure our state is up to date
     if (this.streamingClient) {
       this.inputAudioState = this.streamingClient.getInputAudioState();
@@ -347,7 +372,12 @@ export default class AnamClient {
     return this.inputAudioState;
   }
   public muteInputAudio(): InputAudioState {
-    if (this.streamingClient) {
+    if (this.clientOptions?.disableInputAudio) {
+      console.warn(
+        'AnamClient: Input audio is disabled. Muting input audio will have no effect.',
+      );
+    }
+    if (this.streamingClient && !this.clientOptions?.disableInputAudio) {
       this.inputAudioState = this.streamingClient.muteInputAudio();
     } else {
       this.inputAudioState = {
@@ -359,7 +389,12 @@ export default class AnamClient {
   }
 
   public unmuteInputAudio(): InputAudioState {
-    if (this.streamingClient) {
+    if (this.clientOptions?.disableInputAudio) {
+      console.warn(
+        'AnamClient: Input audio is disabled. Unmuting input audio will have no effect.',
+      );
+    }
+    if (this.streamingClient && !this.clientOptions?.disableInputAudio) {
       this.inputAudioState = this.streamingClient.unmuteInputAudio();
     } else {
       this.inputAudioState = {
