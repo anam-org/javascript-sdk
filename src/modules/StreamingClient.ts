@@ -242,7 +242,11 @@ export class StreamingClient {
 
     // add transceivers
     this.peerConnection.addTransceiver('video', { direction: 'recvonly' });
-    this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+    if (this.disableInputAudio) {
+      this.peerConnection.addTransceiver('audio', { direction: 'recvonly' });
+    } else {
+      this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+    }
   }
 
   private async onSignalMessage(signalMessage: SignalMessage) {
