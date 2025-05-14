@@ -242,7 +242,14 @@ export class StreamingClient {
 
     // add transceivers
     this.peerConnection.addTransceiver('video', { direction: 'recvonly' });
-    this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+    if (this.disableInputAudio) {
+      console.log(
+        'StreamingClient - initPeerConnection: adding recvonly audio transceiver',
+      );
+      this.peerConnection.addTransceiver('audio', { direction: 'recvonly' });
+    } else {
+      this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+    }
   }
 
   private async onSignalMessage(signalMessage: SignalMessage) {
@@ -492,6 +499,10 @@ export class StreamingClient {
     try {
       const offer: RTCSessionDescriptionInit =
         await this.peerConnection.createOffer();
+      console.log(
+        'StreamingClient - initPeerConnectionAndSendOffer: offer',
+        offer,
+      );
       await this.peerConnection.setLocalDescription(offer);
     } catch (error) {
       console.error(
