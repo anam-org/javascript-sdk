@@ -61,7 +61,6 @@ export default class AnamClient {
     this.personaConfig = personaConfig;
     this.clientOptions = options;
 
-    // Set the base URL for error metrics
     if (options?.api?.baseUrl || options?.api?.apiVersion) {
       setErrorMetricsBaseUrl(
         options.api.baseUrl || DEFAULT_ANAM_METRICS_BASE_URL,
