@@ -10,25 +10,40 @@ export enum ErrorCode {
   CLIENT_ERROR_CODE_CONFIGURATION_ERROR = 'CLIENT_ERROR_CODE_CONFIGURATION_ERROR',
 }
 
-// TODO: Move to CoreApiRestClient if we have a pattern for not exposing this
+export const DEFAULT_ANAM_METRICS_BASE_URL = 'https://api.anam.ai';
+export const DEFAULT_ANAM_API_VERSION = '/v1';
+
+let anamCurrentBaseUrl = DEFAULT_ANAM_METRICS_BASE_URL;
+let anamCurrentApiVersion = DEFAULT_ANAM_API_VERSION;
+
+export const setErrorMetricsBaseUrl = (
+  baseUrl: string,
+  apiVersion: string = DEFAULT_ANAM_API_VERSION,
+) => {
+  anamCurrentBaseUrl = baseUrl;
+  anamCurrentApiVersion = apiVersion;
+};
+
 export const sendErrorMetric = async (
   name: string,
   value: string,
   tags?: Record<string, string | number>,
 ) => {
   try {
-    // TODO: Don't send this in dev
-    await fetch('https://api.anam.ai/v1/metrics/client', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    await fetch(
+      `${anamCurrentBaseUrl}${anamCurrentApiVersion}/metrics/client`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name,
+          value,
+          tags,
+        }),
       },
-      body: JSON.stringify({
-        name,
-        value,
-        tags,
-      }),
-    });
+    );
   } catch (error) {
     console.error('Failed to send error metric:', error);
   }
