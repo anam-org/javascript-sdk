@@ -1,4 +1,10 @@
-import { ClientError, ErrorCode } from './lib/ClientError';
+import {
+  ClientError,
+  DEFAULT_ANAM_API_VERSION,
+  DEFAULT_ANAM_METRICS_BASE_URL,
+  ErrorCode,
+  setErrorMetricsBaseUrl,
+} from './lib/ClientError';
 import {
   CoreApiRestClient,
   InternalEventEmitter,
@@ -54,6 +60,13 @@ export default class AnamClient {
 
     this.personaConfig = personaConfig;
     this.clientOptions = options;
+
+    if (options?.api?.baseUrl || options?.api?.apiVersion) {
+      setErrorMetricsBaseUrl(
+        options.api.baseUrl || DEFAULT_ANAM_METRICS_BASE_URL,
+        options.api.apiVersion || DEFAULT_ANAM_API_VERSION,
+      );
+    }
 
     this.publicEventEmitter = new PublicEventEmitter();
     this.internalEventEmitter = new InternalEventEmitter();
