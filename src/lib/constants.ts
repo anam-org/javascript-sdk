@@ -17,5 +17,5 @@ export const CONNECTION_CLOSED_CODE_WEBRTC_FAILURE =
 
 export const CLIENT_METADATA = {
   client: 'js-sdk',
-  version: '0.0.0-automated',
+  version: '0.0.0-development',
 };
