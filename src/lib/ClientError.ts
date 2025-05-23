@@ -1,3 +1,4 @@
+import { CLIENT_METADATA } from './constants';
 export enum ErrorCode {
   CLIENT_ERROR_CODE_USAGE_LIMIT_REACHED = 'CLIENT_ERROR_CODE_USAGE_LIMIT_REACHED',
   CLIENT_ERROR_CODE_VALIDATION_ERROR = 'CLIENT_ERROR_CODE_VALIDATION_ERROR',
@@ -72,6 +73,7 @@ export class ClientError extends Error {
     sendErrorMetric('client_error', code, {
       details,
       statusCode,
+      ...CLIENT_METADATA,
     });
   }
 }
