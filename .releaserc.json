@@ -7,6 +7,13 @@
   "plugins": [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
+    [
+      "semantic-release-mirror-version",
+      {
+        "fileGlob": ["dist/**.ts"],
+        "placeholderRegExp": "0\\.0\\.0-automated"
+      }
+    ],
     "@semantic-release/npm",
     [
       "@semantic-release/github",

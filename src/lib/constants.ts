@@ -1,5 +1,3 @@
-import { version } from '../../package.json';
-
 // Core API
 export const DEFAULT_HEADERS = {
   'Content-Type': 'application/json',
@@ -19,5 +17,5 @@ export const CONNECTION_CLOSED_CODE_WEBRTC_FAILURE =
 
 export const CLIENT_METADATA = {
   client: 'js-sdk',
-  version,
+  version: '0.0.0-automated',
 };
