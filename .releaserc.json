@@ -10,7 +10,7 @@
     [
       "semantic-release-mirror-version",
       {
-        "fileGlob": ["dist/**.js"]
+        "fileGlob": "./dist/**/*.js"
       }
     ],
     "@semantic-release/npm",
