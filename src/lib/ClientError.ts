@@ -41,7 +41,10 @@ export const sendErrorMetric = async (
         body: JSON.stringify({
           name,
           value,
-          tags,
+          tags: {
+            ...CLIENT_METADATA,
+            ...tags,
+          },
         }),
       },
     );
@@ -73,7 +76,6 @@ export class ClientError extends Error {
     sendErrorMetric('client_error', code, {
       details,
       statusCode,
-      ...CLIENT_METADATA,
     });
   }
 }
