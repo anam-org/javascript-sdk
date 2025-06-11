@@ -155,10 +155,7 @@ export class StreamingClient {
     }
   }
 
-  public setMediaStreamTargetsById(
-    videoElementId: string,
-    audioElementId: string,
-  ) {
+  public setMediaStreamTargetsById(videoElementId: string) {
     // set up streaming targets
     if (videoElementId) {
       const videoElement = document.getElementById(videoElementId);
@@ -168,15 +165,6 @@ export class StreamingClient {
         );
       }
       this.videoElement = videoElement as HTMLVideoElement;
-    }
-    if (audioElementId) {
-      const audioElement = document.getElementById(audioElementId);
-      if (!audioElement) {
-        throw new Error(
-          `StreamingClient: audio element with id ${audioElementId} not found`,
-        );
-      }
-      this.audioElement = audioElement as HTMLAudioElement;
     }
   }
 

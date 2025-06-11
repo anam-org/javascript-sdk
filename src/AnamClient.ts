@@ -291,6 +291,16 @@ export default class AnamClient {
     audioElementId: string,
     userProvidedAudioStream?: MediaStream,
   ): Promise<void> {
+    console.warn(
+      'AnamClient: streamToVideoAndAudioElements is deprecated. Please use streamToVideoElement instead.',
+    );
+    await this.streamToVideoElement(videoElementId, userProvidedAudioStream);
+  }
+
+  public async streamToVideoElement(
+    videoElementId: string,
+    userProvidedAudioStream?: MediaStream,
+  ): Promise<void> {
     if (this.clientOptions?.disableInputAudio && userProvidedAudioStream) {
       console.warn(
         'AnamClient:Input audio is disabled. User provided audio stream will be ignored.',
@@ -321,10 +331,7 @@ export default class AnamClient {
       throw new Error('Failed to stream: streaming client is not available');
     }
 
-    this.streamingClient.setMediaStreamTargetsById(
-      videoElementId,
-      audioElementId,
-    );
+    this.streamingClient.setMediaStreamTargetById(videoElementId);
     this.streamingClient.startConnection();
   }
 
