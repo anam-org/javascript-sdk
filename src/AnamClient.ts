@@ -295,13 +295,16 @@ export default class AnamClient {
     });
   }
 
+  /**
+   * @deprecated This method is deprecated. Please use streamToVideoElement instead.
+   */
   public async streamToVideoAndAudioElements(
     videoElementId: string,
     audioElementId: string,
     userProvidedAudioStream?: MediaStream,
   ): Promise<void> {
     console.warn(
-      'AnamClient: streamToVideoAndAudioElements is deprecated. Please use streamToVideoElement instead.',
+      'AnamClient: streamToVideoAndAudioElements is deprecated. To avoid possible audio issues, please use streamToVideoElement instead.',
     );
     await this.streamToVideoElement(videoElementId, userProvidedAudioStream);
   }
