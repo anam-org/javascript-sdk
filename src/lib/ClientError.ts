@@ -17,6 +17,9 @@ export const DEFAULT_ANAM_API_VERSION = '/v1';
 let anamCurrentBaseUrl = DEFAULT_ANAM_METRICS_BASE_URL;
 let anamCurrentApiVersion = DEFAULT_ANAM_API_VERSION;
 
+let currentSessionId: string | null = null;
+let currentOrganizationId: string | null = null;
+
 export const setErrorMetricsBaseUrl = (
   baseUrl: string,
   apiVersion: string = DEFAULT_ANAM_API_VERSION,
@@ -25,12 +28,33 @@ export const setErrorMetricsBaseUrl = (
   anamCurrentApiVersion = apiVersion;
 };
 
+export const setCurrentSessionInfo = (
+  sessionId: string | null,
+  organizationId: string | null,
+) => {
+  currentSessionId = sessionId;
+  currentOrganizationId = organizationId;
+};
+
 export const sendErrorMetric = async (
   name: string,
   value: string,
   tags?: Record<string, string | number>,
 ) => {
   try {
+    const metricTags: Record<string, string | number> = {
+      ...CLIENT_METADATA,
+      ...tags,
+    };
+
+    // Add session and organization IDs if available
+    if (currentSessionId) {
+      metricTags.sessionId = currentSessionId;
+    }
+    if (currentOrganizationId) {
+      metricTags.organizationId = currentOrganizationId;
+    }
+
     await fetch(
       `${anamCurrentBaseUrl}${anamCurrentApiVersion}/metrics/client`,
       {
@@ -41,10 +65,7 @@ export const sendErrorMetric = async (
         body: JSON.stringify({
           name,
           value,
-          tags: {
-            ...CLIENT_METADATA,
-            ...tags,
-          },
+          tags: metricTags,
         }),
       },
     );

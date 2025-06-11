@@ -4,6 +4,7 @@ import {
   DEFAULT_ANAM_METRICS_BASE_URL,
   ErrorCode,
   setErrorMetricsBaseUrl,
+  setCurrentSessionInfo,
 } from './lib/ClientError';
 import {
   CoreApiRestClient,
@@ -34,6 +35,7 @@ export default class AnamClient {
   private inputAudioState: InputAudioState = { isMuted: false };
 
   private sessionId: string | null = null;
+  private organizationId: string | null = null;
 
   private streamingClient: StreamingClient | null = null;
   private apiClient: CoreApiRestClient;
@@ -111,6 +113,9 @@ export default class AnamClient {
     // Validate persona configuration based on session token
     if (sessionToken) {
       const decodedToken = this.decodeJwt(sessionToken);
+      this.organizationId = decodedToken.accountId;
+      setCurrentSessionInfo(this.sessionId, this.organizationId);
+
       const tokenType = decodedToken.type?.toLowerCase();
 
       if (tokenType === 'legacy') {
@@ -218,11 +223,15 @@ export default class AnamClient {
         'Failed to initialize streaming client',
         ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
         500,
-        { cause: error instanceof Error ? error.message : String(error) },
+        {
+          cause: error instanceof Error ? error.message : String(error),
+          sessionId,
+        },
       );
     }
 
     this.sessionId = sessionId;
+    setCurrentSessionInfo(this.sessionId, this.organizationId);
     return sessionId;
   }
 
@@ -319,6 +328,7 @@ export default class AnamClient {
         500,
         {
           cause: error instanceof Error ? error.message : String(error),
+          sessionId: this.sessionId,
         },
       );
     }
@@ -363,6 +373,7 @@ export default class AnamClient {
       this.streamingClient.stopConnection();
       this.streamingClient = null;
       this.sessionId = null;
+      setCurrentSessionInfo(null, this.organizationId);
       this._isStreaming = false;
     }
   }
