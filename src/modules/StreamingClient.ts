@@ -34,7 +34,6 @@ export class StreamingClient {
   private dataChannel: RTCDataChannel | null = null;
   private videoElement: HTMLVideoElement | null = null;
   private videoStream: MediaStream | null = null;
-  private audioElement: HTMLAudioElement | null = null;
   private audioStream: MediaStream | null = null;
   private inputAudioState: InputAudioState = { isMuted: false };
   private audioDeviceId: string | undefined;
@@ -155,7 +154,7 @@ export class StreamingClient {
     }
   }
 
-  public setMediaStreamTargetsById(videoElementId: string) {
+  public setMediaStreamTargetById(videoElementId: string) {
     // set up streaming targets
     if (videoElementId) {
       const videoElement = document.getElementById(videoElementId);
@@ -388,9 +387,6 @@ export class StreamingClient {
         AnamEvent.AUDIO_STREAM_STARTED,
         this.audioStream,
       );
-      if (this.audioElement) {
-        this.audioElement.srcObject = this.audioStream;
-      }
     }
   }
   /**
