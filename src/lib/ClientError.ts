@@ -1,4 +1,5 @@
 import { CLIENT_METADATA } from './constants';
+
 export enum ErrorCode {
   CLIENT_ERROR_CODE_USAGE_LIMIT_REACHED = 'CLIENT_ERROR_CODE_USAGE_LIMIT_REACHED',
   CLIENT_ERROR_CODE_VALIDATION_ERROR = 'CLIENT_ERROR_CODE_VALIDATION_ERROR',
@@ -13,6 +14,12 @@ export enum ErrorCode {
 
 export const DEFAULT_ANAM_METRICS_BASE_URL = 'https://api.anam.ai';
 export const DEFAULT_ANAM_API_VERSION = '/v1';
+
+export enum ClientMetricMeasurement {
+  CLIENT_METRIC_MEASUREMENT_ERROR = 'client_error',
+  CLIENT_METRIC_MEASUREMENT_CONNECTION_CLOSED = 'client_connection_closed',
+  CLIENT_METRIC_MEASUREMENT_CONNECTION_ESTABLISHED = 'client_connection_established',
+}
 
 let anamCurrentBaseUrl = DEFAULT_ANAM_METRICS_BASE_URL;
 let anamCurrentApiVersion = DEFAULT_ANAM_API_VERSION;
@@ -94,9 +101,13 @@ export class ClientError extends Error {
     Object.setPrototypeOf(this, ClientError.prototype);
 
     // Send error metric when error is created
-    sendErrorMetric('client_error', code, {
-      details,
-      statusCode,
-    });
+    sendErrorMetric(
+      ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_ERROR,
+      code,
+      {
+        details,
+        statusCode,
+      },
+    );
   }
 }
