@@ -282,9 +282,13 @@ export class StreamingClient {
           chatMessage.correlationId,
         );
         break;
+      case SignalMessageAction.SESSION_READY:
+        const sessionId = signalMessage.sessionId as string;
+        this.publicEventEmitter.emit(AnamEvent.SESSION_READY, sessionId);
+        break;
       default:
         console.error(
-          'StreamingClient - onSignalMessage: unknown signal message action type',
+          'StreamingClient - onSignalMessage: unknown signal message action type. Is your anam-sdk version up to date?',
           signalMessage,
         );
     }
