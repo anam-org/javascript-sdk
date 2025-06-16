@@ -273,6 +273,7 @@ export class StreamingClient {
       case SignalMessageAction.WARNING:
         const message = signalMessage.payload as string;
         console.warn('Warning received from server: ' + message);
+        this.publicEventEmitter.emit(AnamEvent.SERVER_WARNING, message);
         break;
       case SignalMessageAction.TALK_STREAM_INTERRUPTED:
         const chatMessage =
