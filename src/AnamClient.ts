@@ -119,9 +119,7 @@ export default class AnamClient {
       const tokenType = decodedToken.type?.toLowerCase();
 
       if (tokenType === 'legacy') {
-        if (!personaConfig || !('personaId' in personaConfig)) {
-          return 'Both session token and client are missing a persona configuration. Please provide a persona ID of a saved persona in the personaConfig parameter.';
-        }
+        return 'Legacy session tokens are no longer supported. Please define your persona when creating your session token. See https://docs.anam.ai/resources/migrating-legacy for more information.';
       } else if (tokenType === 'ephemeral' || tokenType === 'stateful') {
         if (personaConfig) {
           return 'This session token already contains a persona configuration. Please remove the personaConfig parameter.';
