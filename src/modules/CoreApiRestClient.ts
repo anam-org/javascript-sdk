@@ -1,5 +1,9 @@
 import { ClientError, ErrorCode } from '../lib/ClientError';
-import { DEFAULT_API_BASE_URL, DEFAULT_API_VERSION } from '../lib/constants';
+import {
+  CLIENT_METADATA,
+  DEFAULT_API_BASE_URL,
+  DEFAULT_API_VERSION,
+} from '../lib/constants';
 import {
   CoreApiRestClientOptions,
   PersonaConfig,
@@ -40,7 +44,6 @@ export class CoreApiRestClient {
           400,
         );
       }
-      // TODO: why do we need to get the unsafe session token here?
       this.sessionToken = await this.unsafe_getSessionToken(personaConfig);
     }
 
@@ -58,7 +61,11 @@ export class CoreApiRestClient {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.sessionToken}`,
         },
-        body: JSON.stringify({ personaConfig, sessionOptions }),
+        body: JSON.stringify({
+          personaConfig,
+          sessionOptions,
+          clientMetadata: CLIENT_METADATA,
+        }),
       });
 
       const data = await response.json();

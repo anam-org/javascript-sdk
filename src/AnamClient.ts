@@ -1,4 +1,11 @@
-import { ClientError, ErrorCode } from './lib/ClientError';
+import {
+  ClientError,
+  DEFAULT_ANAM_API_VERSION,
+  DEFAULT_ANAM_METRICS_BASE_URL,
+  ErrorCode,
+  setErrorMetricsBaseUrl,
+  setCurrentSessionInfo,
+} from './lib/ClientError';
 import {
   CoreApiRestClient,
   InternalEventEmitter,
@@ -16,7 +23,7 @@ import {
   StartSessionResponse,
 } from './types';
 import { TalkMessageStream } from './types/TalkMessageStream';
-
+import { Buffer } from 'buffer';
 export default class AnamClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
@@ -28,6 +35,7 @@ export default class AnamClient {
   private inputAudioState: InputAudioState = { isMuted: false };
 
   private sessionId: string | null = null;
+  private organizationId: string | null = null;
 
   private streamingClient: StreamingClient | null = null;
   private apiClient: CoreApiRestClient;
@@ -45,11 +53,22 @@ export default class AnamClient {
       options,
     );
     if (configError) {
-      throw new Error(configError);
+      throw new ClientError(
+        configError,
+        ErrorCode.CLIENT_ERROR_CODE_CONFIGURATION_ERROR,
+        400,
+      );
     }
 
     this.personaConfig = personaConfig;
     this.clientOptions = options;
+
+    if (options?.api?.baseUrl || options?.api?.apiVersion) {
+      setErrorMetricsBaseUrl(
+        options.api.baseUrl || DEFAULT_ANAM_METRICS_BASE_URL,
+        options.api.apiVersion || DEFAULT_ANAM_API_VERSION,
+      );
+    }
 
     this.publicEventEmitter = new PublicEventEmitter();
     this.internalEventEmitter = new InternalEventEmitter();
@@ -68,7 +87,10 @@ export default class AnamClient {
   private decodeJwt(token: string): any {
     try {
       const base64Payload = token.split('.')[1];
-      const payload = JSON.parse(atob(base64Payload));
+      const payloadString = Buffer.from(base64Payload, 'base64').toString(
+        'utf8',
+      );
+      const payload = JSON.parse(payloadString);
       return payload;
     } catch (error) {
       throw new Error('Invalid session token format');
@@ -91,12 +113,13 @@ export default class AnamClient {
     // Validate persona configuration based on session token
     if (sessionToken) {
       const decodedToken = this.decodeJwt(sessionToken);
+      this.organizationId = decodedToken.accountId;
+      setCurrentSessionInfo(this.sessionId, this.organizationId);
+
       const tokenType = decodedToken.type?.toLowerCase();
 
       if (tokenType === 'legacy') {
-        if (!personaConfig || !('personaId' in personaConfig)) {
-          return 'Both session token and client are missing a persona configuration. Please provide a persona ID of a saved persona in the personaConfig parameter.';
-        }
+        return 'Legacy session tokens are no longer supported. Please define your persona when creating your session token. See https://docs.anam.ai/resources/migrating-legacy for more information.';
       } else if (tokenType === 'ephemeral' || tokenType === 'stateful') {
         if (personaConfig) {
           return 'This session token already contains a persona configuration. Please remove the personaConfig parameter.';
@@ -111,6 +134,9 @@ export default class AnamClient {
 
     // Validate voice detection configuration
     if (options?.voiceDetection) {
+      if (options.disableInputAudio) {
+        return 'Voice detection is disabled because input audio is disabled. Please set disableInputAudio to false to enable voice detection.';
+      }
       // End of speech sensitivity must be a number between 0 and 1
       if (options.voiceDetection.endOfSpeechSensitivity !== undefined) {
         if (typeof options.voiceDetection.endOfSpeechSensitivity !== 'number') {
@@ -180,7 +206,11 @@ export default class AnamClient {
           iceServers,
           inputAudio: {
             inputAudioState: this.inputAudioState,
-            userProvidedMediaStream: userProvidedAudioStream,
+            userProvidedMediaStream: this.clientOptions?.disableInputAudio
+              ? undefined
+              : userProvidedAudioStream,
+            audioDeviceId: this.clientOptions?.audioDeviceId,
+            disableInputAudio: this.clientOptions?.disableInputAudio,
           },
         },
         this.publicEventEmitter,
@@ -191,17 +221,21 @@ export default class AnamClient {
         'Failed to initialize streaming client',
         ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
         500,
-        { cause: error instanceof Error ? error.message : String(error) },
+        {
+          cause: error instanceof Error ? error.message : String(error),
+          sessionId,
+        },
       );
     }
 
     this.sessionId = sessionId;
+    setCurrentSessionInfo(this.sessionId, this.organizationId);
     return sessionId;
   }
 
-  private async startSessionIfNeeded(userProvidedMediaStream?: MediaStream) {
+  private async startSessionIfNeeded(userProvidedAudioStream?: MediaStream) {
     if (!this.sessionId || !this.streamingClient) {
-      await this.startSession(userProvidedMediaStream);
+      await this.startSession(userProvidedAudioStream);
 
       if (!this.sessionId || !this.streamingClient) {
         throw new ClientError(
@@ -219,6 +253,11 @@ export default class AnamClient {
   public async stream(
     userProvidedAudioStream?: MediaStream,
   ): Promise<MediaStream[]> {
+    if (this.clientOptions?.disableInputAudio && userProvidedAudioStream) {
+      console.warn(
+        'AnamClient:Input audio is disabled. User provided audio stream will be ignored.',
+      );
+    }
     await this.startSessionIfNeeded(userProvidedAudioStream);
     if (this._isStreaming) {
       throw new Error('Already streaming');
@@ -254,13 +293,31 @@ export default class AnamClient {
     });
   }
 
+  /**
+   * @deprecated This method is deprecated. Please use streamToVideoElement instead.
+   */
   public async streamToVideoAndAudioElements(
     videoElementId: string,
     audioElementId: string,
-    userProvidedMediaStream?: MediaStream,
+    userProvidedAudioStream?: MediaStream,
   ): Promise<void> {
+    console.warn(
+      'AnamClient: streamToVideoAndAudioElements is deprecated. To avoid possible audio issues, please use streamToVideoElement instead.',
+    );
+    await this.streamToVideoElement(videoElementId, userProvidedAudioStream);
+  }
+
+  public async streamToVideoElement(
+    videoElementId: string,
+    userProvidedAudioStream?: MediaStream,
+  ): Promise<void> {
+    if (this.clientOptions?.disableInputAudio && userProvidedAudioStream) {
+      console.warn(
+        'AnamClient:Input audio is disabled. User provided audio stream will be ignored.',
+      );
+    }
     try {
-      await this.startSessionIfNeeded(userProvidedMediaStream);
+      await this.startSessionIfNeeded(userProvidedAudioStream);
     } catch (error) {
       if (error instanceof ClientError) {
         throw error;
@@ -272,6 +329,7 @@ export default class AnamClient {
         500,
         {
           cause: error instanceof Error ? error.message : String(error),
+          sessionId: this.sessionId,
         },
       );
     }
@@ -284,10 +342,7 @@ export default class AnamClient {
       throw new Error('Failed to stream: streaming client is not available');
     }
 
-    this.streamingClient.setMediaStreamTargetsById(
-      videoElementId,
-      audioElementId,
-    );
+    this.streamingClient.setMediaStreamTargetById(videoElementId);
     this.streamingClient.startConnection();
   }
 
@@ -319,6 +374,7 @@ export default class AnamClient {
       this.streamingClient.stopConnection();
       this.streamingClient = null;
       this.sessionId = null;
+      setCurrentSessionInfo(null, this.organizationId);
       this._isStreaming = false;
     }
   }
@@ -336,6 +392,11 @@ export default class AnamClient {
   }
 
   public getInputAudioState(): InputAudioState {
+    if (this.clientOptions?.disableInputAudio) {
+      console.warn(
+        'AnamClient: Audio state will not be used because input audio is disabled.',
+      );
+    }
     // if streaming client is available, make sure our state is up to date
     if (this.streamingClient) {
       this.inputAudioState = this.streamingClient.getInputAudioState();
@@ -343,7 +404,12 @@ export default class AnamClient {
     return this.inputAudioState;
   }
   public muteInputAudio(): InputAudioState {
-    if (this.streamingClient) {
+    if (this.clientOptions?.disableInputAudio) {
+      console.warn(
+        'AnamClient: Input audio is disabled. Muting input audio will have no effect.',
+      );
+    }
+    if (this.streamingClient && !this.clientOptions?.disableInputAudio) {
       this.inputAudioState = this.streamingClient.muteInputAudio();
     } else {
       this.inputAudioState = {
@@ -355,7 +421,12 @@ export default class AnamClient {
   }
 
   public unmuteInputAudio(): InputAudioState {
-    if (this.streamingClient) {
+    if (this.clientOptions?.disableInputAudio) {
+      console.warn(
+        'AnamClient: Input audio is disabled. Unmuting input audio will have no effect.',
+      );
+    }
+    if (this.streamingClient && !this.clientOptions?.disableInputAudio) {
       this.inputAudioState = this.streamingClient.unmuteInputAudio();
     } else {
       this.inputAudioState = {

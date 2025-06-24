@@ -38,14 +38,19 @@ npm install @anam-ai/js-sdk
 
 ## Local development
 
-The quickest way to start testing the SDK is to use your API key directly with our SDK and [choose a default persona](#listing-personas) from our predefined examples.
+The quickest way to start testing the SDK is to use your API key directly with our SDK and the example persona config shown below.
 To use the SDK you first need to create an instance of `AnamClient`. For local development you can do this using the `unsafe_createClientWithApiKey` method.
 
 ```typescript
 import { unsafe_createClientWithApiKey } from '@anam-ai/js-sdk';
 
 const anamClient = unsafe_createClientWithApiKey('your-api-key', {
-  personaId: 'chosen-persona-id',
+  name: 'Cara',
+  avatarId: '30fa96d0-26c4-4e55-94a0-517025942e18',
+  voiceId: '6bfbe25a-979d-40f3-a92b-5394170af54b',
+  brainType: 'ANAM_GPT_4O_MINI_V1',
+  systemPrompt:
+    "[STYLE] Reply in natural speech without formatting. Add pauses using '...' and very occasionally a disfluency. [PERSONALITY] You are Cara, a helpful assistant.",
 });
 ```
 
@@ -54,13 +59,10 @@ const anamClient = unsafe_createClientWithApiKey('your-api-key', {
 Once you have an instance of the Anam client initialised you can start a session by streaming to audio and video elements in the DOM.
 
 ```typescript
-await anamClient.streamToVideoAndAudioElements(
-  'video-element-id',
-  'audio-element-id',
-);
+await anamClient.streamToVideoElement('video-element-id');
 ```
 
-This will start a new session using the pre-configured persona id and start streaming video and audio to the elements in the DOM with the matching element ids.
+This will start a new session using the pre-configured persona id and start streaming video element in the DOM with the matching element id.
 
 To stop a session use the `stopStreaming` method.
 
@@ -83,13 +85,12 @@ const response = await fetch(`https://api.anam.ai/v1/auth/session-token`, {
   },
   body: JSON.stringify({
     personaConfig: {
-      name: 'Test Assistant',
-      personaPreset: 'eva',
-      llmId: 'ANAM_GPT_4O_MINI_V1',
-      personality: 'You are a helpful and friendly AI assistant.',
+      name: 'Cara',
+      avatarId: '30fa96d0-26c4-4e55-94a0-517025942e18',
+      voiceId: '6bfbe25a-979d-40f3-a92b-5394170af54b',
+      llmId: '<LLM ID HERE>',
       systemPrompt:
-        'You are an AI assistant focused on helping with technical questions.',
-      fillerPhrases: ['Let me think about that...'],
+        "[STYLE] Reply in natural speech without formatting. Add pauses using '...' and very occasionally a disfluency. [PERSONALITY] You are Cara, a helpful assistant.",
     },
   }),
 });

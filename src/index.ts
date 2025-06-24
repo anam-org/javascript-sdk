@@ -1,7 +1,6 @@
 import AnamClient from './AnamClient';
 import { PersonaConfig } from './types';
 import { AnamPublicClientOptions } from './types/AnamPublicClientOptions';
-import { SavedPersonaConfig } from './types/PersonaConfig';
 
 /**
  * Create a new Anam client.
@@ -12,10 +11,9 @@ import { SavedPersonaConfig } from './types/PersonaConfig';
  */
 const createClient = (
   sessionToken: string,
-  personaConfig?: SavedPersonaConfig,
   options?: AnamPublicClientOptions,
 ): AnamClient => {
-  return new AnamClient(sessionToken, personaConfig, options);
+  return new AnamClient(sessionToken, undefined, options);
 };
 
 /**
@@ -36,4 +34,5 @@ const unsafe_createClientWithApiKey = (
 };
 
 export { createClient, unsafe_createClientWithApiKey };
-export type { AnamClient, PersonaConfig, AnamPublicClientOptions };
+export type { AnamClient };
+export * from './types';

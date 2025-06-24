@@ -1,4 +1,4 @@
-import { sendErrorMetric } from '../lib/ClientError';
+import { ClientMetricMeasurement, sendErrorMetric } from '../lib/ClientError';
 import { AnamEvent, EventCallbacks } from '../types';
 
 export class PublicEventEmitter {
@@ -32,11 +32,21 @@ export class PublicEventEmitter {
     event: K,
     ...args: EventCallbacks[K] extends (...args: infer P) => any ? P : never
   ): void {
-    if (!this.listeners[event]) return;
+    if (event === AnamEvent.CONNECTION_ESTABLISHED) {
+      sendErrorMetric(
+        ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_CONNECTION_ESTABLISHED,
+        '1',
+      );
+    }
 
     if (event === AnamEvent.CONNECTION_CLOSED) {
-      sendErrorMetric('client_connection_closed', args[0] as string);
+      sendErrorMetric(
+        ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_CONNECTION_CLOSED,
+        args[0] as string,
+      );
     }
+
+    if (!this.listeners[event]) return;
 
     (this.listeners[event] as Set<EventCallbacks[K]>).forEach((callback) => {
       (callback as (...args: any[]) => void)(...args);

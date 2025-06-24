@@ -34,9 +34,10 @@ export class StreamingClient {
   private dataChannel: RTCDataChannel | null = null;
   private videoElement: HTMLVideoElement | null = null;
   private videoStream: MediaStream | null = null;
-  private audioElement: HTMLAudioElement | null = null;
   private audioStream: MediaStream | null = null;
   private inputAudioState: InputAudioState = { isMuted: false };
+  private audioDeviceId: string | undefined;
+  private disableInputAudio: boolean;
 
   constructor(
     sessionId: string,
@@ -52,6 +53,7 @@ export class StreamingClient {
     if (options.inputAudio.userProvidedMediaStream) {
       this.inputAudioStream = options.inputAudio.userProvidedMediaStream;
     }
+    this.disableInputAudio = options.inputAudio.disableInputAudio === true;
     // register event handlers
     this.internalEventEmitter.addListener(
       InternalEvent.WEB_SOCKET_OPEN,
@@ -75,6 +77,7 @@ export class StreamingClient {
       options.engine.baseUrl,
       sessionId,
     );
+    this.audioDeviceId = options.inputAudio.audioDeviceId;
   }
 
   private onInputAudioStateChange(
@@ -151,10 +154,7 @@ export class StreamingClient {
     }
   }
 
-  public setMediaStreamTargetsById(
-    videoElementId: string,
-    audioElementId: string,
-  ) {
+  public setMediaStreamTargetById(videoElementId: string) {
     // set up streaming targets
     if (videoElementId) {
       const videoElement = document.getElementById(videoElementId);
@@ -164,15 +164,6 @@ export class StreamingClient {
         );
       }
       this.videoElement = videoElement as HTMLVideoElement;
-    }
-    if (audioElementId) {
-      const audioElement = document.getElementById(audioElementId);
-      if (!audioElement) {
-        throw new Error(
-          `StreamingClient: audio element with id ${audioElementId} not found`,
-        );
-      }
-      this.audioElement = audioElement as HTMLAudioElement;
     }
   }
 
@@ -238,7 +229,11 @@ export class StreamingClient {
 
     // add transceivers
     this.peerConnection.addTransceiver('video', { direction: 'recvonly' });
-    this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+    if (this.disableInputAudio) {
+      this.peerConnection.addTransceiver('audio', { direction: 'recvonly' });
+    } else {
+      this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+    }
   }
 
   private async onSignalMessage(signalMessage: SignalMessage) {
@@ -278,6 +273,7 @@ export class StreamingClient {
       case SignalMessageAction.WARNING:
         const message = signalMessage.payload as string;
         console.warn('Warning received from server: ' + message);
+        this.publicEventEmitter.emit(AnamEvent.SERVER_WARNING, message);
         break;
       case SignalMessageAction.TALK_STREAM_INTERRUPTED:
         const chatMessage =
@@ -287,9 +283,13 @@ export class StreamingClient {
           chatMessage.correlationId,
         );
         break;
+      case SignalMessageAction.SESSION_READY:
+        const sessionId = signalMessage.sessionId as string;
+        this.publicEventEmitter.emit(AnamEvent.SESSION_READY, sessionId);
+        break;
       default:
         console.error(
-          'StreamingClient - onSignalMessage: unknown signal message action type',
+          'StreamingClient - onSignalMessage: unknown signal message action type. Is your anam-sdk version up to date?',
           signalMessage,
         );
     }
@@ -392,9 +392,6 @@ export class StreamingClient {
         AnamEvent.AUDIO_STREAM_STARTED,
         this.audioStream,
       );
-      if (this.audioElement) {
-        this.audioElement.srcObject = this.audioStream;
-      }
     }
   }
   /**
@@ -411,33 +408,45 @@ export class StreamingClient {
      * Audio
      *
      * If the user hasn't provided an audio stream, capture the audio stream from the user's microphone and send it to the peer connection
+     * If input audio is disabled we don't send any audio to the peer connection
      */
-    if (this.inputAudioStream) {
-      // verify the user provided stream has audio tracks
-      if (!this.inputAudioStream.getAudioTracks().length) {
-        throw new Error(
-          'StreamingClient - setupDataChannels: user provided stream does not have audio tracks',
-        );
-      }
-    } else {
-      this.inputAudioStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
+    if (!this.disableInputAudio) {
+      if (this.inputAudioStream) {
+        // verify the user provided stream has audio tracks
+        if (!this.inputAudioStream.getAudioTracks().length) {
+          throw new Error(
+            'StreamingClient - setupDataChannels: user provided stream does not have audio tracks',
+          );
+        }
+      } else {
+        const audioConstraints: MediaTrackConstraints = {
           echoCancellation: true,
-        },
-      });
-    }
+        };
 
-    // mute the audio tracks if the user has muted the microphone
-    if (this.inputAudioState.isMuted) {
-      this.muteAllAudioTracks();
+        // If an audio device ID is provided in the options, use it
+        if (this.audioDeviceId) {
+          audioConstraints.deviceId = {
+            exact: this.audioDeviceId,
+          };
+        }
+
+        this.inputAudioStream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+        });
+      }
+
+      // mute the audio tracks if the user has muted the microphone
+      if (this.inputAudioState.isMuted) {
+        this.muteAllAudioTracks();
+      }
+      const audioTrack = this.inputAudioStream.getAudioTracks()[0];
+      this.peerConnection.addTrack(audioTrack, this.inputAudioStream);
+      // pass the stream to the callback if it exists
+      this.publicEventEmitter.emit(
+        AnamEvent.INPUT_AUDIO_STREAM_STARTED,
+        this.inputAudioStream,
+      );
     }
-    const audioTrack = this.inputAudioStream.getAudioTracks()[0];
-    this.peerConnection.addTrack(audioTrack, this.inputAudioStream);
-    // pass the stream to the callback if it exists
-    this.publicEventEmitter.emit(
-      AnamEvent.INPUT_AUDIO_STREAM_STARTED,
-      this.inputAudioStream,
-    );
 
     /**
      * Text
@@ -451,9 +460,7 @@ export class StreamingClient {
     dataChannel.onopen = () => {
       this.dataChannel = dataChannel ?? null;
     };
-    dataChannel.onclose = () => {
-      // TODO: should we set the data channel to null here?
-    };
+    dataChannel.onclose = () => {};
     // pass text message to the message history client
     dataChannel.onmessage = (event) => {
       const messageEvent = JSON.parse(event.data) as WebRtcTextMessageEvent;
