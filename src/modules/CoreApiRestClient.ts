@@ -44,6 +44,13 @@ export class CoreApiRestClient {
       this.sessionToken = await this.unsafe_getSessionToken(personaConfig);
     }
 
+    // Check if brainType is being used and log deprecation warning
+    if (personaConfig && 'brainType' in personaConfig) {
+      console.warn(
+        'Warning: brainType is deprecated and will be removed in a future version. Please use llmId instead.',
+      );
+    }
+
     try {
       const response = await fetch(`${this.getApiUrl()}/engine/session`, {
         method: 'POST',
@@ -132,6 +139,14 @@ export class CoreApiRestClient {
     if (!this.apiKey) {
       throw new Error('No apiKey provided');
     }
+
+    // Check if brainType is being used and log deprecation warning
+    if (personaConfig && 'brainType' in personaConfig) {
+      console.warn(
+        'Warning: brainType is deprecated and will be removed in a future version. Please use llmId instead.',
+      );
+    }
+
     let body: { clientLabel: string; personaConfig?: PersonaConfig } = {
       clientLabel: 'js-sdk-api-key',
     };

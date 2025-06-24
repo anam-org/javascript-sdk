@@ -32,6 +32,10 @@ First, install the SDK in your project
 npm install @anam-ai/js-sdk
 ```
 
+## Deprecation Notice
+
+**Important**: The `brainType` field in `PersonaConfig` is deprecated and will be removed in a future version. Please use `llmId` instead. If you are currently using `brainType`, you will see a deprecation warning in the console. Both fields are supported during the transition period.
+
 ## Local development
 
 The quickest way to start testing the SDK is to use your API key directly with our SDK and [choose a default persona](#listing-personas) from our predefined examples.
@@ -81,7 +85,7 @@ const response = await fetch(`https://api.anam.ai/v1/auth/session-token`, {
     personaConfig: {
       name: 'Test Assistant',
       personaPreset: 'eva',
-      brainType: 'ANAM_GPT_4O_MINI_V1',
+      llmId: 'ANAM_GPT_4O_MINI_V1',
       personality: 'You are a helpful and friendly AI assistant.',
       systemPrompt:
         'You are an AI assistant focused on helping with technical questions.',

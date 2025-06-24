@@ -9,7 +9,8 @@ export interface SavedPersonaConfig {
 export interface CustomPersonaConfig {
   name: string;
   personaPreset: string;
-  brainType: string;
+  brainType?: string;
+  llmId?: string;
   systemPrompt?: string;
   personality: string;
   fillerPhrases: string[];
@@ -26,5 +27,5 @@ export function isSavedPersonaConfig(
 export function isCustomPersonaConfig(
   personaConfig: PersonaConfig,
 ): personaConfig is CustomPersonaConfig {
-  return 'brainType' in personaConfig;
+  return 'brainType' in personaConfig || 'llmId' in personaConfig;
 }
