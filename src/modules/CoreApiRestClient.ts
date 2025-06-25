@@ -97,7 +97,7 @@ export class CoreApiRestClient {
           );
         case 429:
           throw new ClientError(
-            'Out of credits, please upgrade your plan',
+            'Usage limit reached, please upgrade your plan',
             ErrorCode.CLIENT_ERROR_CODE_USAGE_LIMIT_REACHED,
             429,
             { cause: data.message },
