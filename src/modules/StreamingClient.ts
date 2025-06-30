@@ -146,23 +146,50 @@ export class StreamingClient {
 
       try {
         const stats = await this.peerConnection.getStats();
+
+        let videoDetected = false;
+        let detectionMethod = null;
+
         stats.forEach((report) => {
           // Find the report for inbound video
           if (report.type === 'inbound-rtp' && report.kind === 'video') {
-            if (report.framesReceived > 0) {
-              this.successMetricFired = true;
-              sendClientMetric(
-                ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS,
-                '1',
-              );
-              if (this.successMetricPoller) {
-                clearInterval(this.successMetricPoller);
-              }
-              clearTimeout(timeoutId);
-              this.successMetricPoller = null;
+            // Method 1: Try framesDecoded (most reliable when available)
+            if (
+              report.framesDecoded !== undefined &&
+              report.framesDecoded > 0
+            ) {
+              videoDetected = true;
+              detectionMethod = 'framesDecoded';
+            } else if (
+              report.framesReceived !== undefined &&
+              report.framesReceived > 0
+            ) {
+              videoDetected = true;
+              detectionMethod = 'framesReceived';
+            } else if (
+              report.bytesReceived > 0 &&
+              report.packetsReceived > 0 &&
+              // Additional check: ensure we've received enough data for actual video
+              report.bytesReceived > 100000 // rough threshold
+            ) {
+              videoDetected = true;
+              detectionMethod = 'bytesReceived';
             }
           }
         });
+        if (videoDetected && !this.successMetricFired) {
+          this.successMetricFired = true;
+          sendClientMetric(
+            ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS,
+            '1',
+            detectionMethod ? { detectionMethod } : undefined,
+          );
+          if (this.successMetricPoller) {
+            clearInterval(this.successMetricPoller);
+          }
+          clearTimeout(timeoutId);
+          this.successMetricPoller = null;
+        }
       } catch (error) {}
     }, 500);
   }
@@ -448,6 +475,14 @@ export class StreamingClient {
           // unregister the callback after the first frame
           this.videoElement?.cancelVideoFrameCallback(handle);
           this.publicEventEmitter.emit(AnamEvent.VIDEO_PLAY_STARTED);
+          if (!this.successMetricFired) {
+            this.successMetricFired = true;
+            sendClientMetric(
+              ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS,
+              '1',
+              { detectionMethod: 'videoElement' },
+            );
+          }
         });
       }
     } else if (event.track.kind === 'audio') {
@@ -568,11 +603,7 @@ export class StreamingClient {
   private async shutdown() {
     if (this.showPeerConnectionStatsReport) {
       const stats = await this.peerConnection?.getStats();
-      if (!stats) {
-        console.error(
-          'StreamingClient - shutdown: peer connection is unavailable. Unable to create RTC stats report.',
-        );
-      } else {
+      if (stats) {
         const report = createRTCStatsReport(
           stats,
           this.peerConnectionStatsReportOutputFormat,
