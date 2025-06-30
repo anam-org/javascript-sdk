@@ -1,8 +1,4 @@
-import {
-  CONNECTION_CLOSED_CODE_MICROPHONE_PERMISSION_DENIED,
-  CONNECTION_CLOSED_CODE_NORMAL,
-  CONNECTION_CLOSED_CODE_WEBRTC_FAILURE,
-} from '../lib/constants';
+import { ConnectionClosedCode } from '../lib/constants';
 import {
   EngineApiRestClient,
   InternalEventEmitter,
@@ -353,7 +349,8 @@ export class StreamingClient {
         console.log('StreamingClient - onSignalMessage: reason', reason);
         this.publicEventEmitter.emit(
           AnamEvent.CONNECTION_CLOSED,
-          CONNECTION_CLOSED_CODE_NORMAL,
+          ConnectionClosedCode.SERVER_CLOSED_CONNECTION,
+          reason,
         );
         // close the peer connection
         this.shutdown();
@@ -440,12 +437,12 @@ export class StreamingClient {
     if (err.name === 'NotAllowedError' && err.message === 'Permission denied') {
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
-        CONNECTION_CLOSED_CODE_MICROPHONE_PERMISSION_DENIED,
+        ConnectionClosedCode.MICROPHONE_PERMISSION_DENIED,
       );
     } else {
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
-        CONNECTION_CLOSED_CODE_WEBRTC_FAILURE,
+        ConnectionClosedCode.WEBRTC_FAILURE,
       );
     }
 
