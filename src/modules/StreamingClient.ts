@@ -47,6 +47,7 @@ export class StreamingClient {
   private successMetricPoller: ReturnType<typeof setInterval> | null = null;
   private successMetricFired = false;
   private showPeerConnectionStatsReport: boolean = false;
+  private peerConnectionStatsReportOutputFormat: 'console' | 'json' = 'console';
 
   constructor(
     sessionId: string,
@@ -89,6 +90,8 @@ export class StreamingClient {
     this.audioDeviceId = options.inputAudio.audioDeviceId;
     this.showPeerConnectionStatsReport =
       options.metrics?.showPeerConnectionStatsReport ?? false;
+    this.peerConnectionStatsReportOutputFormat =
+      options.metrics?.peerConnectionStatsReportOutputFormat ?? 'console';
   }
 
   private onInputAudioStateChange(
@@ -241,8 +244,8 @@ export class StreamingClient {
     }
   }
 
-  public stopConnection() {
-    this.shutdown();
+  public async stopConnection() {
+    await this.shutdown();
   }
 
   public async sendTalkCommand(content: string): Promise<void> {
@@ -562,11 +565,22 @@ export class StreamingClient {
     await this.signallingClient.sendOffer(this.peerConnection.localDescription);
   }
 
-  private shutdown() {
+  private async shutdown() {
     if (this.showPeerConnectionStatsReport) {
-      this.peerConnection?.getStats().then((stats: RTCStatsReport) => {
-        createRTCStatsReport(stats);
-      });
+      const stats = await this.peerConnection?.getStats();
+      if (!stats) {
+        console.error(
+          'StreamingClient - shutdown: peer connection is unavailable. Unable to create RTC stats report.',
+        );
+      } else {
+        const report = createRTCStatsReport(
+          stats,
+          this.peerConnectionStatsReportOutputFormat,
+        );
+        if (report) {
+          console.log(report, undefined, 2);
+        }
+      }
     }
     // reset video frame polling
     if (this.successMetricPoller) {

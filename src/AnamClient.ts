@@ -225,6 +225,9 @@ export default class AnamClient {
             showPeerConnectionStatsReport:
               this.clientOptions?.metrics?.showPeerConnectionStatsReport ??
               false,
+            peerConnectionStatsReportOutputFormat:
+              this.clientOptions?.metrics
+                ?.peerConnectionStatsReportOutputFormat ?? 'console',
           },
         },
         this.publicEventEmitter,
@@ -407,7 +410,7 @@ export default class AnamClient {
 
   public async stopStreaming(): Promise<void> {
     if (this.streamingClient) {
-      this.streamingClient.stopConnection();
+      await this.streamingClient.stopConnection();
       this.streamingClient = null;
       this.sessionId = null;
       setMetricsContext({

@@ -9,5 +9,6 @@ export interface StreamingClientOptions {
   inputAudio: InputAudioOptions;
   metrics?: {
     showPeerConnectionStatsReport?: boolean;
+    peerConnectionStatsReportOutputFormat?: 'console' | 'json';
   };
 }
