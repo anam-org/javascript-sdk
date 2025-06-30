@@ -65,6 +65,7 @@
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
-    "buffer": "^6.0.3"
+    "buffer": "^6.0.3",
+    "nanoid": "^5.1.5"
   }
 }

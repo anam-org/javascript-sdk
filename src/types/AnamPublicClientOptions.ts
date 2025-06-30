@@ -5,4 +5,7 @@ export interface AnamPublicClientOptions {
   voiceDetection?: VoiceDetectionOptions;
   audioDeviceId?: string;
   disableInputAudio?: boolean;
+  metrics?: {
+    showPeerConnectionStatsReport?: boolean;
+  };
 }

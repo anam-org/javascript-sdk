@@ -7,4 +7,7 @@ export interface StreamingClientOptions {
   signalling: SignallingClientOptions;
   iceServers: RTCIceServer[];
   inputAudio: InputAudioOptions;
+  metrics?: {
+    showPeerConnectionStatsReport?: boolean;
+  };
 }

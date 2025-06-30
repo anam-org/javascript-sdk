@@ -1,5 +1,5 @@
 import { CONNECTION_CLOSED_CODE_SIGNALLING_CLIENT_CONNECTION_FAILURE } from '../lib/constants';
-import { InternalEventEmitter, PublicEventEmitter } from '../modules';
+import { InternalEventEmitter, PublicEventEmitter } from '.';
 import {
   AnamEvent,
   InternalEvent,
