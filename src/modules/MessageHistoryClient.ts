@@ -6,7 +6,7 @@ import {
   InternalEvent,
   AnamEvent,
 } from '../types';
-import { PublicEventEmitter, InternalEventEmitter } from '../modules';
+import { PublicEventEmitter, InternalEventEmitter } from '.';
 export class MessageHistoryClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;

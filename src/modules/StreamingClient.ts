@@ -20,7 +20,12 @@ import {
 } from '../types';
 import { TalkMessageStream } from '../types/TalkMessageStream';
 import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
+import {
+  ClientMetricMeasurement,
+  sendClientMetric,
+} from '../lib/ClientMetrics';
 
+const SUCCESS_METRIC_POLLING_TIMEOUT_MS = 15000; // After this time we will stop polling for the first frame and consider the session a failure.
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
@@ -38,6 +43,9 @@ export class StreamingClient {
   private inputAudioState: InputAudioState = { isMuted: false };
   private audioDeviceId: string | undefined;
   private disableInputAudio: boolean;
+  private successMetricPoller: ReturnType<typeof setInterval> | null = null;
+  private successMetricFired = false;
+  private showPeerConnectionStatsReport: boolean = false;
 
   constructor(
     sessionId: string,
@@ -78,6 +86,8 @@ export class StreamingClient {
       sessionId,
     );
     this.audioDeviceId = options.inputAudio.audioDeviceId;
+    this.showPeerConnectionStatsReport =
+      options.metrics?.showPeerConnectionStatsReport ?? false;
   }
 
   private onInputAudioStateChange(
@@ -104,6 +114,53 @@ export class StreamingClient {
     this.inputAudioStream?.getAudioTracks().forEach((track) => {
       track.enabled = true;
     });
+  }
+
+  private startSuccessMetricPolling() {
+    if (this.successMetricPoller || this.successMetricFired) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      if (this.successMetricPoller) {
+        console.warn(
+          'No video frames received, there is a problem with the connection.',
+        );
+        clearInterval(this.successMetricPoller);
+        this.successMetricPoller = null;
+      }
+    }, SUCCESS_METRIC_POLLING_TIMEOUT_MS);
+
+    this.successMetricPoller = setInterval(async () => {
+      if (!this.peerConnection || this.successMetricFired) {
+        if (this.successMetricPoller) {
+          clearInterval(this.successMetricPoller);
+        }
+        clearTimeout(timeoutId);
+        return;
+      }
+
+      try {
+        const stats = await this.peerConnection.getStats();
+        stats.forEach((report) => {
+          // Find the report for inbound video
+          if (report.type === 'inbound-rtp' && report.kind === 'video') {
+            if (report.framesReceived > 0) {
+              this.successMetricFired = true;
+              sendClientMetric(
+                ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS,
+                '1',
+              );
+              if (this.successMetricPoller) {
+                clearInterval(this.successMetricPoller);
+              }
+              clearTimeout(timeoutId);
+              this.successMetricPoller = null;
+            }
+          }
+        });
+      } catch (error) {}
+    }, 500);
   }
 
   public muteInputAudio(): InputAudioState {
@@ -373,6 +430,9 @@ export class StreamingClient {
 
   private onTrackEventHandler(event: RTCTrackEvent) {
     if (event.track.kind === 'video') {
+      // start polling stats to detect successful video data received
+      this.startSuccessMetricPolling();
+
       this.videoStream = event.streams[0];
       this.publicEventEmitter.emit(
         AnamEvent.VIDEO_STREAM_STARTED,
@@ -502,6 +562,19 @@ export class StreamingClient {
   }
 
   private shutdown() {
+    if (this.showPeerConnectionStatsReport) {
+      this.peerConnection?.getStats().then((stats) => {
+        console.log('StreamingClient - shutdown: peer connection stats', stats);
+      });
+    }
+    // reset video frame polling
+    if (this.successMetricPoller) {
+      clearInterval(this.successMetricPoller);
+      this.successMetricPoller = null;
+    }
+    this.successMetricFired = false;
+
+    // stop the input audio stream
     try {
       if (this.inputAudioStream) {
         this.inputAudioStream.getTracks().forEach((track) => {
@@ -515,6 +588,8 @@ export class StreamingClient {
         error,
       );
     }
+
+    // stop the signalling client
     try {
       this.signallingClient.stop();
     } catch (error) {
@@ -523,6 +598,8 @@ export class StreamingClient {
         error,
       );
     }
+
+    // close the peer connection
     try {
       if (
         this.peerConnection &&
