@@ -241,8 +241,8 @@ export class StreamingClient {
     }
   }
 
-  public stopConnection() {
-    this.shutdown();
+  public async stopConnection() {
+    await this.shutdown();
   }
 
   public async sendTalkCommand(content: string): Promise<void> {
@@ -562,11 +562,16 @@ export class StreamingClient {
     await this.signallingClient.sendOffer(this.peerConnection.localDescription);
   }
 
-  private shutdown() {
+  private async shutdown() {
     if (this.showPeerConnectionStatsReport) {
-      this.peerConnection?.getStats().then((stats: RTCStatsReport) => {
+      const stats = await this.peerConnection?.getStats();
+      if (!stats) {
+        console.error(
+          'StreamingClient - shutdown: peer connection is unavailable. Unable to create RTC stats report.',
+        );
+      } else {
         createRTCStatsReport(stats);
-      });
+      }
     }
     // reset video frame polling
     if (this.successMetricPoller) {

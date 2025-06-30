@@ -95,38 +95,24 @@ export const createRTCStatsReport = (stats: RTCStatsReport) => {
     statsByType[report.type].push(report);
   });
 
-  // Report connection overview
-  if (statsByType['peer-connection']) {
-    console.group('🔗 Connection Overview');
-    statsByType['peer-connection'].forEach((report) => {
-      console.log(`Connection State: ${report.connectionState || 'unknown'}`);
-      console.log(`Data Channels Opened: ${report.dataChannelsOpened || 0}`);
-      console.log(`Data Channels Closed: ${report.dataChannelsClosed || 0}`);
-    });
-    console.groupEnd();
-  }
-
   // Report video statistics (AI video output)
   const inboundVideo =
     statsByType['inbound-rtp']?.filter((r) => r.kind === 'video') || [];
   if (inboundVideo.length > 0) {
-    console.group('📹 AI Video Stream (Inbound)');
+    console.group('📹 Persona Video Stream (Inbound)');
     inboundVideo.forEach((report) => {
-      console.log(`Frames Received: ${report.framesReceived || 0}`);
-      console.log(`Frames Dropped: ${report.framesDropped || 0}`);
-      console.log(`Frames Per Second: ${report.framesPerSecond || 0}`);
+      console.log(`Frames Received: ${report.framesReceived || 'unknown'}`);
+      console.log(`Frames Dropped: ${report.framesDropped || 'unknown'}`);
+      console.log(`Frames Per Second: ${report.framesPerSecond || 'unknown'}`);
       console.log(
-        `Bytes Received: ${(report.bytesReceived || 0).toLocaleString()}`,
+        `Packets Received: ${(report.packetsReceived || 'unknown').toLocaleString()}`,
       );
-      console.log(
-        `Packets Received: ${(report.packetsReceived || 0).toLocaleString()}`,
-      );
-      console.log(`Packets Lost: ${report.packetsLost || 0}`);
+      console.log(`Packets Lost: ${report.packetsLost || 'unknown'}`);
       if (report.frameWidth && report.frameHeight) {
         console.log(`Resolution: ${report.frameWidth}x${report.frameHeight}`);
       }
       if (report.jitter !== undefined) {
-        console.log(`Jitter: ${report.jitter.toFixed(3)}ms`);
+        console.log(`Jitter: ${report.jitter.toFixed(5)}ms`);
       }
     });
     console.groupEnd();
@@ -136,18 +122,15 @@ export const createRTCStatsReport = (stats: RTCStatsReport) => {
   const inboundAudio =
     statsByType['inbound-rtp']?.filter((r) => r.kind === 'audio') || [];
   if (inboundAudio.length > 0) {
-    console.group('🔊 AI Audio Stream (Inbound)');
+    console.group('🔊 Persona Audio Stream (Inbound)');
     inboundAudio.forEach((report) => {
       console.log(
-        `Bytes Received: ${(report.bytesReceived || 0).toLocaleString()}`,
+        `Packets Received: ${(report.packetsReceived || 'unknown').toLocaleString()}`,
       );
-      console.log(
-        `Packets Received: ${(report.packetsReceived || 0).toLocaleString()}`,
-      );
-      console.log(`Packets Lost: ${report.packetsLost || 0}`);
-      console.log(`Audio Level: ${report.audioLevel || 0}`);
+      console.log(`Packets Lost: ${report.packetsLost || 'unknown'}`);
+      console.log(`Audio Level: ${report.audioLevel || 'unknown'}`);
       if (report.jitter !== undefined) {
-        console.log(`Jitter: ${report.jitter.toFixed(3)}ms`);
+        console.log(`Jitter: ${report.jitter.toFixed(5)}ms`);
       }
       if (report.totalAudioEnergy !== undefined) {
         console.log(
@@ -164,9 +147,8 @@ export const createRTCStatsReport = (stats: RTCStatsReport) => {
   if (outboundAudio.length > 0) {
     console.group('🎤 User Audio Input (Outbound)');
     outboundAudio.forEach((report) => {
-      console.log(`Bytes Sent: ${(report.bytesSent || 0).toLocaleString()}`);
       console.log(
-        `Packets Sent: ${(report.packetsSent || 0).toLocaleString()}`,
+        `Packets Sent: ${(report.packetsSent || 'unknown').toLocaleString()}`,
       );
       if (report.retransmittedPacketsSent) {
         console.log(
@@ -175,7 +157,7 @@ export const createRTCStatsReport = (stats: RTCStatsReport) => {
       }
       if (report.totalPacketSendDelay !== undefined) {
         console.log(
-          `Avg Packet Send Delay: ${((report.totalPacketSendDelay / (report.packetsSent || 1)) * 1000).toFixed(2)}ms`,
+          `Avg Packet Send Delay: ${((report.totalPacketSendDelay / (report.packetsSent || 1)) * 1000).toFixed(5)}ms`,
         );
       }
     });
@@ -200,38 +182,6 @@ export const createRTCStatsReport = (stats: RTCStatsReport) => {
     console.groupEnd();
   }
 
-  // Report connection quality metrics
-  const candidatePairs =
-    statsByType['candidate-pair']?.filter((r) => r.state === 'succeeded') || [];
-  if (candidatePairs.length > 0) {
-    console.group('📡 Connection Quality');
-    candidatePairs.forEach((report) => {
-      console.log(
-        `Connection Type: ${report.localCandidateType || 'unknown'} → ${report.remoteCandidateType || 'unknown'}`,
-      );
-      if (report.currentRoundTripTime !== undefined) {
-        console.log(
-          `Round Trip Time: ${(report.currentRoundTripTime * 1000).toFixed(1)}ms`,
-        );
-      }
-      if (report.availableOutgoingBitrate !== undefined) {
-        console.log(
-          `Available Outgoing Bitrate: ${Math.round(report.availableOutgoingBitrate / 1000)}kbps`,
-        );
-      }
-      if (report.availableIncomingBitrate !== undefined) {
-        console.log(
-          `Available Incoming Bitrate: ${Math.round(report.availableIncomingBitrate / 1000)}kbps`,
-        );
-      }
-      console.log(`Bytes Sent: ${(report.bytesSent || 0).toLocaleString()}`);
-      console.log(
-        `Bytes Received: ${(report.bytesReceived || 0).toLocaleString()}`,
-      );
-    });
-    console.groupEnd();
-  }
-
   // Report any transport issues
   if (statsByType['transport']) {
     console.group('🚚 Transport Layer');
@@ -240,7 +190,7 @@ export const createRTCStatsReport = (stats: RTCStatsReport) => {
       console.log(`ICE State: ${report.iceState || 'unknown'}`);
       if (report.bytesReceived || report.bytesSent) {
         console.log(
-          `Data Transfer - Sent: ${(report.bytesSent || 0).toLocaleString()}, Received: ${(report.bytesReceived || 0).toLocaleString()}`,
+          `Data Transfer (bytes) - Sent: ${(report.bytesSent || 0).toLocaleString()}, Received: ${(report.bytesReceived || 0).toLocaleString()}`,
         );
       }
     });
@@ -271,15 +221,6 @@ export const createRTCStatsReport = (stats: RTCStatsReport) => {
     if (report.jitter > 0.1) {
       issues.push(
         `Audio: High jitter (${(report.jitter * 1000).toFixed(1)}ms)`,
-      );
-    }
-  });
-
-  // Check for connection issues
-  candidatePairs.forEach((report) => {
-    if (report.currentRoundTripTime > 0.5) {
-      issues.push(
-        `Connection: High latency (${(report.currentRoundTripTime * 1000).toFixed(1)}ms RTT)`,
       );
     }
   });
