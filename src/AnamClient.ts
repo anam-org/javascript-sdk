@@ -225,6 +225,9 @@ export default class AnamClient {
             showPeerConnectionStatsReport:
               this.clientOptions?.metrics?.showPeerConnectionStatsReport ??
               false,
+            peerConnectionStatsReportOutputFormat:
+              this.clientOptions?.metrics
+                ?.peerConnectionStatsReportOutputFormat ?? 'console',
           },
         },
         this.publicEventEmitter,

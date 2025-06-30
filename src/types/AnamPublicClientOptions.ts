@@ -7,5 +7,6 @@ export interface AnamPublicClientOptions {
   disableInputAudio?: boolean;
   metrics?: {
     showPeerConnectionStatsReport?: boolean;
+    peerConnectionStatsReportOutputFormat?: 'console' | 'json';
   };
 }
