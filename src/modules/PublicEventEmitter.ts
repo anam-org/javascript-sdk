@@ -1,4 +1,7 @@
-import { ClientMetricMeasurement, sendErrorMetric } from '../lib/ClientError';
+import {
+  ClientMetricMeasurement,
+  sendClientMetric,
+} from '../lib/ClientMetrics';
 import { AnamEvent, EventCallbacks } from '../types';
 
 export class PublicEventEmitter {
@@ -33,16 +36,18 @@ export class PublicEventEmitter {
     ...args: EventCallbacks[K] extends (...args: infer P) => any ? P : never
   ): void {
     if (event === AnamEvent.CONNECTION_ESTABLISHED) {
-      sendErrorMetric(
+      sendClientMetric(
         ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_CONNECTION_ESTABLISHED,
         '1',
       );
     }
 
     if (event === AnamEvent.CONNECTION_CLOSED) {
-      sendErrorMetric(
+      const [closeCode, details] = args;
+      sendClientMetric(
         ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_CONNECTION_CLOSED,
-        args[0] as string,
+        closeCode as string,
+        details ? { details: details as string } : undefined,
       );
     }
 

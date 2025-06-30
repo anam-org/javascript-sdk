@@ -1,11 +1,13 @@
+import { nanoid } from 'nanoid';
+import { ClientError, ErrorCode } from './lib/ClientError';
 import {
-  ClientError,
+  ClientMetricMeasurement,
   DEFAULT_ANAM_API_VERSION,
   DEFAULT_ANAM_METRICS_BASE_URL,
-  ErrorCode,
-  setErrorMetricsBaseUrl,
-  setCurrentSessionInfo,
-} from './lib/ClientError';
+  setClientMetricsBaseUrl,
+  sendClientMetric,
+  setMetricsContext,
+} from './lib/ClientMetrics';
 import {
   CoreApiRestClient,
   InternalEventEmitter,
@@ -21,6 +23,7 @@ import {
   PersonaConfig,
   StartSessionOptions,
   StartSessionResponse,
+  ConnectionClosedCode,
 } from './types';
 import { TalkMessageStream } from './types/TalkMessageStream';
 import { Buffer } from 'buffer';
@@ -64,7 +67,7 @@ export default class AnamClient {
     this.clientOptions = options;
 
     if (options?.api?.baseUrl || options?.api?.apiVersion) {
-      setErrorMetricsBaseUrl(
+      setClientMetricsBaseUrl(
         options.api.baseUrl || DEFAULT_ANAM_METRICS_BASE_URL,
         options.api.apiVersion || DEFAULT_ANAM_API_VERSION,
       );
@@ -114,7 +117,9 @@ export default class AnamClient {
     if (sessionToken) {
       const decodedToken = this.decodeJwt(sessionToken);
       this.organizationId = decodedToken.accountId;
-      setCurrentSessionInfo(this.sessionId, this.organizationId);
+      setMetricsContext({
+        organizationId: this.organizationId,
+      });
 
       const tokenType = decodedToken.type?.toLowerCase();
 
@@ -187,6 +192,11 @@ export default class AnamClient {
     const { heartbeatIntervalSeconds, maxWsReconnectionAttempts, iceServers } =
       clientConfig;
 
+    this.sessionId = sessionId;
+    setMetricsContext({
+      sessionId: this.sessionId,
+    });
+
     try {
       this.streamingClient = new StreamingClient(
         sessionId,
@@ -212,11 +222,22 @@ export default class AnamClient {
             audioDeviceId: this.clientOptions?.audioDeviceId,
             disableInputAudio: this.clientOptions?.disableInputAudio,
           },
+          metrics: {
+            showPeerConnectionStatsReport:
+              this.clientOptions?.metrics?.showPeerConnectionStatsReport ??
+              false,
+            peerConnectionStatsReportOutputFormat:
+              this.clientOptions?.metrics
+                ?.peerConnectionStatsReportOutputFormat ?? 'console',
+          },
         },
         this.publicEventEmitter,
         this.internalEventEmitter,
       );
     } catch (error) {
+      setMetricsContext({
+        sessionId: null,
+      });
       throw new ClientError(
         'Failed to initialize streaming client',
         ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
@@ -228,8 +249,6 @@ export default class AnamClient {
       );
     }
 
-    this.sessionId = sessionId;
-    setCurrentSessionInfo(this.sessionId, this.organizationId);
     return sessionId;
   }
 
@@ -253,15 +272,26 @@ export default class AnamClient {
   public async stream(
     userProvidedAudioStream?: MediaStream,
   ): Promise<MediaStream[]> {
+    if (this._isStreaming) {
+      throw new Error('Already streaming');
+    }
+    // generate a new ID here to track the attempt
+    const attemptCorrelationId = nanoid();
+    setMetricsContext({
+      attemptCorrelationId,
+      sessionId: null, // reset sessionId
+    });
+    sendClientMetric(
+      ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_SESSION_ATTEMPT,
+      '1',
+    );
     if (this.clientOptions?.disableInputAudio && userProvidedAudioStream) {
       console.warn(
         'AnamClient:Input audio is disabled. User provided audio stream will be ignored.',
       );
     }
     await this.startSessionIfNeeded(userProvidedAudioStream);
-    if (this._isStreaming) {
-      throw new Error('Already streaming');
-    }
+
     this._isStreaming = true;
     return new Promise<MediaStream[]>((resolve) => {
       // set stream callbacks to capture the stream
@@ -311,6 +341,16 @@ export default class AnamClient {
     videoElementId: string,
     userProvidedAudioStream?: MediaStream,
   ): Promise<void> {
+    // generate a new ID here to track the attempt
+    const attemptCorrelationId = nanoid();
+    setMetricsContext({
+      attemptCorrelationId,
+      sessionId: null, // reset sessionId
+    });
+    sendClientMetric(
+      ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_SESSION_ATTEMPT,
+      '1',
+    );
     if (this.clientOptions?.disableInputAudio && userProvidedAudioStream) {
       console.warn(
         'AnamClient:Input audio is disabled. User provided audio stream will be ignored.',
@@ -371,10 +411,18 @@ export default class AnamClient {
 
   public async stopStreaming(): Promise<void> {
     if (this.streamingClient) {
-      this.streamingClient.stopConnection();
+      this.publicEventEmitter.emit(
+        AnamEvent.CONNECTION_CLOSED,
+        ConnectionClosedCode.NORMAL,
+      );
+      await this.streamingClient.stopConnection();
       this.streamingClient = null;
       this.sessionId = null;
-      setCurrentSessionInfo(null, this.organizationId);
+      setMetricsContext({
+        attemptCorrelationId: null,
+        sessionId: null,
+        organizationId: this.organizationId,
+      });
       this._isStreaming = false;
     }
   }

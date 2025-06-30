@@ -1,3 +1,4 @@
+import { ConnectionClosedCode } from './ConnectionClosedCodes';
 import { Message, MessageStreamEvent, AnamEvent } from '../../index';
 
 export type EventCallbacks = {
@@ -6,7 +7,10 @@ export type EventCallbacks = {
     messageEvent: MessageStreamEvent,
   ) => void;
   [AnamEvent.CONNECTION_ESTABLISHED]: () => void;
-  [AnamEvent.CONNECTION_CLOSED]: (reason: string) => void;
+  [AnamEvent.CONNECTION_CLOSED]: (
+    reason: ConnectionClosedCode,
+    details?: string,
+  ) => void;
   [AnamEvent.INPUT_AUDIO_STREAM_STARTED]: (audioStream: MediaStream) => void;
   [AnamEvent.VIDEO_STREAM_STARTED]: (videoStream: MediaStream) => void;
   [AnamEvent.VIDEO_PLAY_STARTED]: () => void;

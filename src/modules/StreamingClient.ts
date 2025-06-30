@@ -1,9 +1,4 @@
 import {
-  CONNECTION_CLOSED_CODE_MICROPHONE_PERMISSION_DENIED,
-  CONNECTION_CLOSED_CODE_NORMAL,
-  CONNECTION_CLOSED_CODE_WEBRTC_FAILURE,
-} from '../lib/constants';
-import {
   EngineApiRestClient,
   InternalEventEmitter,
   PublicEventEmitter,
@@ -17,10 +12,17 @@ import {
   SignalMessageAction,
   StreamingClientOptions,
   WebRtcTextMessageEvent,
+  ConnectionClosedCode,
 } from '../types';
 import { TalkMessageStream } from '../types/TalkMessageStream';
 import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
+import {
+  ClientMetricMeasurement,
+  createRTCStatsReport,
+  sendClientMetric,
+} from '../lib/ClientMetrics';
 
+const SUCCESS_METRIC_POLLING_TIMEOUT_MS = 15000; // After this time we will stop polling for the first frame and consider the session a failure.
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
@@ -38,6 +40,10 @@ export class StreamingClient {
   private inputAudioState: InputAudioState = { isMuted: false };
   private audioDeviceId: string | undefined;
   private disableInputAudio: boolean;
+  private successMetricPoller: ReturnType<typeof setInterval> | null = null;
+  private successMetricFired = false;
+  private showPeerConnectionStatsReport: boolean = false;
+  private peerConnectionStatsReportOutputFormat: 'console' | 'json' = 'console';
 
   constructor(
     sessionId: string,
@@ -78,6 +84,10 @@ export class StreamingClient {
       sessionId,
     );
     this.audioDeviceId = options.inputAudio.audioDeviceId;
+    this.showPeerConnectionStatsReport =
+      options.metrics?.showPeerConnectionStatsReport ?? false;
+    this.peerConnectionStatsReportOutputFormat =
+      options.metrics?.peerConnectionStatsReportOutputFormat ?? 'console';
   }
 
   private onInputAudioStateChange(
@@ -104,6 +114,80 @@ export class StreamingClient {
     this.inputAudioStream?.getAudioTracks().forEach((track) => {
       track.enabled = true;
     });
+  }
+
+  private startSuccessMetricPolling() {
+    if (this.successMetricPoller || this.successMetricFired) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      if (this.successMetricPoller) {
+        console.warn(
+          'No video frames received, there is a problem with the connection.',
+        );
+        clearInterval(this.successMetricPoller);
+        this.successMetricPoller = null;
+      }
+    }, SUCCESS_METRIC_POLLING_TIMEOUT_MS);
+
+    this.successMetricPoller = setInterval(async () => {
+      if (!this.peerConnection || this.successMetricFired) {
+        if (this.successMetricPoller) {
+          clearInterval(this.successMetricPoller);
+        }
+        clearTimeout(timeoutId);
+        return;
+      }
+
+      try {
+        const stats = await this.peerConnection.getStats();
+
+        let videoDetected = false;
+        let detectionMethod = null;
+
+        stats.forEach((report) => {
+          // Find the report for inbound video
+          if (report.type === 'inbound-rtp' && report.kind === 'video') {
+            // Method 1: Try framesDecoded (most reliable when available)
+            if (
+              report.framesDecoded !== undefined &&
+              report.framesDecoded > 0
+            ) {
+              videoDetected = true;
+              detectionMethod = 'framesDecoded';
+            } else if (
+              report.framesReceived !== undefined &&
+              report.framesReceived > 0
+            ) {
+              videoDetected = true;
+              detectionMethod = 'framesReceived';
+            } else if (
+              report.bytesReceived > 0 &&
+              report.packetsReceived > 0 &&
+              // Additional check: ensure we've received enough data for actual video
+              report.bytesReceived > 100000 // rough threshold
+            ) {
+              videoDetected = true;
+              detectionMethod = 'bytesReceived';
+            }
+          }
+        });
+        if (videoDetected && !this.successMetricFired) {
+          this.successMetricFired = true;
+          sendClientMetric(
+            ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS,
+            '1',
+            detectionMethod ? { detectionMethod } : undefined,
+          );
+          if (this.successMetricPoller) {
+            clearInterval(this.successMetricPoller);
+          }
+          clearTimeout(timeoutId);
+          this.successMetricPoller = null;
+        }
+      } catch (error) {}
+    }, 500);
   }
 
   public muteInputAudio(): InputAudioState {
@@ -183,8 +267,8 @@ export class StreamingClient {
     }
   }
 
-  public stopConnection() {
-    this.shutdown();
+  public async stopConnection() {
+    await this.shutdown();
   }
 
   public async sendTalkCommand(content: string): Promise<void> {
@@ -265,7 +349,8 @@ export class StreamingClient {
         console.log('StreamingClient - onSignalMessage: reason', reason);
         this.publicEventEmitter.emit(
           AnamEvent.CONNECTION_CLOSED,
-          CONNECTION_CLOSED_CODE_NORMAL,
+          ConnectionClosedCode.SERVER_CLOSED_CONNECTION,
+          reason,
         );
         // close the peer connection
         this.shutdown();
@@ -352,12 +437,12 @@ export class StreamingClient {
     if (err.name === 'NotAllowedError' && err.message === 'Permission denied') {
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
-        CONNECTION_CLOSED_CODE_MICROPHONE_PERMISSION_DENIED,
+        ConnectionClosedCode.MICROPHONE_PERMISSION_DENIED,
       );
     } else {
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
-        CONNECTION_CLOSED_CODE_WEBRTC_FAILURE,
+        ConnectionClosedCode.WEBRTC_FAILURE,
       );
     }
 
@@ -373,6 +458,9 @@ export class StreamingClient {
 
   private onTrackEventHandler(event: RTCTrackEvent) {
     if (event.track.kind === 'video') {
+      // start polling stats to detect successful video data received
+      this.startSuccessMetricPolling();
+
       this.videoStream = event.streams[0];
       this.publicEventEmitter.emit(
         AnamEvent.VIDEO_STREAM_STARTED,
@@ -384,6 +472,14 @@ export class StreamingClient {
           // unregister the callback after the first frame
           this.videoElement?.cancelVideoFrameCallback(handle);
           this.publicEventEmitter.emit(AnamEvent.VIDEO_PLAY_STARTED);
+          if (!this.successMetricFired) {
+            this.successMetricFired = true;
+            sendClientMetric(
+              ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS,
+              '1',
+              { detectionMethod: 'videoElement' },
+            );
+          }
         });
       }
     } else if (event.track.kind === 'audio') {
@@ -501,7 +597,27 @@ export class StreamingClient {
     await this.signallingClient.sendOffer(this.peerConnection.localDescription);
   }
 
-  private shutdown() {
+  private async shutdown() {
+    if (this.showPeerConnectionStatsReport) {
+      const stats = await this.peerConnection?.getStats();
+      if (stats) {
+        const report = createRTCStatsReport(
+          stats,
+          this.peerConnectionStatsReportOutputFormat,
+        );
+        if (report) {
+          console.log(report, undefined, 2);
+        }
+      }
+    }
+    // reset video frame polling
+    if (this.successMetricPoller) {
+      clearInterval(this.successMetricPoller);
+      this.successMetricPoller = null;
+    }
+    this.successMetricFired = false;
+
+    // stop the input audio stream
     try {
       if (this.inputAudioStream) {
         this.inputAudioStream.getTracks().forEach((track) => {
@@ -515,6 +631,8 @@ export class StreamingClient {
         error,
       );
     }
+
+    // stop the signalling client
     try {
       this.signallingClient.stop();
     } catch (error) {
@@ -523,6 +641,8 @@ export class StreamingClient {
         error,
       );
     }
+
+    // close the peer connection
     try {
       if (
         this.peerConnection &&
