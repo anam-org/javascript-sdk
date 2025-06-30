@@ -22,6 +22,7 @@ import { TalkMessageStream } from '../types/TalkMessageStream';
 import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
 import {
   ClientMetricMeasurement,
+  createRTCStatsReport,
   sendClientMetric,
 } from '../lib/ClientMetrics';
 
@@ -563,8 +564,8 @@ export class StreamingClient {
 
   private shutdown() {
     if (this.showPeerConnectionStatsReport) {
-      this.peerConnection?.getStats().then((stats) => {
-        console.log('StreamingClient - shutdown: peer connection stats', stats);
+      this.peerConnection?.getStats().then((stats: RTCStatsReport) => {
+        createRTCStatsReport(stats);
       });
     }
     // reset video frame polling
