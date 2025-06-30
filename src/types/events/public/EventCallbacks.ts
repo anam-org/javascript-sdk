@@ -1,4 +1,4 @@
-import { ConnectionClosedCode } from '../../../lib/constants';
+import { ConnectionClosedCode } from './ConnectionClosedCodes';
 import { Message, MessageStreamEvent, AnamEvent } from '../../index';
 
 export type EventCallbacks = {

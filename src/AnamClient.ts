@@ -23,10 +23,10 @@ import {
   PersonaConfig,
   StartSessionOptions,
   StartSessionResponse,
+  ConnectionClosedCode,
 } from './types';
 import { TalkMessageStream } from './types/TalkMessageStream';
 import { Buffer } from 'buffer';
-import { ConnectionClosedCode } from './lib/constants';
 export default class AnamClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;

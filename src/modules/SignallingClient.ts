@@ -1,4 +1,3 @@
-import { ConnectionClosedCode } from '../lib/constants';
 import { InternalEventEmitter, PublicEventEmitter } from '.';
 import {
   AnamEvent,
@@ -6,6 +5,7 @@ import {
   SignalMessage,
   SignalMessageAction,
   SignallingClientOptions,
+  ConnectionClosedCode,
 } from '../types';
 import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamPayload';
 
