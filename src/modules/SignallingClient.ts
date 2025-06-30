@@ -1,4 +1,4 @@
-import { CONNECTION_CLOSED_CODE_SIGNALLING_CLIENT_CONNECTION_FAILURE } from '../lib/constants';
+import { ConnectionClosedCode } from '../lib/constants';
 import { InternalEventEmitter, PublicEventEmitter } from '.';
 import {
   AnamEvent,
@@ -146,7 +146,7 @@ export class SignallingClient {
       console.error('SignallingClient - onOpen: error in onOpen', e);
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
-        CONNECTION_CLOSED_CODE_SIGNALLING_CLIENT_CONNECTION_FAILURE,
+        ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
       );
     }
   }
@@ -168,7 +168,7 @@ export class SignallingClient {
       }
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
-        CONNECTION_CLOSED_CODE_SIGNALLING_CLIENT_CONNECTION_FAILURE,
+        ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
       );
     }
   }

@@ -43,9 +43,11 @@ export class PublicEventEmitter {
     }
 
     if (event === AnamEvent.CONNECTION_CLOSED) {
+      const [closeCode, details] = args;
       sendClientMetric(
         ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_CONNECTION_CLOSED,
-        args[0] as string,
+        closeCode as string,
+        details ? { details: details as string } : undefined,
       );
     }
 

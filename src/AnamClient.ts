@@ -26,6 +26,7 @@ import {
 } from './types';
 import { TalkMessageStream } from './types/TalkMessageStream';
 import { Buffer } from 'buffer';
+import { ConnectionClosedCode } from './lib/constants';
 export default class AnamClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
@@ -410,6 +411,10 @@ export default class AnamClient {
 
   public async stopStreaming(): Promise<void> {
     if (this.streamingClient) {
+      this.publicEventEmitter.emit(
+        AnamEvent.CONNECTION_CLOSED,
+        ConnectionClosedCode.NORMAL,
+      );
       await this.streamingClient.stopConnection();
       this.streamingClient = null;
       this.sessionId = null;
