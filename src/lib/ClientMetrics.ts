@@ -148,11 +148,11 @@ export const createRTCStatsReport = (
 
     inboundVideo.forEach((report) => {
       const videoData = {
-        framesReceived: report.framesReceived || 'unknown',
-        framesDropped: report.framesDropped || 'unknown',
-        framesPerSecond: report.framesPerSecond || 'unknown',
-        packetsReceived: report.packetsReceived || 'unknown',
-        packetsLost: report.packetsLost || 'unknown',
+        framesReceived: report.framesReceived ?? 'unknown',
+        framesDropped: report.framesDropped ?? 'unknown',
+        framesPerSecond: report.framesPerSecond ?? 'unknown',
+        packetsReceived: report.packetsReceived ?? 'unknown',
+        packetsLost: report.packetsLost ?? 'unknown',
         resolution:
           report.frameWidth && report.frameHeight
             ? `${report.frameWidth}x${report.frameHeight}`
@@ -172,9 +172,9 @@ export const createRTCStatsReport = (
 
     inboundAudio.forEach((report) => {
       const audioData = {
-        packetsReceived: report.packetsReceived || 'unknown',
-        packetsLost: report.packetsLost || 'unknown',
-        audioLevel: report.audioLevel || 'unknown',
+        packetsReceived: report.packetsReceived ?? 'unknown',
+        packetsLost: report.packetsLost ?? 'unknown',
+        audioLevel: report.audioLevel ?? 'unknown',
         jitter: report.jitter !== undefined ? report.jitter : undefined,
         totalAudioEnergy:
           report.totalAudioEnergy !== undefined
@@ -194,8 +194,8 @@ export const createRTCStatsReport = (
 
     outboundAudio.forEach((report) => {
       const userAudioData = {
-        packetsSent: report.packetsSent || 'unknown',
-        retransmittedPackets: report.retransmittedPacketsSent || undefined,
+        packetsSent: report.packetsSent ?? 'unknown',
+        retransmittedPackets: report.retransmittedPacketsSent ?? undefined,
         avgPacketSendDelay:
           report.totalPacketSendDelay !== undefined
             ? (report.totalPacketSendDelay / (report.packetsSent || 1)) * 1000
