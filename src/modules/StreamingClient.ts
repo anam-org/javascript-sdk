@@ -1,4 +1,3 @@
-import { ConnectionClosedCode } from '../lib/constants';
 import {
   EngineApiRestClient,
   InternalEventEmitter,
@@ -13,6 +12,7 @@ import {
   SignalMessageAction,
   StreamingClientOptions,
   WebRtcTextMessageEvent,
+  ConnectionClosedCode,
 } from '../types';
 import { TalkMessageStream } from '../types/TalkMessageStream';
 import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
