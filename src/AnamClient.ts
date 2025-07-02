@@ -1,5 +1,5 @@
-import { nanoid } from 'nanoid';
 import { ClientError, ErrorCode } from './lib/ClientError';
+import { generateCorrelationId } from './lib/correlationId';
 import {
   ClientMetricMeasurement,
   DEFAULT_ANAM_API_VERSION,
@@ -276,7 +276,7 @@ export default class AnamClient {
       throw new Error('Already streaming');
     }
     // generate a new ID here to track the attempt
-    const attemptCorrelationId = nanoid();
+    const attemptCorrelationId = generateCorrelationId();
     setMetricsContext({
       attemptCorrelationId,
       sessionId: null, // reset sessionId
@@ -342,7 +342,7 @@ export default class AnamClient {
     userProvidedAudioStream?: MediaStream,
   ): Promise<void> {
     // generate a new ID here to track the attempt
-    const attemptCorrelationId = nanoid();
+    const attemptCorrelationId = generateCorrelationId();
     setMetricsContext({
       attemptCorrelationId,
       sessionId: null, // reset sessionId
