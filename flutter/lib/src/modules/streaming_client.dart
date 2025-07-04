@@ -1,0 +1,344 @@
+import 'dart:async';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+import '../types/client_options.dart';
+import '../types/events.dart';
+import '../types/signal_messages.dart';
+import '../utils/constants.dart';
+import 'event_emitter.dart';
+import 'signalling_client.dart';
+
+class StreamingClient {
+  final String sessionId;
+  final StreamingClientOptions options;
+  final PublicEventEmitter publicEventEmitter;
+  final InternalEventEmitter internalEventEmitter;
+  
+  late final SignallingClient signallingClient;
+  RTCPeerConnection? _peerConnection;
+  bool _connectionReceivedAnswer = false;
+  final List<RTCIceCandidate> _remoteIceCandidateBuffer = [];
+  MediaStream? _localStream;
+  MediaStream? _remoteVideoStream;
+  MediaStream? _remoteAudioStream;
+  RTCDataChannel? _dataChannel;
+  StreamSubscription? _signalMessageSubscription;
+  Timer? _successMetricPoller;
+  bool _successMetricFired = false;
+
+  StreamingClient({
+    required this.sessionId,
+    required this.options,
+    required this.publicEventEmitter,
+    required this.internalEventEmitter,
+  }) {
+    // Initialize signalling client
+    signallingClient = SignallingClient(
+      sessionId: sessionId,
+      options: options.signalling,
+      publicEventEmitter: publicEventEmitter,
+      internalEventEmitter: internalEventEmitter,
+    );
+
+    // Listen for events
+    internalEventEmitter.on<void>(AnamEvent.webSocketOpen).listen((_) {
+      _onSignallingClientConnected();
+    });
+
+    _signalMessageSubscription = internalEventEmitter
+        .on<SignalMessage>(AnamEvent.signalMessageReceived)
+        .listen(_onSignalMessage);
+  }
+
+  Future<void> startConnection() async {
+    await signallingClient.connect();
+  }
+
+  Future<void> stopConnection() async {
+    _successMetricPoller?.cancel();
+    _signalMessageSubscription?.cancel();
+    
+    await _localStream?.dispose();
+    _localStream = null;
+    
+    await _remoteVideoStream?.dispose();
+    _remoteVideoStream = null;
+    
+    await _remoteAudioStream?.dispose();
+    _remoteAudioStream = null;
+    
+    await _dataChannel?.close();
+    _dataChannel = null;
+    
+    await _peerConnection?.close();
+    _peerConnection = null;
+    
+    signallingClient.stop();
+    _connectionReceivedAnswer = false;
+    _remoteIceCandidateBuffer.clear();
+  }
+
+  Future<void> _initializePeerConnection() async {
+    final configuration = <String, dynamic>{
+      'iceServers': options.iceServers,
+      'sdpSemantics': 'unified-plan',
+    };
+
+    _peerConnection = await createPeerConnection(configuration);
+
+    // Set up event handlers
+    _peerConnection!.onIceCandidate = _onIceCandidate;
+    _peerConnection!.onIceConnectionState = _onIceConnectionStateChange;
+    _peerConnection!.onConnectionState = _onConnectionStateChange;
+    _peerConnection!.onTrack = _onTrackEvent;
+    _peerConnection!.onDataChannel = _onDataChannel;
+
+    // Set up data channel
+    await _setupDataChannels();
+
+    // Add local stream if not disabled
+    if (!options.inputAudio.disableInputAudio) {
+      await _setupLocalStream();
+    }
+  }
+
+  Future<void> _setupLocalStream() async {
+    try {
+      final constraints = <String, dynamic>{
+        'audio': {
+          'mandatory': {},
+          'optional': [],
+        },
+        'video': false,
+      };
+
+      if (options.inputAudio.audioDeviceId != null) {
+        constraints['audio']['mandatory']['sourceId'] = options.inputAudio.audioDeviceId;
+      }
+
+      _localStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      // Apply initial mute state
+      if (options.inputAudio.inputAudioState.isMuted) {
+        _muteAllAudioTracks();
+      }
+
+      // Add tracks to peer connection
+      for (final track in _localStream!.getTracks()) {
+        await _peerConnection!.addTrack(track, _localStream!);
+      }
+    } catch (e) {
+      _handleWebrtcFailure(e);
+    }
+  }
+
+  Future<void> _setupDataChannels() async {
+    if (_peerConnection == null) return;
+
+    try {
+      _dataChannel = await _peerConnection!.createDataChannel(
+        'messages',
+        RTCDataChannelInit()..ordered = true,
+      );
+
+      _dataChannel!.onMessage = (RTCDataChannelMessage message) {
+        // Handle data channel messages if needed
+      };
+    } catch (e) {
+      print('Error setting up data channel: $e');
+    }
+  }
+
+  void _onSignallingClientConnected() {
+    _initializePeerConnection().then((_) => _createAndSendOffer());
+  }
+
+  Future<void> _createAndSendOffer() async {
+    if (_peerConnection == null) return;
+
+    try {
+      final offer = await _peerConnection!.createOffer();
+      await _peerConnection!.setLocalDescription(offer);
+      signallingClient.sendOffer(offer);
+    } catch (e) {
+      _handleWebrtcFailure(e);
+    }
+  }
+
+  void _onSignalMessage(SignalMessage message) {
+    switch (message.actionType) {
+      case SignalMessageAction.answer:
+        _handleAnswer(message.payload);
+        break;
+      case SignalMessageAction.iceCandidate:
+        _handleIceCandidate(message.payload);
+        break;
+      case SignalMessageAction.trickleComplete:
+        _handleTrickleComplete();
+        break;
+      case SignalMessageAction.endSession:
+        publicEventEmitter.emitConnectionClosed(
+          ConnectionClosedCode.sessionExpired,
+          'Session ended by server',
+        );
+        stopConnection();
+        break;
+      default:
+        break;
+    }
+  }
+
+  Future<void> _handleAnswer(dynamic payload) async {
+    if (_peerConnection == null) return;
+
+    try {
+      final answer = RTCSessionDescription(
+        payload['sdp'] as String,
+        payload['type'] as String,
+      );
+      await _peerConnection!.setRemoteDescription(answer);
+      _connectionReceivedAnswer = true;
+
+      // Process buffered ICE candidates
+      for (final candidate in _remoteIceCandidateBuffer) {
+        await _peerConnection!.addCandidate(candidate);
+      }
+      _remoteIceCandidateBuffer.clear();
+    } catch (e) {
+      _handleWebrtcFailure(e);
+    }
+  }
+
+  Future<void> _handleIceCandidate(dynamic payload) async {
+    if (_peerConnection == null) return;
+
+    try {
+      final candidate = RTCIceCandidate(
+        payload['candidate'] as String,
+        payload['sdpMid'] as String?,
+        payload['sdpMLineIndex'] as int?,
+      );
+
+      if (_connectionReceivedAnswer) {
+        await _peerConnection!.addCandidate(candidate);
+      } else {
+        _remoteIceCandidateBuffer.add(candidate);
+      }
+    } catch (e) {
+      print('Error adding ICE candidate: $e');
+    }
+  }
+
+  void _handleTrickleComplete() {
+    // ICE gathering complete
+  }
+
+  void _onIceCandidate(RTCIceCandidate? candidate) {
+    if (candidate != null) {
+      signallingClient.sendIceCandidate(candidate);
+    }
+  }
+
+  void _onIceConnectionStateChange(RTCIceConnectionState? state) {
+    if (state == RTCIceConnectionState.RTCIceConnectionStateConnected ||
+        state == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+      publicEventEmitter.emitConnectionEstablished();
+    }
+  }
+
+  void _onConnectionStateChange(RTCPeerConnectionState? state) {
+    if (state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+      _handleWebrtcFailure('Connection closed');
+    }
+  }
+
+  void _onTrackEvent(RTCTrackEvent event) {
+    if (event.track.kind == 'video') {
+      _startSuccessMetricPolling();
+      _remoteVideoStream = event.streams.first;
+      publicEventEmitter.emitVideoStreamStarted(_remoteVideoStream!);
+    } else if (event.track.kind == 'audio') {
+      _remoteAudioStream = event.streams.first;
+      publicEventEmitter.emitAudioStreamStarted(_remoteAudioStream!);
+    }
+  }
+
+  void _onDataChannel(RTCDataChannel channel) {
+    // Handle incoming data channel if needed
+  }
+
+  void _startSuccessMetricPolling() {
+    if (_successMetricPoller != null || _successMetricFired) return;
+
+    // Timeout after 15 seconds
+    Future.delayed(const Duration(milliseconds: successMetricPollingTimeoutMs), () {
+      if (!_successMetricFired) {
+        print('No video frames received, there may be a problem with the connection.');
+        _successMetricPoller?.cancel();
+        _successMetricPoller = null;
+      }
+    });
+
+    _successMetricPoller = Timer.periodic(const Duration(seconds: 1), (_) async {
+      if (_peerConnection == null || _successMetricFired) {
+        _successMetricPoller?.cancel();
+        return;
+      }
+
+      try {
+        final stats = await _peerConnection!.getStats();
+        for (final stat in stats) {
+          if (stat.type == 'inbound-rtp' && stat.values['mediaType'] == 'video') {
+            final framesDecoded = stat.values['framesDecoded'] as int?;
+            if (framesDecoded != null && framesDecoded > 0) {
+              _successMetricFired = true;
+              publicEventEmitter.emitVideoPlayStarted();
+              _successMetricPoller?.cancel();
+              break;
+            }
+          }
+        }
+      } catch (e) {
+        print('Error getting stats: $e');
+      }
+    });
+  }
+
+  void _handleWebrtcFailure(dynamic error) {
+    print('WebRTC failure: $error');
+    
+    ConnectionClosedCode code = ConnectionClosedCode.webrtcFailure;
+    if (error.toString().contains('Permission denied')) {
+      code = ConnectionClosedCode.microphonePermissionDenied;
+    }
+    
+    publicEventEmitter.emitConnectionClosed(code, error.toString());
+    stopConnection();
+  }
+
+  void _muteAllAudioTracks() {
+    _localStream?.getAudioTracks().forEach((track) {
+      track.enabled = false;
+    });
+  }
+
+  void _unmuteAllAudioTracks() {
+    _localStream?.getAudioTracks().forEach((track) {
+      track.enabled = true;
+    });
+  }
+
+  void updateInputAudioState(InputAudioState oldState, InputAudioState newState) {
+    if (oldState.isMuted != newState.isMuted) {
+      if (newState.isMuted) {
+        _muteAllAudioTracks();
+        signallingClient.sendMute();
+      } else {
+        _unmuteAllAudioTracks();
+        signallingClient.sendUnmute();
+      }
+    }
+  }
+
+  MediaStream? get videoStream => _remoteVideoStream;
+  MediaStream? get audioStream => _remoteAudioStream;
+}
