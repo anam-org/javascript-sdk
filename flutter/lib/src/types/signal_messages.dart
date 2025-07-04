@@ -2,13 +2,12 @@ enum SignalMessageAction {
   offer,
   answer,
   iceCandidate,
-  trickleComplete,
   endSession,
   heartbeat,
-  talk,
+  warning,
   talkStreamInterrupted,
-  mute,
-  unmute,
+  talkStreamInput,
+  sessionReady,
 }
 
 class SignalMessage {
@@ -24,16 +23,16 @@ class SignalMessage {
 
   Map<String, dynamic> toJson() {
     return {
-      'action_type': _actionTypeToString(actionType),
-      'session_id': sessionId,
+      'actionType': _actionTypeToString(actionType),
+      'sessionId': sessionId,
       if (payload != null) 'payload': payload,
     };
   }
 
   factory SignalMessage.fromJson(Map<String, dynamic> json) {
     return SignalMessage(
-      actionType: _stringToActionType(json['action_type'] as String),
-      sessionId: json['session_id'] as String,
+      actionType: _stringToActionType(json['actionType'] as String),
+      sessionId: json['sessionId'] as String,
       payload: json['payload'],
     );
   }
@@ -41,50 +40,46 @@ class SignalMessage {
   static String _actionTypeToString(SignalMessageAction action) {
     switch (action) {
       case SignalMessageAction.offer:
-        return 'OFFER';
+        return 'offer';
       case SignalMessageAction.answer:
-        return 'ANSWER';
+        return 'answer';
       case SignalMessageAction.iceCandidate:
-        return 'ICE_CANDIDATE';
-      case SignalMessageAction.trickleComplete:
-        return 'TRICKLE_COMPLETE';
+        return 'icecandidate';
       case SignalMessageAction.endSession:
-        return 'END_SESSION';
+        return 'endsession';
       case SignalMessageAction.heartbeat:
-        return 'HEARTBEAT';
-      case SignalMessageAction.talk:
-        return 'TALK';
+        return 'heartbeat';
+      case SignalMessageAction.warning:
+        return 'warning';
       case SignalMessageAction.talkStreamInterrupted:
-        return 'TALK_STREAM_INTERRUPTED';
-      case SignalMessageAction.mute:
-        return 'MUTE';
-      case SignalMessageAction.unmute:
-        return 'UNMUTE';
+        return 'talkinputstreaminterrupted';
+      case SignalMessageAction.talkStreamInput:
+        return 'talkstream';
+      case SignalMessageAction.sessionReady:
+        return 'sessionready';
     }
   }
 
   static SignalMessageAction _stringToActionType(String action) {
     switch (action) {
-      case 'OFFER':
+      case 'offer':
         return SignalMessageAction.offer;
-      case 'ANSWER':
+      case 'answer':
         return SignalMessageAction.answer;
-      case 'ICE_CANDIDATE':
+      case 'icecandidate':
         return SignalMessageAction.iceCandidate;
-      case 'TRICKLE_COMPLETE':
-        return SignalMessageAction.trickleComplete;
-      case 'END_SESSION':
+      case 'endsession':
         return SignalMessageAction.endSession;
-      case 'HEARTBEAT':
+      case 'heartbeat':
         return SignalMessageAction.heartbeat;
-      case 'TALK':
-        return SignalMessageAction.talk;
-      case 'TALK_STREAM_INTERRUPTED':
+      case 'warning':
+        return SignalMessageAction.warning;
+      case 'talkinputstreaminterrupted':
         return SignalMessageAction.talkStreamInterrupted;
-      case 'MUTE':
-        return SignalMessageAction.mute;
-      case 'UNMUTE':
-        return SignalMessageAction.unmute;
+      case 'talkstream':
+        return SignalMessageAction.talkStreamInput;
+      case 'sessionready':
+        return SignalMessageAction.sessionReady;
       default:
         throw ArgumentError('Unknown action type: $action');
     }
@@ -104,7 +99,7 @@ class TalkMessagePayload {
     return {
       'content': content,
       if (talkMessageStreamId != null)
-        'talk_message_stream_id': talkMessageStreamId,
+        'talkMessageStreamId': talkMessageStreamId,
     };
   }
 }

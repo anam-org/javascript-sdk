@@ -190,7 +190,7 @@ class AnamClient {
     if (!_isStreaming) {
       throw StateError('Not currently streaming. Call streamToWidget first.');
     }
-    _streamingClient!.signallingClient.sendTalk(content);
+    _streamingClient!.signallingClient.sendTalkMessage(content);
   }
 
   /// Stop the current streaming session.

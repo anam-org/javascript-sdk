@@ -37,9 +37,9 @@ class ClientConfig {
 
   factory ClientConfig.fromJson(Map<String, dynamic> json) {
     return ClientConfig(
-      heartbeatIntervalSeconds: json['heartbeatIntervalSeconds'] as int,
-      maxWsReconnectionAttempts: json['maxWsReconnectionAttempts'] as int,
-      iceServers: (json['iceServers'] as List<dynamic>)
+      heartbeatIntervalSeconds: json['expectedHeartbeatIntervalSecs'] as int? ?? 5,
+      maxWsReconnectionAttempts: json['maxWsReconnectAttempts'] as int? ?? 5,
+      iceServers: (json['iceServers'] as List<dynamic>? ?? [])
           .map((e) => e as Map<String, dynamic>)
           .toList(),
     );

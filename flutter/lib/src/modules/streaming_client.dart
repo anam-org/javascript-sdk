@@ -50,6 +50,7 @@ class StreamingClient {
   }
 
   Future<void> startConnection() async {
+    print('DEBUG: StreamingClient.startConnection() called');
     await signallingClient.connect();
   }
 
@@ -78,26 +79,57 @@ class StreamingClient {
   }
 
   Future<void> _initializePeerConnection() async {
-    final configuration = <String, dynamic>{
-      'iceServers': options.iceServers,
-      'sdpSemantics': 'unified-plan',
-    };
+    print('DEBUG: _initializePeerConnection() called');
+    try {
+      final configuration = <String, dynamic>{
+        'iceServers': options.iceServers,
+        'sdpSemantics': 'unified-plan',
+      };
 
-    _peerConnection = await createPeerConnection(configuration);
+      print('DEBUG: Creating peer connection with ${options.iceServers.length} ICE servers');
+      _peerConnection = await createPeerConnection(configuration);
+      print('DEBUG: Peer connection created successfully');
 
-    // Set up event handlers
-    _peerConnection!.onIceCandidate = _onIceCandidate;
-    _peerConnection!.onIceConnectionState = _onIceConnectionStateChange;
-    _peerConnection!.onConnectionState = _onConnectionStateChange;
-    _peerConnection!.onTrack = _onTrackEvent;
-    _peerConnection!.onDataChannel = _onDataChannel;
+      // Set up event handlers
+      _peerConnection!.onIceCandidate = _onIceCandidate;
+      _peerConnection!.onIceConnectionState = _onIceConnectionStateChange;
+      _peerConnection!.onConnectionState = _onConnectionStateChange;
+      _peerConnection!.onTrack = _onTrackEvent;
+      _peerConnection!.onDataChannel = _onDataChannel;
+      print('DEBUG: Event handlers set up');
 
-    // Set up data channel
-    await _setupDataChannels();
+      // Set up data channel
+      await _setupDataChannels();
+      print('DEBUG: Data channels set up');
 
-    // Add local stream if not disabled
-    if (!options.inputAudio.disableInputAudio) {
-      await _setupLocalStream();
+      // Add transceivers for video and audio
+      print('DEBUG: Adding video transceiver');
+      await _peerConnection!.addTransceiver(
+        kind: RTCRtpMediaType.RTCRtpMediaTypeVideo,
+        init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
+      );
+      
+      print('DEBUG: Adding audio transceiver');
+      await _peerConnection!.addTransceiver(
+        kind: RTCRtpMediaType.RTCRtpMediaTypeAudio,
+        init: RTCRtpTransceiverInit(
+          direction: options.inputAudio.disableInputAudio 
+            ? TransceiverDirection.RecvOnly 
+            : TransceiverDirection.SendRecv
+        ),
+      );
+
+      // Add local stream if not disabled
+      if (!options.inputAudio.disableInputAudio) {
+        print('DEBUG: Setting up local stream');
+        await _setupLocalStream();
+      }
+      
+      print('DEBUG: _initializePeerConnection() completed successfully');
+    } catch (e, stackTrace) {
+      print('ERROR: _initializePeerConnection failed: $e');
+      print('STACK TRACE: $stackTrace');
+      rethrow;
     }
   }
 
@@ -149,17 +181,27 @@ class StreamingClient {
   }
 
   void _onSignallingClientConnected() {
-    _initializePeerConnection().then((_) => _createAndSendOffer());
+    print('DEBUG: StreamingClient._onSignallingClientConnected() - WebSocket is open');
+    _initializePeerConnection().then((_) {
+      print('DEBUG: Peer connection initialized, now creating offer');
+      _createAndSendOffer();
+    }).catchError((e) {
+      print('ERROR: Failed to initialize peer connection: $e');
+      _handleWebrtcFailure(e);
+    });
   }
 
   Future<void> _createAndSendOffer() async {
     if (_peerConnection == null) return;
 
+    print('DEBUG: Creating and sending offer');
     try {
       final offer = await _peerConnection!.createOffer();
       await _peerConnection!.setLocalDescription(offer);
+      print('DEBUG: Offer created, sending via signalling client');
       signallingClient.sendOffer(offer);
     } catch (e) {
+      print('ERROR: Failed to create/send offer: $e');
       _handleWebrtcFailure(e);
     }
   }
@@ -172,15 +214,18 @@ class StreamingClient {
       case SignalMessageAction.iceCandidate:
         _handleIceCandidate(message.payload);
         break;
-      case SignalMessageAction.trickleComplete:
-        _handleTrickleComplete();
-        break;
       case SignalMessageAction.endSession:
         publicEventEmitter.emitConnectionClosed(
           ConnectionClosedCode.sessionExpired,
           'Session ended by server',
         );
         stopConnection();
+        break;
+      case SignalMessageAction.sessionReady:
+        // Session is ready
+        break;
+      case SignalMessageAction.warning:
+        // Handle warning messages
         break;
       default:
         break;
@@ -228,12 +273,10 @@ class StreamingClient {
     }
   }
 
-  void _handleTrickleComplete() {
-    // ICE gathering complete
-  }
 
   void _onIceCandidate(RTCIceCandidate? candidate) {
     if (candidate != null) {
+      print('DEBUG: Sending ICE candidate: ${candidate.candidate}');
       signallingClient.sendIceCandidate(candidate);
     }
   }
@@ -331,10 +374,8 @@ class StreamingClient {
     if (oldState.isMuted != newState.isMuted) {
       if (newState.isMuted) {
         _muteAllAudioTracks();
-        signallingClient.sendMute();
       } else {
         _unmuteAllAudioTracks();
-        signallingClient.sendUnmute();
       }
     }
   }

@@ -35,31 +35,38 @@ class SignallingClient {
     final wsProtocol = httpProtocol == 'http' ? 'ws' : 'wss';
     final path = options.url.signallingPath ?? '/ws';
     
-    var urlString = '$wsProtocol://${options.url.baseUrl}$path?session_id=$sessionId';
-    if (options.url.port != null) {
-      urlString = '$wsProtocol://${options.url.baseUrl}:${options.url.port}$path?session_id=$sessionId';
-    }
+    // Don't include port if it's null or empty
+    final urlString = options.url.port != null && options.url.port!.isNotEmpty 
+      ? '$wsProtocol://${options.url.baseUrl}:${options.url.port}$path?session_id=$sessionId'
+      : '$wsProtocol://${options.url.baseUrl}$path?session_id=$sessionId';
     
     _url = Uri.parse(urlString);
+    print('DEBUG: Constructed WebSocket URL: $_url');
   }
 
   Future<void> connect() async {
     if (_stopSignal) return;
     
+    print('DEBUG: SignallingClient connecting to: $_url');
+    
     try {
       _channel = WebSocketChannel.connect(_url);
       
+      // Set up stream listener first
       _channel!.stream.listen(
         _onMessage,
         onDone: _onClose,
         onError: _onError,
+        cancelOnError: false,  // Don't cancel on error
       );
       
       // Wait for connection to be established
       await _channel!.ready;
+      print('DEBUG: WebSocket ready, calling _onOpen');
       _onOpen();
       
     } catch (e) {
+      print('DEBUG: WebSocket connection error: $e');
       _onError(e);
     }
   }
@@ -70,6 +77,8 @@ class SignallingClient {
   }
 
   void sendOffer(RTCSessionDescription localDescription) {
+    print('DEBUG: sendOffer called with type: ${localDescription.type}');
+    print('DEBUG: WebSocket state - channel: $_channel, closeCode: ${_channel?.closeCode}');
     final offerMessage = SignalMessage(
       actionType: SignalMessageAction.offer,
       sessionId: sessionId,
@@ -81,6 +90,7 @@ class SignallingClient {
         'userUid': sessionId,
       },
     );
+    print('DEBUG: Sending offer message via WebSocket');
     _sendSignalMessage(offerMessage);
   }
 
@@ -93,9 +103,9 @@ class SignallingClient {
     _sendSignalMessage(iceCandidateMessage);
   }
 
-  void sendTalk(String content, {String? talkMessageStreamId}) {
+  void sendTalkMessage(String content, {String? talkMessageStreamId}) {
     final talkMessage = SignalMessage(
-      actionType: SignalMessageAction.talk,
+      actionType: SignalMessageAction.talkStreamInput,
       sessionId: sessionId,
       payload: TalkMessagePayload(
         content: content,
@@ -105,30 +115,20 @@ class SignallingClient {
     _sendSignalMessage(talkMessage);
   }
 
-  void sendMute() {
-    final muteMessage = SignalMessage(
-      actionType: SignalMessageAction.mute,
-      sessionId: sessionId,
-    );
-    _sendSignalMessage(muteMessage);
-  }
-
-  void sendUnmute() {
-    final unmuteMessage = SignalMessage(
-      actionType: SignalMessageAction.unmute,
-      sessionId: sessionId,
-    );
-    _sendSignalMessage(unmuteMessage);
-  }
-
   void _sendSignalMessage(SignalMessage message) {
+    print('DEBUG: _sendSignalMessage called with action: ${message.actionType}');
     if (_channel?.closeCode == null) {
       try {
-        _channel!.sink.add(jsonEncode(message.toJson()));
+        final jsonMessage = jsonEncode(message.toJson());
+        print('DEBUG: Sending message over WebSocket: ${jsonMessage.substring(0, 100)}...');
+        _channel!.sink.add(jsonMessage);
+        print('DEBUG: Message sent successfully');
       } catch (e) {
+        print('ERROR: Failed to send message, adding to buffer: $e');
         _sendingBuffer.add(message);
       }
     } else {
+      print('DEBUG: WebSocket is closed (code: ${_channel?.closeCode}), adding message to buffer');
       _sendingBuffer.add(message);
     }
   }
@@ -156,6 +156,7 @@ class SignallingClient {
   }
 
   void _onOpen() {
+    print('DEBUG: WebSocket connected successfully');
     _wsConnectionAttempts = 0;
     internalEventEmitter.emitWebSocketOpen();
     _startHeartbeat();
@@ -163,16 +164,20 @@ class SignallingClient {
   }
 
   void _onMessage(dynamic message) {
+    print('DEBUG: Received WebSocket message: $message');
     try {
       final data = jsonDecode(message as String) as Map<String, dynamic>;
       final signalMessage = SignalMessage.fromJson(data);
+      print('DEBUG: Parsed signal message with action: ${signalMessage.actionType}');
       internalEventEmitter.emitSignalMessageReceived(signalMessage);
     } catch (e) {
-      print('Error parsing signal message: $e');
+      print('ERROR: Failed to parse signal message: $e');
+      print('ERROR: Raw message was: $message');
     }
   }
 
   void _onClose() {
+    print('DEBUG: WebSocket closed with code: ${_channel?.closeCode}, reason: ${_channel?.closeReason}');
     _heartbeatTimer?.cancel();
     internalEventEmitter.emitWebSocketClose(
       _channel?.closeCode,
