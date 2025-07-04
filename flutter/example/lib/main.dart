@@ -112,6 +112,10 @@ class _HomePageState extends State<HomePage> {
       // Start streaming
       await _anamClient!.streamToWidget(
         onVideoStream: (stream) {
+          print('DEBUG: Received video stream with ${stream.getVideoTracks().length} video tracks');
+          for (final track in stream.getVideoTracks()) {
+            print('DEBUG: Video track - id: ${track.id}, enabled: ${track.enabled}, muted: ${track.muted}');
+          }
           setState(() {
             _remoteRenderer.srcObject = stream;
           });
@@ -186,7 +190,8 @@ class _HomePageState extends State<HomePage> {
                   child: _remoteRenderer.srcObject != null
                       ? RTCVideoView(
                           _remoteRenderer,
-                          objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                          objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+                          mirror: false,
                         )
                       : const Center(
                           child: Text(
@@ -221,6 +226,20 @@ class _HomePageState extends State<HomePage> {
                         : const Text('Start Chat'),
                   ),
                 ] else ...[
+                  ElevatedButton(
+                    onPressed: () async {
+                      // Debug: Check video track status
+                      final stream = _remoteRenderer.srcObject;
+                      if (stream != null) {
+                        print('Stream ID: ${stream.id}');
+                        for (final track in stream.getVideoTracks()) {
+                          print('Video track - id: ${track.id}, enabled: ${track.enabled}, muted: ${track.muted}');
+                        }
+                      }
+                    },
+                    child: const Text('Check Video Status'),
+                  ),
+                  const SizedBox(width: 10),
                   ElevatedButton(
                     onPressed: _stopChat,
                     style: ElevatedButton.styleFrom(

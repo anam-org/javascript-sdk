@@ -256,6 +256,8 @@ class StreamingClient {
   Future<void> _handleIceCandidate(dynamic payload) async {
     if (_peerConnection == null) return;
 
+    print('DEBUG: Handling remote ICE candidate: ${payload['candidate']}');
+    
     try {
       final candidate = RTCIceCandidate(
         payload['candidate'] as String,
@@ -264,12 +266,16 @@ class StreamingClient {
       );
 
       if (_connectionReceivedAnswer) {
+        print('DEBUG: Adding remote ICE candidate immediately');
         await _peerConnection!.addCandidate(candidate);
+        print('DEBUG: Successfully added remote ICE candidate');
       } else {
+        print('DEBUG: Buffering remote ICE candidate (answer not received yet)');
         _remoteIceCandidateBuffer.add(candidate);
       }
     } catch (e) {
-      print('Error adding ICE candidate: $e');
+      print('ERROR: Failed to add ICE candidate: $e');
+      print('ERROR: Payload was: $payload');
     }
   }
 
@@ -282,9 +288,14 @@ class StreamingClient {
   }
 
   void _onIceConnectionStateChange(RTCIceConnectionState? state) {
+    print('DEBUG: ICE connection state changed to: $state');
     if (state == RTCIceConnectionState.RTCIceConnectionStateConnected ||
         state == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+      print('DEBUG: ICE connection established successfully!');
       publicEventEmitter.emitConnectionEstablished();
+    } else if (state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
+      print('ERROR: ICE connection failed');
+      _handleWebrtcFailure('ICE connection failed');
     }
   }
 
@@ -295,12 +306,26 @@ class StreamingClient {
   }
 
   void _onTrackEvent(RTCTrackEvent event) {
+    print('DEBUG: Received track event - kind: ${event.track.kind}, enabled: ${event.track.enabled}');
     if (event.track.kind == 'video') {
       _startSuccessMetricPolling();
       _remoteVideoStream = event.streams.first;
+      
+      // Ensure video track is enabled
+      for (final track in _remoteVideoStream!.getVideoTracks()) {
+        print('DEBUG: Video track id: ${track.id}, enabled: ${track.enabled}');
+        track.enabled = true;
+      }
+      
       publicEventEmitter.emitVideoStreamStarted(_remoteVideoStream!);
     } else if (event.track.kind == 'audio') {
       _remoteAudioStream = event.streams.first;
+      
+      // Ensure audio tracks are enabled
+      for (final track in _remoteAudioStream!.getAudioTracks()) {
+        track.enabled = true;
+      }
+      
       publicEventEmitter.emitAudioStreamStarted(_remoteAudioStream!);
     }
   }
@@ -312,10 +337,12 @@ class StreamingClient {
   void _startSuccessMetricPolling() {
     if (_successMetricPoller != null || _successMetricFired) return;
 
+    print('DEBUG: Starting success metric polling');
+    
     // Timeout after 15 seconds
     Future.delayed(const Duration(milliseconds: successMetricPollingTimeoutMs), () {
       if (!_successMetricFired) {
-        print('No video frames received, there may be a problem with the connection.');
+        print('WARNING: No video frames received after 15 seconds, there may be a problem with the connection.');
         _successMetricPoller?.cancel();
         _successMetricPoller = null;
       }
@@ -329,16 +356,28 @@ class StreamingClient {
 
       try {
         final stats = await _peerConnection!.getStats();
+        var foundVideoStats = false;
         for (final stat in stats) {
           if (stat.type == 'inbound-rtp' && stat.values['mediaType'] == 'video') {
+            foundVideoStats = true;
             final framesDecoded = stat.values['framesDecoded'] as int?;
+            final framesReceived = stat.values['framesReceived'] as int?;
+            final framesDropped = stat.values['framesDropped'] as int?;
+            final bytesReceived = stat.values['bytesReceived'] as int?;
+            
+            print('DEBUG: Video stats - framesDecoded: $framesDecoded, framesReceived: $framesReceived, framesDropped: $framesDropped, bytesReceived: $bytesReceived');
+            
             if (framesDecoded != null && framesDecoded > 0) {
+              print('DEBUG: Video frames are being decoded successfully!');
               _successMetricFired = true;
               publicEventEmitter.emitVideoPlayStarted();
               _successMetricPoller?.cancel();
               break;
             }
           }
+        }
+        if (!foundVideoStats) {
+          print('DEBUG: No video stats found in RTC stats');
         }
       } catch (e) {
         print('Error getting stats: $e');
