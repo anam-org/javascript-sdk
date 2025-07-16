@@ -61,8 +61,11 @@ export class SignallingClient {
       return;
     }
 
-    // Initialize Ably Realtime client
-    this.realtime = new Ably.Realtime(this.ablyToken);
+    // Initialize Ably Realtime client with echo disabled
+    this.realtime = new Ably.Realtime({
+      token: this.ablyToken,
+      echoMessages: false,
+    });
 
     // Get the channel with hardcoded rewind parameter of 100
     this.channel = this.realtime.channels.get(this.channelName, {
