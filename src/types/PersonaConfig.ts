@@ -5,7 +5,7 @@ export interface CustomPersonaConfig {
   name: string;
   avatarId: string;
   voiceId: string;
-  brainType: string;
+  llmId?: string;
   systemPrompt?: string;
   maxSessionLengthSeconds?: number;
   languageCode?: string;
@@ -14,5 +14,5 @@ export interface CustomPersonaConfig {
 export function isCustomPersonaConfig(
   personaConfig: PersonaConfig,
 ): personaConfig is CustomPersonaConfig {
-  return 'brainType' in personaConfig;
+  return 'brainType' in personaConfig || 'llmId' in personaConfig;
 }

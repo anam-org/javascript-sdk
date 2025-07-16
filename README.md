@@ -32,6 +32,10 @@ First, install the SDK in your project
 npm install @anam-ai/js-sdk
 ```
 
+## Deprecation Notice
+
+**Important**: The `brainType` field in `PersonaConfig` is deprecated and will be removed in a future version. Please use `llmId` instead. If you are currently using `brainType`, you will see a deprecation warning in the console. Both fields are supported during the transition period.
+
 ## Local development
 
 The quickest way to start testing the SDK is to use your API key directly with our SDK and the example persona config shown below.
@@ -84,7 +88,7 @@ const response = await fetch(`https://api.anam.ai/v1/auth/session-token`, {
       name: 'Cara',
       avatarId: '30fa96d0-26c4-4e55-94a0-517025942e18',
       voiceId: '6bfbe25a-979d-40f3-a92b-5394170af54b',
-      brainType: 'ANAM_GPT_4O_MINI_V1',
+      llmId: '<LLM ID HERE>',
       systemPrompt:
         "[STYLE] Reply in natural speech without formatting. Add pauses using '...' and very occasionally a disfluency. [PERSONALITY] You are Cara, a helpful assistant.",
     },
