@@ -182,15 +182,8 @@ export default class AnamClient {
       config,
       sessionOptions,
     );
-    const {
-      sessionId,
-      clientConfig,
-      engineHost,
-      engineProtocol,
-      signallingEndpoint,
-    } = response;
-    const { heartbeatIntervalSeconds, maxWsReconnectionAttempts, iceServers } =
-      clientConfig;
+    const { sessionId, clientConfig, engineHost, engineProtocol } = response;
+    const { ablyToken, ablyChannel, iceServers } = clientConfig;
 
     this.sessionId = sessionId;
     setMetricsContext({
@@ -205,13 +198,8 @@ export default class AnamClient {
             baseUrl: `${engineProtocol}://${engineHost}`,
           },
           signalling: {
-            heartbeatIntervalSeconds,
-            maxWsReconnectionAttempts,
-            url: {
-              baseUrl: engineHost,
-              protocol: engineProtocol,
-              signallingPath: signallingEndpoint,
-            },
+            ablyToken,
+            channelName: ablyChannel,
           },
           iceServers,
           inputAudio: {

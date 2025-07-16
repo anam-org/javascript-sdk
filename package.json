@@ -65,6 +65,7 @@
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
+    "ably": "^2.9.0",
     "buffer": "^6.0.3"
   }
 }
