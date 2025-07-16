@@ -61,6 +61,11 @@ export class SignallingClient {
       return;
     }
 
+    // Initialize Ably Realtime client with echo disabled
+    this.realtime = new Ably.Realtime({
+      token: this.ablyToken,
+      echoMessages: false,
+    });
     // Initialize Ably Realtime client
     this.realtime = new Ably.Realtime(this.ablyToken);
 
