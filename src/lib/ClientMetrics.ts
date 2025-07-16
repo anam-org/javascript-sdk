@@ -44,7 +44,7 @@ export const sendClientMetric = async (
   tags?: Record<string, string | number>,
 ) => {
   try {
-    const metricTags: Record<string, string | number> = {
+    const metricTags: Record<string, string | number | boolean> = {
       ...CLIENT_METADATA,
       ...tags,
     };
