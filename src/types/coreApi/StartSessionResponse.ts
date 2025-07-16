@@ -7,7 +7,7 @@ export interface StartSessionResponse {
 }
 
 export interface ClientConfigResponse {
-  heartbeatIntervalSeconds: number;
-  maxWsReconnectionAttempts: number;
+  ablyToken: string;
+  ablyChannel: string;
   iceServers: RTCIceServer[];
 }
