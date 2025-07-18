@@ -9,6 +9,7 @@ import {
   ConnectionClosedCode,
 } from '../types';
 import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamPayload';
+import { toUnencodedMessage } from '../types/signalling/SignalMessage';
 
 export class SignallingClient {
   private publicEventEmitter: PublicEventEmitter;
@@ -19,7 +20,6 @@ export class SignallingClient {
   private realtime: Ably.Realtime | null = null;
   private channel: Ably.RealtimeChannel | null = null;
   private stopSignal = false;
-  private isConnected = false;
 
   constructor(
     sessionId: string,
@@ -65,6 +65,11 @@ export class SignallingClient {
     this.realtime = new Ably.Realtime({
       token: this.ablyToken,
       echoMessages: false,
+      disconnectedRetryTimeout: 1000, // Retry after 1 second
+      suspendedRetryTimeout: 2000, // Retry after 2 seconds if suspended (this comes after repeated disconnection and failed reconnects)
+      transportParams: {
+        heartbeatInterval: 5000, // this is the minimum heartbeat interval, we want it low so we can quickly detect disconnections.
+      },
     });
     // Initialize Ably Realtime client
     this.realtime = new Ably.Realtime(this.ablyToken);
@@ -74,13 +79,11 @@ export class SignallingClient {
       params: { rewind: '100' },
     });
 
+    this.channel.presence.enter();
+
     // Set up connection state listeners
     this.realtime.connection.on('connected', () => {
       this.onConnected();
-    });
-
-    this.realtime.connection.on('disconnected', () => {
-      this.onDisconnected();
     });
 
     this.realtime.connection.on('failed', () => {
@@ -91,6 +94,7 @@ export class SignallingClient {
     this.channel.subscribe((message) => {
       this.onMessage(message);
     });
+    this.realtime.connect();
   }
 
   public async sendOffer(localDescription: RTCSessionDescription) {
@@ -134,12 +138,6 @@ export class SignallingClient {
       );
     }
 
-    if (!this.isConnected) {
-      throw new Error(
-        'SignallingClient - sendSignalMessage: Cannot send message, connection not established yet.',
-      );
-    }
-
     try {
       this.channel.publish('signal', message);
     } catch (error) {
@@ -171,13 +169,11 @@ export class SignallingClient {
       this.realtime.close();
       this.realtime = null;
       this.channel = null;
-      this.isConnected = false;
     }
   }
 
   private onConnected(): void {
     try {
-      this.isConnected = true;
       this.internalEventEmitter.emit(InternalEvent.WEB_SOCKET_OPEN);
     } catch (e) {
       console.error('SignallingClient - onConnected: error', e);
@@ -186,14 +182,6 @@ export class SignallingClient {
         ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
       );
     }
-  }
-
-  private onDisconnected() {
-    this.isConnected = false;
-    if (this.stopSignal) {
-      return;
-    }
-    // Ably handles reconnection automatically
   }
 
   private onConnectionFailed() {
@@ -208,7 +196,9 @@ export class SignallingClient {
 
   private onMessage(message: Ably.Message) {
     // Extract the SignalMessage from Ably message data
-    const signalMessage: SignalMessage = message.data;
+    let signalMessage: SignalMessage = message.data;
+    // Messages coming back from the server may have an encoded payload, convert it to unencoded for cosumption elsewhere in the SDK
+    signalMessage = toUnencodedMessage(signalMessage);
     this.internalEventEmitter.emit(
       InternalEvent.SIGNAL_MESSAGE_RECEIVED,
       signalMessage,

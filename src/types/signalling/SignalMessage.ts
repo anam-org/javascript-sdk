@@ -14,4 +14,17 @@ export interface SignalMessage {
   actionType: SignalMessageAction;
   sessionId: string;
   payload: object | string;
+  payloadFormat?: 'json-string' | 'unencoded';
+}
+
+export function toUnencodedMessage(message: SignalMessage): SignalMessage {
+  if (message.payloadFormat === 'json-string') {
+    return {
+      ...message,
+      payload: JSON.parse(message.payload as string),
+      payloadFormat: 'unencoded',
+    };
+  }
+  // Already raw or undefined format (assume raw)
+  return message;
 }
