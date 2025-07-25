@@ -71,8 +71,6 @@ export class SignallingClient {
         heartbeatInterval: 5000, // this is the minimum heartbeat interval, we want it low so we can quickly detect disconnections.
       },
     });
-    // Initialize Ably Realtime client
-    this.realtime = new Ably.Realtime(this.ablyToken);
 
     // Get the channel with hardcoded rewind parameter of 100
     this.channel = this.realtime.channels.get(this.channelName, {
