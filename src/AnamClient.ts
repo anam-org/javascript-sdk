@@ -420,21 +420,21 @@ export default class AnamClient {
   }
 
   /**
-   * Send a human text message in the active streaming session.
+   * Send a user text message in the active streaming session.
    * @param content - The text message content to send
    * @throws Error if not currently streaming or session is not started
    */
-  public sendHumanMessage(content: string): void {
+  public sendUserMessage(content: string): void {
     if (!this._isStreaming) {
       console.warn(
-        'AnamClient: Not currently streaming. Human message will not be sent.',
+        'AnamClient: Not currently streaming. User message will not be sent.',
       );
-      throw new Error('Failed to send human message: not currently streaming');
+      throw new Error('Failed to send user message: not currently streaming');
     }
 
     const sessionId = this.getActiveSessionId();
     if (!sessionId) {
-      throw new Error('Failed to send human message: no active session');
+      throw new Error('Failed to send user message: no active session');
     }
 
     const currentTimestamp = new Date().toISOString().replace('Z', '');
