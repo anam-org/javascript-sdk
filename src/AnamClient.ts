@@ -1,13 +1,14 @@
+import { Buffer } from 'buffer';
 import { ClientError, ErrorCode } from './lib/ClientError';
-import { generateCorrelationId } from './lib/correlationId';
 import {
   ClientMetricMeasurement,
   DEFAULT_ANAM_API_VERSION,
   DEFAULT_ANAM_METRICS_BASE_URL,
-  setClientMetricsBaseUrl,
   sendClientMetric,
+  setClientMetricsBaseUrl,
   setMetricsContext,
 } from './lib/ClientMetrics';
+import { generateCorrelationId } from './lib/correlationId';
 import {
   CoreApiRestClient,
   InternalEventEmitter,
@@ -18,15 +19,14 @@ import {
 import {
   AnamClientOptions,
   AnamEvent,
+  ConnectionClosedCode,
   EventCallbacks,
   InputAudioState,
   PersonaConfig,
   StartSessionOptions,
   StartSessionResponse,
-  ConnectionClosedCode,
 } from './types';
 import { TalkMessageStream } from './types/TalkMessageStream';
-import { Buffer } from 'buffer';
 export default class AnamClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
@@ -386,6 +386,11 @@ export default class AnamClient {
     this.streamingClient.startConnection();
   }
 
+  /**
+   * Send a talk command to make the persona speak the provided content.
+   * @param content - The text content for the persona to speak
+   * @throws Error if session is not started or not currently streaming
+   */
   public async talk(content: string): Promise<void> {
     if (!this.streamingClient) {
       throw new Error(
@@ -401,12 +406,46 @@ export default class AnamClient {
     return;
   }
 
+  /**
+   * Send a raw data message through the WebRTC data channel.
+   * @param message - The message string to send through the data channel
+   * @throws Error if session is not started
+   */
   public sendDataMessage(message: string): void {
     if (this.streamingClient) {
       this.streamingClient.sendDataMessage(message);
     } else {
       throw new Error('Failed to send message: session is not started.');
     }
+  }
+
+  /**
+   * Send a human text message in the active streaming session.
+   * @param content - The text message content to send
+   * @throws Error if not currently streaming or session is not started
+   */
+  public sendHumanMessage(content: string): void {
+    if (!this._isStreaming) {
+      console.warn(
+        'AnamClient: Not currently streaming. Human message will not be sent.',
+      );
+      throw new Error('Failed to send human message: not currently streaming');
+    }
+
+    const sessionId = this.getActiveSessionId();
+    if (!sessionId) {
+      throw new Error('Failed to send human message: no active session');
+    }
+
+    const currentTimestamp = new Date().toISOString().replace('Z', '');
+    const body = JSON.stringify({
+      content,
+      timestamp: currentTimestamp,
+      session_id: sessionId,
+      message_type: 'speech',
+    });
+
+    this.sendDataMessage(body);
   }
 
   public async stopStreaming(): Promise<void> {
