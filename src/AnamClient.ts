@@ -448,6 +448,27 @@ export default class AnamClient {
     this.sendDataMessage(body);
   }
 
+  public interruptPersona(): void {
+    if (!this._isStreaming) {
+      throw new Error(
+        'Failed to send interrupt command: not currently streaming',
+      );
+    }
+
+    const sessionId = this.getActiveSessionId();
+    if (!sessionId) {
+      throw new Error('Failed to send interrupt command: no active session');
+    }
+
+    const body = JSON.stringify({
+      message_type: 'interrupt',
+      session_id: sessionId,
+      timestamp: new Date().toISOString(), // removing Z not needed
+    });
+
+    this.sendDataMessage(body);
+  }
+
   public async stopStreaming(): Promise<void> {
     if (this.streamingClient) {
       this.publicEventEmitter.emit(
