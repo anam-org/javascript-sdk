@@ -438,15 +438,14 @@ export default class AnamClient {
 
   public interruptPersona(): void {
     if (!this._isStreaming) {
-      console.warn(
-        'AnamClient: Not currently streaming. User message will not be sent.',
+      throw new Error(
+        'Failed to send interrupt command: not currently streaming',
       );
-      throw new Error('Failed to send user message: not currently streaming');
     }
 
     const sessionId = this.getActiveSessionId();
     if (!sessionId) {
-      throw new Error('Failed to send user message: no active session');
+      throw new Error('Failed to send interrupt command: no active session');
     }
 
     const body = JSON.stringify({
