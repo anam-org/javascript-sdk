@@ -3,8 +3,8 @@
   "version": "0.0.0-automated",
   "description": "Client side JavaScript SDK for Anam AI",
   "author": "Anam AI",
-  "main": "dist/main/index.js",
-  "module": "dist/module/index.js",
+  "main": "./dist/node/index.js",
+  "module": "./dist/browser/index.js",
   "types": "dist/module/index.d.ts",
   "repository": {
     "type": "git",
@@ -47,6 +47,7 @@
     "@eslint/js": "^9.2.0",
     "@typescript-eslint/eslint-plugin": "^7.9.0",
     "@typescript-eslint/parser": "^7.9.0",
+    "esbuild": "^0.25.8",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.1.3",
@@ -65,8 +66,21 @@
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
-    "ably": "^2.9.0",
-    "buffer": "^6.0.3",
-    "keyv": "^4.5.4"
-  }
+    "@keyv/sqlite": "^4.0.5",
+    "ably": "^2.10.1",
+    "buffer": "^6.0.3"
+  },
+  "exports": {
+    ".": {
+      "browser": {
+        "import": "./dist/browser/index.js",
+        "require": "./dist/browser/index.cjs"
+      },
+      "node": {
+        "require": "./dist/node/index.js"
+      },
+      "default": "./dist/browser/index.js"
+    }
+  },
+  "browser": "./dist/browser/index.js"
 }
