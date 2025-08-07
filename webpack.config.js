@@ -26,11 +26,28 @@ module.exports = {
     extensions: ['.ts', '.js', '.json'],
     fallback: {
       buffer: require.resolve('buffer/'),
+      fs: false,
+      path: false,
+      os: false,
+    },
+    alias: {
+      '@keyv/redis': false,
+      '@keyv/mongo': false,
+      '@keyv/sqlite': false,
+      '@keyv/postgres': false,
+      '@keyv/mysql': false,
+      '@keyv/etcd': false,
+      '@keyv/offline': false,
+      '@keyv/tiered': false,
     },
   },
   plugins: [
     new webpack.ProvidePlugin({
       Buffer: ['buffer', 'Buffer'],
+    }),
+    new webpack.IgnorePlugin({
+      resourceRegExp:
+        /^@keyv\/(redis|mongo|sqlite|postgres|mysql|etcd|offline|tiered)$/,
     }),
   ],
 };

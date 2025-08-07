@@ -66,6 +66,7 @@
   },
   "dependencies": {
     "ably": "^2.9.0",
-    "buffer": "^6.0.3"
+    "buffer": "^6.0.3",
+    "keyv": "^4.5.4"
   }
 }
