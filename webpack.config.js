@@ -27,27 +27,31 @@ module.exports = {
     fallback: {
       buffer: require.resolve('buffer/'),
       fs: false,
-      path: false,
+      net: false,
+      tls: false,
+      http: false,
+      https: false,
+      stream: false,
+      crypto: false,
       os: false,
+      path: false,
+      util: false,
     },
     alias: {
-      '@keyv/redis': false,
-      '@keyv/mongo': false,
-      '@keyv/sqlite': false,
-      '@keyv/postgres': false,
-      '@keyv/mysql': false,
-      '@keyv/etcd': false,
-      '@keyv/offline': false,
-      '@keyv/tiered': false,
+      // force ably to use the browser build
+      ably$: path.join(__dirname, 'node_modules/ably/build/ably.js'),
     },
   },
   plugins: [
     new webpack.ProvidePlugin({
       Buffer: ['buffer', 'Buffer'],
     }),
+    new webpack.DefinePlugin({
+      'process.env.NODE_ENV': JSON.stringify('production'),
+      global: 'window',
+    }),
     new webpack.IgnorePlugin({
-      resourceRegExp:
-        /^@keyv\/(redis|mongo|sqlite|postgres|mysql|etcd|offline|tiered)$/,
+      resourceRegExp: /^(got|ws|http|https|net|tls|fs)$/,
     }),
   ],
 };
