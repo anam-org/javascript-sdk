@@ -1,4 +1,4 @@
-import * as Ably from 'ably';
+import { Realtime, RealtimeChannel, Message as AblyMessage } from 'ably';
 import { InternalEventEmitter, PublicEventEmitter } from '.';
 import {
   AnamEvent,
@@ -17,8 +17,8 @@ export class SignallingClient {
   private sessionId: string;
   private ablyToken: string;
   private channelName: string;
-  private realtime: Ably.Realtime | null = null;
-  private channel: Ably.RealtimeChannel | null = null;
+  private realtime: Realtime | null = null;
+  private channel: RealtimeChannel | null = null;
   private stopSignal = false;
 
   constructor(
@@ -62,7 +62,7 @@ export class SignallingClient {
     }
 
     // Initialize Ably Realtime client with echo disabled
-    this.realtime = new Ably.Realtime({
+    this.realtime = new Realtime({
       token: this.ablyToken,
       echoMessages: false,
       disconnectedRetryTimeout: 1000, // Retry after 1 second
@@ -192,7 +192,7 @@ export class SignallingClient {
     );
   }
 
-  private onMessage(message: Ably.Message) {
+  private onMessage(message: AblyMessage) {
     // Extract the SignalMessage from Ably message data
     let signalMessage: SignalMessage = message.data;
     // Messages coming back from the server may have an encoded payload, convert it to unencoded for cosumption elsewhere in the SDK
