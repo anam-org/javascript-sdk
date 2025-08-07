@@ -65,7 +65,8 @@
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
-    "ably": "^2.9.0",
+    "@keyv/sqlite": "^3.6.7",
+    "ably": "^2.10.1",
     "buffer": "^6.0.3",
     "keyv": "^4.5.4"
   }
