@@ -36,3 +36,4 @@ const unsafe_createClientWithApiKey = (
 export { createClient, unsafe_createClientWithApiKey };
 export type { AnamClient };
 export * from './types';
+export { ClientError } from './lib/ClientError';
