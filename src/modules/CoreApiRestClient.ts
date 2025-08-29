@@ -70,7 +70,7 @@ export class CoreApiRestClient {
 
       const data = await response.json();
 
-      const error: string | undefined = data.error;
+      const errorCause: string | undefined = data.error;
 
       switch (response.status) {
         case 200:
@@ -105,14 +105,14 @@ export class CoreApiRestClient {
             { cause: data.message },
           );
         case 429:
-          if (error === 'Concurrent session limit reached') {
+          if (errorCause === 'Concurrent session limit reached') {
             throw new ClientError(
               'Concurrency limit reached, please upgrade your plan',
               ErrorCode.CLIENT_ERROR_CODE_MAX_CONCURRENT_SESSIONS_REACHED,
               429,
               { cause: data.message },
             );
-          } else if (error === 'Spend cap reached') {
+          } else if (errorCause === 'Spend cap reached') {
             throw new ClientError(
               'Spend cap reached, please upgrade your plan',
               ErrorCode.CLIENT_ERROR_CODE_SPEND_CAP_REACHED,
