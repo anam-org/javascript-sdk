@@ -70,6 +70,8 @@ export class CoreApiRestClient {
 
       const data = await response.json();
 
+      const error: string | undefined = data.error;
+
       switch (response.status) {
         case 200:
         case 201:
@@ -103,12 +105,21 @@ export class CoreApiRestClient {
             { cause: data.message },
           );
         case 429:
-          throw new ClientError(
-            'Usage limit reached, please upgrade your plan',
-            ErrorCode.CLIENT_ERROR_CODE_USAGE_LIMIT_REACHED,
-            429,
-            { cause: data.message },
-          );
+          if (error === 'Concurrent session limit reached') {
+            throw new ClientError(
+              'There are no available personas, please try again later',
+              ErrorCode.CLIENT_ERROR_CODE_MAX_CONCURRENT_SESSIONS_REACHED,
+              429,
+              { cause: data.message },
+            );
+          } else {
+            throw new ClientError(
+              'Usage limit reached, please upgrade your plan',
+              ErrorCode.CLIENT_ERROR_CODE_USAGE_LIMIT_REACHED,
+              429,
+              { cause: data.message },
+            );
+          }
         case 503:
           throw new ClientError(
             'There are no available personas, please try again later',
