@@ -107,8 +107,15 @@ export class CoreApiRestClient {
         case 429:
           if (error === 'Concurrent session limit reached') {
             throw new ClientError(
-              'There are no available personas, please try again later',
+              'Concurrency limit reached, please upgrade your plan',
               ErrorCode.CLIENT_ERROR_CODE_MAX_CONCURRENT_SESSIONS_REACHED,
+              429,
+              { cause: data.message },
+            );
+          } else if (error === 'Spend cap reached') {
+            throw new ClientError(
+              'Spend cap reached, please upgrade your plan',
+              ErrorCode.CLIENT_ERROR_CODE_SPEND_CAP_REACHED,
               429,
               { cause: data.message },
             );
