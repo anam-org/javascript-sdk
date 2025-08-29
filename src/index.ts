@@ -1,6 +1,7 @@
 import AnamClient from './AnamClient';
 import { PersonaConfig } from './types';
 import { AnamPublicClientOptions } from './types/AnamPublicClientOptions';
+import { ClientError, ErrorCode } from './lib/ClientError';
 
 /**
  * Create a new Anam client.
@@ -33,6 +34,6 @@ const unsafe_createClientWithApiKey = (
   return new AnamClient(undefined, personaConfig, { ...options, apiKey });
 };
 
-export { createClient, unsafe_createClientWithApiKey };
+export { createClient, unsafe_createClientWithApiKey, ClientError, ErrorCode };
 export type { AnamClient };
 export * from './types';
