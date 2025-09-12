@@ -16,6 +16,7 @@ import {
   PublicEventEmitter,
   StreamingClient,
 } from './modules';
+import { ExternalSessionClient } from './modules/ExternalSessionClient';
 import {
   AnamClientOptions,
   AnamEvent,
@@ -42,6 +43,7 @@ export default class AnamClient {
 
   private streamingClient: StreamingClient | null = null;
   private apiClient: CoreApiRestClient;
+  private externalSessionClient: ExternalSessionClient | null = null;
 
   private _isStreaming = false;
 
@@ -81,6 +83,14 @@ export default class AnamClient {
       options?.apiKey,
       options?.api,
     );
+    if (options?.transport?.mode === 'proxy' && options.transport.proxy) {
+      this.externalSessionClient = new ExternalSessionClient({
+        baseUrl: options.transport.proxy.baseUrl,
+        startSessionPath: options.transport.proxy.startSessionPath,
+        getUserId: options.transport.proxy.getUserId,
+        headers: options.transport.proxy.headers,
+      });
+    }
     this.messageHistoryClient = new MessageHistoryClient(
       this.publicEventEmitter,
       this.internalEventEmitter,
@@ -178,17 +188,34 @@ export default class AnamClient {
     const sessionOptions: StartSessionOptions | undefined =
       this.buildStartSessionOptionsForClient();
     // start a new session
-    const response: StartSessionResponse = await this.apiClient.startSession(
-      config,
-      sessionOptions,
-    );
-    const {
-      sessionId,
-      clientConfig,
-      engineHost,
-      engineProtocol,
-      signallingEndpoint,
-    } = response;
+    let sessionId: string;
+    let engineHost: string;
+    let engineProtocol: 'http' | 'https';
+    let signallingEndpoint: string;
+    let clientConfig: any;
+
+    if (
+      this.clientOptions?.transport?.mode === 'proxy' &&
+      this.externalSessionClient
+    ) {
+      const response =
+        await this.externalSessionClient.startSession(sessionOptions);
+      sessionId = response.sessionId;
+      engineHost = response.engineHost;
+      engineProtocol = response.engineProtocol;
+      signallingEndpoint = response.signallingEndpoint;
+      clientConfig = response.clientConfig ?? {};
+    } else {
+      const response: StartSessionResponse = await this.apiClient.startSession(
+        config,
+        sessionOptions,
+      );
+      sessionId = response.sessionId;
+      clientConfig = response.clientConfig;
+      engineHost = response.engineHost;
+      engineProtocol = response.engineProtocol as 'http' | 'https';
+      signallingEndpoint = response.signallingEndpoint;
+    }
     const { heartbeatIntervalSeconds, maxWsReconnectionAttempts, iceServers } =
       clientConfig;
 
@@ -198,6 +225,36 @@ export default class AnamClient {
     });
 
     try {
+      // Build signalling config; if in proxy mode, supply absolute WS URL to our proxy
+      let signallingUrlConfig: any = {
+        baseUrl: engineHost,
+        protocol: engineProtocol,
+        signallingPath: signallingEndpoint,
+      };
+
+      if (
+        this.clientOptions?.transport?.mode === 'proxy' &&
+        this.clientOptions.transport.proxy
+      ) {
+        const proxyCfg = this.clientOptions.transport.proxy;
+        const userId = proxyCfg.getUserId();
+        const wsBase = new URL(proxyCfg.baseUrl);
+        // Convert to ws/wss and append params for the DO proxy
+        const agentPathTemplate =
+          proxyCfg.agentWsPathTemplate ?? '/v1/agents/{userId}/ws';
+        const agentPath = agentPathTemplate.replace(
+          '{userId}',
+          encodeURIComponent(userId),
+        );
+        const wsUrl = new URL(agentPath, wsBase.origin);
+        wsUrl.protocol = wsUrl.protocol === 'http:' ? 'ws:' : 'wss:';
+        wsUrl.searchParams.set('engineHost', engineHost);
+        wsUrl.searchParams.set('engineProtocol', engineProtocol);
+        wsUrl.searchParams.set('signallingEndpoint', signallingEndpoint);
+        wsUrl.searchParams.set('session_id', sessionId);
+        signallingUrlConfig = { absoluteWsUrl: wsUrl.href };
+      }
+
       this.streamingClient = new StreamingClient(
         sessionId,
         {
@@ -207,11 +264,7 @@ export default class AnamClient {
           signalling: {
             heartbeatIntervalSeconds,
             maxWsReconnectionAttempts,
-            url: {
-              baseUrl: engineHost,
-              protocol: engineProtocol,
-              signallingPath: signallingEndpoint,
-            },
+            url: signallingUrlConfig,
           },
           iceServers,
           inputAudio: {

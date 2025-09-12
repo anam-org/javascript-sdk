@@ -48,18 +48,26 @@ export class SignallingClient {
     this.maxWsReconnectionAttempts =
       maxWsReconnectionAttempts || DEFAULT_WS_RECONNECTION_ATTEMPTS;
 
-    if (!url.baseUrl) {
-      throw new Error('Signalling Client: baseUrl is required');
+    if (url.absoluteWsUrl) {
+      this.url = new URL(url.absoluteWsUrl);
+      // ensure session_id param exists
+      if (!this.url.searchParams.get('session_id')) {
+        this.url.searchParams.append('session_id', sessionId);
+      }
+    } else {
+      if (!url.baseUrl) {
+        throw new Error('Signalling Client: baseUrl is required');
+      }
+      const httpProtocol = url.protocol || 'https';
+      const initUrl = `${httpProtocol}://${url.baseUrl}`;
+      this.url = new URL(initUrl);
+      this.url.protocol = url.protocol === 'http' ? 'ws:' : 'wss:';
+      if (url.port) {
+        this.url.port = url.port;
+      }
+      this.url.pathname = url.signallingPath ?? '/ws';
+      this.url.searchParams.append('session_id', sessionId);
     }
-    const httpProtocol = url.protocol || 'https';
-    const initUrl = `${httpProtocol}://${url.baseUrl}`;
-    this.url = new URL(initUrl);
-    this.url.protocol = url.protocol === 'http' ? 'ws:' : 'wss:';
-    if (url.port) {
-      this.url.port = url.port;
-    }
-    this.url.pathname = url.signallingPath ?? '/ws';
-    this.url.searchParams.append('session_id', sessionId);
   }
 
   public stop() {
@@ -119,6 +127,34 @@ export class SignallingClient {
       payload: payload,
     };
     this.sendSignalMessage(chatMessage);
+  }
+
+  /**
+   * Send a custom signaling message. Useful for proxy-side extensions.
+   */
+  public sendCustom(actionType: string, payload: any) {
+    const message: SignalMessage = {
+      actionType,
+      sessionId: this.sessionId,
+      payload,
+    };
+    this.sendSignalMessage(message);
+  }
+
+  /**
+   * Send binary data directly over the WebSocket if open.
+   */
+  public sendBinary(data: ArrayBuffer | Uint8Array) {
+    try {
+      if (this.socket?.readyState === WebSocket.OPEN) {
+        this.socket.send(data);
+      }
+    } catch (error) {
+      console.error(
+        'SignallingClient - sendBinary: error sending binary',
+        error,
+      );
+    }
   }
 
   private closeSocket() {
