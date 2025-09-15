@@ -23,6 +23,9 @@ import {
 } from '../lib/ClientMetrics';
 
 const SUCCESS_METRIC_POLLING_TIMEOUT_MS = 15000; // After this time we will stop polling for the first frame and consider the session a failure.
+const STATS_COLLECTION_INTERVAL_MS = 5000;
+const ICE_CANDIDATE_POOL_SIZE = 2; // Optimisation to speed up connection time
+
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
@@ -44,6 +47,7 @@ export class StreamingClient {
   private successMetricFired = false;
   private showPeerConnectionStatsReport: boolean = false;
   private peerConnectionStatsReportOutputFormat: 'console' | 'json' = 'console';
+  private statsCollectionInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     sessionId: string,
@@ -113,6 +117,47 @@ export class StreamingClient {
   private unmuteAllAudioTracks() {
     this.inputAudioStream?.getAudioTracks().forEach((track) => {
       track.enabled = true;
+    });
+  }
+
+  private startStatsCollection() {
+    if (this.statsCollectionInterval) {
+      return;
+    }
+
+    // Send stats every STATS_COLLECTION_INTERVAL_MS seconds
+    this.statsCollectionInterval = setInterval(async () => {
+      if (
+        !this.peerConnection ||
+        !this.dataChannel ||
+        this.dataChannel.readyState !== 'open'
+      ) {
+        return;
+      }
+
+      try {
+        const stats = await this.peerConnection.getStats();
+        this.sendClientSideMetrics(stats);
+      } catch (error) {
+        console.error('Failed to collect and send stats:', error);
+      }
+    }, STATS_COLLECTION_INTERVAL_MS);
+  }
+
+  private sendClientSideMetrics(stats: RTCStatsReport) {
+    stats.forEach((report: RTCStats) => {
+      // Process inbound-rtp stats for both video and audio
+      if (report.type === 'inbound-rtp') {
+        const metrics = {
+          message_type: 'remote_rtp_stats',
+          data: report,
+        };
+
+        // Send the metrics via data channel
+        if (this.dataChannel && this.dataChannel.readyState === 'open') {
+          this.dataChannel.send(JSON.stringify(metrics));
+        }
+      }
     });
   }
 
@@ -296,6 +341,7 @@ export class StreamingClient {
   private async initPeerConnection() {
     this.peerConnection = new RTCPeerConnection({
       iceServers: this.iceServers,
+      iceCandidatePoolSize: ICE_CANDIDATE_POOL_SIZE,
     });
     // set event handlers
     this.peerConnection.onicecandidate = this.onIceCandidate.bind(this);
@@ -418,6 +464,8 @@ export class StreamingClient {
       this.peerConnection?.iceConnectionState === 'completed'
     ) {
       this.publicEventEmitter.emit(AnamEvent.CONNECTION_ESTABLISHED);
+      // Start collecting stats every 5 seconds
+      this.startStatsCollection();
     }
   }
 
@@ -609,6 +657,11 @@ export class StreamingClient {
           console.log(report, undefined, 2);
         }
       }
+    }
+    // stop stats collection
+    if (this.statsCollectionInterval) {
+      clearInterval(this.statsCollectionInterval);
+      this.statsCollectionInterval = null;
     }
     // reset video frame polling
     if (this.successMetricPoller) {
