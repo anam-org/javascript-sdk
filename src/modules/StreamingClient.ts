@@ -7,6 +7,7 @@ import {
 import {
   AnamEvent,
   InputAudioState,
+  AudioPermissionState,
   InternalEvent,
   SignalMessage,
   SignalMessageAction,
@@ -40,7 +41,10 @@ export class StreamingClient {
   private videoElement: HTMLVideoElement | null = null;
   private videoStream: MediaStream | null = null;
   private audioStream: MediaStream | null = null;
-  private inputAudioState: InputAudioState = { isMuted: false };
+  private inputAudioState: InputAudioState = {
+    isMuted: false,
+    permissionState: AudioPermissionState.NOT_REQUESTED,
+  };
   private audioDeviceId: string | undefined;
   private disableInputAudio: boolean;
   private successMetricPoller: ReturnType<typeof setInterval> | null = null;
@@ -307,7 +311,7 @@ export class StreamingClient {
       // start the connection
       this.signallingClient.connect();
     } catch (error) {
-      console.log('StreamingClient - startConnection: error', error);
+      console.error('StreamingClient - startConnection: error', error);
       this.handleWebrtcFailure(error);
     }
   }
@@ -363,6 +367,18 @@ export class StreamingClient {
       this.peerConnection.addTransceiver('audio', { direction: 'recvonly' });
     } else {
       this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+
+      // Handle audio setup after transceivers are configured
+      if (this.inputAudioStream) {
+        // User provided an audio stream, set it up immediately
+        await this.setupAudioTrack();
+      } else {
+        // No user stream, start microphone permission request asynchronously
+        // Don't await - let it run in parallel with connection setup
+        this.requestMicrophonePermissionAsync().catch((error) => {
+          console.error('Async microphone permission request failed:', error);
+        });
+      }
     }
   }
 
@@ -392,7 +408,6 @@ export class StreamingClient {
         break;
       case SignalMessageAction.END_SESSION:
         const reason = signalMessage.payload as string;
-        console.log('StreamingClient - onSignalMessage: reason', reason);
         this.publicEventEmitter.emit(
           AnamEvent.CONNECTION_CLOSED,
           ConnectionClosedCode.SERVER_CLOSED_CONNECTION,
@@ -548,48 +563,20 @@ export class StreamingClient {
       );
       return;
     }
+
     /**
-     * Audio
+     * Audio - Validate user-provided stream only
      *
-     * If the user hasn't provided an audio stream, capture the audio stream from the user's microphone and send it to the peer connection
-     * If input audio is disabled we don't send any audio to the peer connection
+     * If the user provided an audio stream, validate it has audio tracks
+     * Microphone permission request will be handled asynchronously
      */
-    if (!this.disableInputAudio) {
-      if (this.inputAudioStream) {
-        // verify the user provided stream has audio tracks
-        if (!this.inputAudioStream.getAudioTracks().length) {
-          throw new Error(
-            'StreamingClient - setupDataChannels: user provided stream does not have audio tracks',
-          );
-        }
-      } else {
-        const audioConstraints: MediaTrackConstraints = {
-          echoCancellation: true,
-        };
-
-        // If an audio device ID is provided in the options, use it
-        if (this.audioDeviceId) {
-          audioConstraints.deviceId = {
-            exact: this.audioDeviceId,
-          };
-        }
-
-        this.inputAudioStream = await navigator.mediaDevices.getUserMedia({
-          audio: audioConstraints,
-        });
+    if (!this.disableInputAudio && this.inputAudioStream) {
+      // verify the user provided stream has audio tracks
+      if (!this.inputAudioStream.getAudioTracks().length) {
+        throw new Error(
+          'StreamingClient - setupDataChannels: user provided stream does not have audio tracks',
+        );
       }
-
-      // mute the audio tracks if the user has muted the microphone
-      if (this.inputAudioState.isMuted) {
-        this.muteAllAudioTracks();
-      }
-      const audioTrack = this.inputAudioStream.getAudioTracks()[0];
-      this.peerConnection.addTrack(audioTrack, this.inputAudioStream);
-      // pass the stream to the callback if it exists
-      this.publicEventEmitter.emit(
-        AnamEvent.INPUT_AUDIO_STREAM_STARTED,
-        this.inputAudioStream,
-      );
     }
 
     /**
@@ -613,6 +600,114 @@ export class StreamingClient {
         messageEvent,
       );
     };
+  }
+
+  /**
+   * Request microphone permission asynchronously without blocking connection
+   */
+  private async requestMicrophonePermissionAsync() {
+    if (this.inputAudioState.permissionState === AudioPermissionState.PENDING) {
+      return; // Already requesting
+    }
+
+    this.inputAudioState = {
+      ...this.inputAudioState,
+      permissionState: AudioPermissionState.PENDING,
+    };
+
+    this.publicEventEmitter.emit(AnamEvent.MIC_PERMISSION_PENDING);
+
+    try {
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+      };
+
+      // If an audio device ID is provided in the options, use it
+      if (this.audioDeviceId) {
+        audioConstraints.deviceId = {
+          exact: this.audioDeviceId,
+        };
+      }
+
+      this.inputAudioStream = await navigator.mediaDevices.getUserMedia({
+        audio: audioConstraints,
+      });
+
+      this.inputAudioState = {
+        ...this.inputAudioState,
+        permissionState: AudioPermissionState.GRANTED,
+      };
+
+      this.publicEventEmitter.emit(AnamEvent.MIC_PERMISSION_GRANTED);
+
+      // Now add the audio track to the existing connection
+      await this.setupAudioTrack();
+    } catch (error) {
+      console.error('Failed to get microphone permission:', error);
+      this.inputAudioState = {
+        ...this.inputAudioState,
+        permissionState: AudioPermissionState.DENIED,
+      };
+
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.publicEventEmitter.emit(
+        AnamEvent.MIC_PERMISSION_DENIED,
+        errorMessage,
+      );
+    }
+  }
+
+  /**
+   * Set up audio track and add it to the peer connection using replaceTrack
+   */
+  private async setupAudioTrack() {
+    if (!this.peerConnection || !this.inputAudioStream) {
+      return;
+    }
+
+    // verify the stream has audio tracks
+    if (!this.inputAudioStream.getAudioTracks().length) {
+      console.error(
+        'StreamingClient - setupAudioTrack: stream does not have audio tracks',
+      );
+      return;
+    }
+
+    // mute the audio tracks if the user has muted the microphone
+    if (this.inputAudioState.isMuted) {
+      this.muteAllAudioTracks();
+    }
+
+    const audioTrack = this.inputAudioStream.getAudioTracks()[0];
+
+    // Find the audio sender
+    const existingSenders = this.peerConnection.getSenders();
+    const audioSender = existingSenders.find(
+      (sender) =>
+        sender.track?.kind === 'audio' ||
+        (sender.track === null && sender.dtmf !== null), // audio sender without track
+    );
+
+    if (audioSender) {
+      // Replace existing track (or null track) with our audio track
+      try {
+        await audioSender.replaceTrack(audioTrack);
+      } catch (error) {
+        console.error('Failed to replace audio track:', error);
+        // Fallback: add track normally
+        this.peerConnection.addTrack(audioTrack, this.inputAudioStream);
+      }
+    } else {
+      // No audio sender found, add track normally
+      this.peerConnection.addTrack(audioTrack, this.inputAudioStream);
+    }
+
+    // pass the stream to the callback
+    this.publicEventEmitter.emit(
+      AnamEvent.INPUT_AUDIO_STREAM_STARTED,
+      this.inputAudioStream,
+    );
   }
 
   private async initPeerConnectionAndSendOffer() {
