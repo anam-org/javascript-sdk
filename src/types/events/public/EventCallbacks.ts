@@ -18,4 +18,7 @@ export type EventCallbacks = {
   [AnamEvent.TALK_STREAM_INTERRUPTED]: (correlationId: string) => void;
   [AnamEvent.SESSION_READY]: (sessionId: string) => void;
   [AnamEvent.SERVER_WARNING]: (message: string) => void;
+  [AnamEvent.MIC_PERMISSION_PENDING]: () => void;
+  [AnamEvent.MIC_PERMISSION_GRANTED]: () => void;
+  [AnamEvent.MIC_PERMISSION_DENIED]: (error: string) => void;
 };

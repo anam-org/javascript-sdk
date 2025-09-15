@@ -19,6 +19,7 @@ import {
 import {
   AnamClientOptions,
   AnamEvent,
+  AudioPermissionState,
   ConnectionClosedCode,
   EventCallbacks,
   InputAudioState,
@@ -35,7 +36,10 @@ export default class AnamClient {
 
   private personaConfig: PersonaConfig | undefined;
   private clientOptions: AnamClientOptions | undefined;
-  private inputAudioState: InputAudioState = { isMuted: false };
+  private inputAudioState: InputAudioState = {
+    isMuted: false,
+    permissionState: AudioPermissionState.NOT_REQUESTED,
+  };
 
   private sessionId: string | null = null;
   private organizationId: string | null = null;
