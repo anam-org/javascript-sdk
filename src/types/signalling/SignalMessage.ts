@@ -11,7 +11,8 @@ export enum SignalMessageAction {
 }
 
 export interface SignalMessage {
-  actionType: SignalMessageAction;
+  // Allow custom action types beyond the enum
+  actionType: string;
   sessionId: string;
   payload: object | string;
 }
