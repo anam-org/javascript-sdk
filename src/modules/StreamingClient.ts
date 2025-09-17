@@ -24,6 +24,7 @@ import {
 
 const SUCCESS_METRIC_POLLING_TIMEOUT_MS = 15000; // After this time we will stop polling for the first frame and consider the session a failure.
 const STATS_COLLECTION_INTERVAL_MS = 5000;
+const ICE_CANDIDATE_POOL_SIZE = 2; // Optimisation to speed up connection time
 
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
@@ -340,6 +341,7 @@ export class StreamingClient {
   private async initPeerConnection() {
     this.peerConnection = new RTCPeerConnection({
       iceServers: this.iceServers,
+      iceCandidatePoolSize: ICE_CANDIDATE_POOL_SIZE,
     });
     // set event handlers
     this.peerConnection.onicecandidate = this.onIceCandidate.bind(this);
