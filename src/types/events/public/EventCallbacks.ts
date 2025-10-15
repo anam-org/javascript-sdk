@@ -21,4 +21,5 @@ export type EventCallbacks = {
   [AnamEvent.MIC_PERMISSION_PENDING]: () => void;
   [AnamEvent.MIC_PERMISSION_GRANTED]: () => void;
   [AnamEvent.MIC_PERMISSION_DENIED]: (error: string) => void;
+  [AnamEvent.INPUT_AUDIO_DEVICE_CHANGED]: (deviceId: string) => void;
 };

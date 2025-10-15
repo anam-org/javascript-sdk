@@ -549,6 +549,28 @@ export default class AnamClient {
     return this.inputAudioState;
   }
 
+  public async changeAudioInputDevice(deviceId: string): Promise<void> {
+    if (this.clientOptions?.disableInputAudio) {
+      throw new Error(
+        'AnamClient: Cannot change audio input device because input audio is disabled.',
+      );
+    }
+
+    if (!this._isStreaming) {
+      throw new Error(
+        'AnamClient: Cannot change audio input device while not streaming. Start streaming first.',
+      );
+    }
+
+    if (!this.streamingClient) {
+      throw new Error(
+        'AnamClient: Cannot change audio input device because streaming client is not available. Start streaming first.',
+      );
+    }
+
+    await this.streamingClient.changeAudioInputDevice(deviceId);
+  }
+
   public createTalkMessageStream(correlationId?: string): TalkMessageStream {
     if (!this.streamingClient) {
       throw new Error(

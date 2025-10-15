@@ -269,6 +269,66 @@ export class StreamingClient {
     return this.peerConnection;
   }
 
+  public async changeAudioInputDevice(deviceId: string): Promise<void> {
+    if (!this.peerConnection) {
+      throw new Error(
+        'StreamingClient - changeAudioInputDevice: peer connection is not initialized. Start streaming first.',
+      );
+    }
+
+    if (!deviceId) {
+      throw new Error(
+        'StreamingClient - changeAudioInputDevice: deviceId is required',
+      );
+    }
+
+    // Store the current mute state to preserve it
+    const wasMuted = this.inputAudioState.isMuted;
+
+    try {
+      // Stop the current audio stream tracks
+      if (this.inputAudioStream) {
+        this.inputAudioStream.getAudioTracks().forEach((track) => {
+          track.stop();
+        });
+      }
+
+      // Request new audio stream with the new device ID
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+        deviceId: {
+          exact: deviceId,
+        },
+      };
+
+      this.inputAudioStream = await navigator.mediaDevices.getUserMedia({
+        audio: audioConstraints,
+      });
+
+      // Update the stored device ID
+      this.audioDeviceId = deviceId;
+
+      // Replace the audio track in the peer connection
+      await this.setupAudioTrack();
+
+      // Restore the mute state
+      if (wasMuted) {
+        this.muteAllAudioTracks();
+      }
+
+      // Emit event to notify that the device has changed
+      this.publicEventEmitter.emit(
+        AnamEvent.INPUT_AUDIO_DEVICE_CHANGED,
+        deviceId,
+      );
+    } catch (error) {
+      console.error('Failed to change audio input device:', error);
+      throw new Error(
+        `StreamingClient - changeAudioInputDevice: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   public getInputAudioStream(): MediaStream | null {
     return this.inputAudioStream;
   }
