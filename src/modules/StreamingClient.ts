@@ -276,7 +276,7 @@ export class StreamingClient {
       );
     }
 
-    if (!deviceId) {
+    if (deviceId === null || deviceId === undefined) {
       throw new Error(
         'StreamingClient - changeAudioInputDevice: deviceId is required',
       );
