@@ -5,9 +5,10 @@ import {
   DEFAULT_API_VERSION,
 } from '../lib/constants';
 import {
-  CoreApiRestClientOptions,
+  ApiOptions,
   PersonaConfig,
   StartSessionResponse,
+  ProxyConfig,
 } from '../types';
 import { StartSessionOptions } from '../types/coreApi/StartSessionOptions';
 import { isCustomPersonaConfig } from '../types/PersonaConfig';
@@ -17,12 +18,9 @@ export class CoreApiRestClient {
   private apiVersion: string;
   private apiKey: string | null;
   private sessionToken: string | null;
+  private proxyConfig: ProxyConfig | undefined;
 
-  constructor(
-    sessionToken?: string,
-    apiKey?: string,
-    options?: CoreApiRestClientOptions,
-  ) {
+  constructor(sessionToken?: string, apiKey?: string, options?: ApiOptions) {
     if (!sessionToken && !apiKey) {
       throw new Error('Either sessionToken or apiKey must be provided');
     }
@@ -30,6 +28,7 @@ export class CoreApiRestClient {
     this.apiKey = apiKey || null;
     this.baseUrl = options?.baseUrl || DEFAULT_API_BASE_URL;
     this.apiVersion = options?.apiVersion || DEFAULT_API_VERSION;
+    this.proxyConfig = options?.proxy || undefined;
   }
 
   public async startSession(
@@ -55,12 +54,33 @@ export class CoreApiRestClient {
     }
 
     try {
-      const response = await fetch(`${this.getApiUrl()}/engine/session`, {
+      // Determine the URL and headers based on proxy configuration
+      let url: string;
+      let headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.sessionToken}`,
+      };
+
+      const targetPath = `${this.apiVersion}/engine/session`;
+
+      if (this.proxyConfig?.enabled && this.proxyConfig?.api) {
+        // Use proxy base URL with same endpoint path
+        url = `${this.proxyConfig.api}${targetPath}`;
+        // standard forwarding headers
+        const targetUrl = new URL(`${this.baseUrl}${targetPath}`);
+        headers['X-Forwarded-Host'] = targetUrl.host;
+        headers['X-Forwarded-Proto'] = targetUrl.protocol.slice(0, -1);
+        headers['X-Original-URI'] = targetPath;
+        // full original target URL for convenience
+        headers['X-Anam-Target-Url'] = targetUrl.href;
+      } else {
+        // Direct call to Anam API
+        url = `${this.baseUrl}${targetPath}`;
+      }
+
+      const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.sessionToken}`,
-        },
+        headers,
         body: JSON.stringify({
           personaConfig,
           sessionOptions,
@@ -179,12 +199,32 @@ export class CoreApiRestClient {
       body = { ...body, personaConfig };
     }
     try {
-      const response = await fetch(`${this.getApiUrl()}/auth/session-token`, {
+      // Determine the URL and headers based on proxy configuration
+      let url: string;
+      let headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+      };
+
+      const targetPath = `${this.apiVersion}/auth/session-token`;
+
+      if (this.proxyConfig?.enabled && this.proxyConfig?.api) {
+        // Use proxy base URL with same endpoint path
+        url = `${this.proxyConfig.api}${targetPath}`;
+        // Add industry-standard forwarding headers
+        const targetUrl = new URL(`${this.baseUrl}${targetPath}`);
+        headers['X-Forwarded-Host'] = targetUrl.host;
+        headers['X-Forwarded-Proto'] = targetUrl.protocol.slice(0, -1);
+        headers['X-Original-URI'] = targetPath;
+        headers['X-Anam-Target-Url'] = targetUrl.href;
+      } else {
+        // Direct call to Anam API
+        url = `${this.baseUrl}${targetPath}`;
+      }
+
+      const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
-        },
+        headers,
         body: JSON.stringify(body),
       });
       const data = await response.json();
