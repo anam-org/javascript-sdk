@@ -1,4 +1,4 @@
-import { ApiOptions, ProxyConfig } from '../types';
+import { ApiOptions } from '../types';
 import { VoiceDetectionOptions } from './VoiceDetectionOptions';
 
 export interface AnamPublicClientOptions {
