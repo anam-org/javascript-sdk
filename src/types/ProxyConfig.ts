@@ -30,9 +30,8 @@ export interface ProxyConfig {
   enabled: boolean;
 
   /**
-   * Proxy base URL for Core API requests (session creation, auth)
+   * Proxy base URL for Anam API requests (session creation, auth)
    * Replaces https://api.anam.ai base URL
-   * Endpoints like /v1/engine/session remain the same
    *
    * @example 'https://my-proxy.com' or '/api/proxy' for same-origin
    */
@@ -40,8 +39,9 @@ export interface ProxyConfig {
 
   /**
    * Proxy base URL for Engine API requests (talk commands, etc.)
-   * Replaces the engine server base URL
-   * Endpoints like /talk remain the same
+   * Replaces the engine server base URL.
+   * The original engine base url is dynamic for each session.
+   * The forwarding headers can be used to construct the full original target URL.
    *
    * @example 'https://my-proxy.com' or '/api/proxy' for same-origin
    */
@@ -49,8 +49,9 @@ export interface ProxyConfig {
 
   /**
    * Proxy base URL for WebSocket signalling connections
-   * Replaces the engine WebSocket base URL
-   * Path like /ws remains the same
+   * Replaces the engine WebSocket base URL.
+   * The original WebSocket base url is dynamic for each session.
+   * The websocket query parameters can be used to construct the full original target URL.
    *
    * @example 'wss://my-proxy.com' or 'ws://localhost:3000/api/proxy'
    */
