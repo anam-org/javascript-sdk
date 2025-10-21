@@ -65,13 +65,17 @@ export class SignallingClient {
       // Add forwarding information as query parameters for proxy routing
       const httpProtocol = url.protocol || 'https';
       const targetProtocol = httpProtocol === 'http' ? 'ws' : 'wss';
-      const targetHost = url.baseUrl;
-      const targetPort = url.port;
-      const wsPath = url.signallingPath ?? '/ws';
+
+      // Parse baseUrl to extract just the hostname (it may contain path segments)
+      const tempUrl = new URL(`${httpProtocol}://${url.baseUrl}`);
+      const targetHost = tempUrl.hostname;
+      const targetPort = url.port || tempUrl.port;
+      const basePath = tempUrl.pathname !== '/' ? tempUrl.pathname : '';
+      const wsPath = basePath + (url.signallingPath ?? '/ws');
 
       this.url.searchParams.append('x_forwarded_proto', targetProtocol);
       this.url.searchParams.append('x_forwarded_host', targetHost);
-      if (targetPort) {
+      if (targetPort && targetPort !== '80' && targetPort !== '443') {
         this.url.searchParams.append('x_forwarded_port', targetPort);
       }
       this.url.searchParams.append('x_original_uri', wsPath);
