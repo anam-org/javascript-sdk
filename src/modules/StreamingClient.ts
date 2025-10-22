@@ -28,6 +28,11 @@ const SUCCESS_METRIC_POLLING_TIMEOUT_MS = 15000; // After this time we will stop
 const STATS_COLLECTION_INTERVAL_MS = 5000;
 const ICE_CANDIDATE_POOL_SIZE = 2; // Optimisation to speed up connection time
 
+// Data channel message types
+const DATA_CHANNEL_MESSAGE_TYPE = {
+  SPEECH_TEXT: 'speechText',
+} as const;
+
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
@@ -650,7 +655,7 @@ export class StreamingClient {
      * Create the data channel for sending and receiving text.
      * There is no input stream for text, instead the sending of data is triggered by a UI interaction.
      */
-    const dataChannel = this.peerConnection.createDataChannel('chat', {
+    const dataChannel = this.peerConnection.createDataChannel('session', {
       ordered: true,
     });
     dataChannel.onopen = () => {
@@ -659,11 +664,24 @@ export class StreamingClient {
     dataChannel.onclose = () => {};
     // pass text message to the message history client
     dataChannel.onmessage = (event) => {
-      const messageEvent = JSON.parse(event.data) as WebRtcTextMessageEvent;
-      this.internalEventEmitter.emit(
-        InternalEvent.WEBRTC_CHAT_MESSAGE_RECEIVED,
-        messageEvent,
-      );
+      try {
+        const message = JSON.parse(event.data);
+
+        // Handle known message types
+        switch (message.messageType) {
+          case DATA_CHANNEL_MESSAGE_TYPE.SPEECH_TEXT:
+            this.internalEventEmitter.emit(
+              InternalEvent.WEBRTC_CHAT_MESSAGE_RECEIVED,
+              message.data as WebRtcTextMessageEvent,
+            );
+            break;
+          // Unknown message types are silently ignored to maintain forward compatibility
+          default:
+            break;
+        }
+      } catch (error) {
+        console.error('Failed to parse data channel message:', error);
+      }
     };
   }
 
