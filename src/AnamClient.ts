@@ -118,7 +118,7 @@ export default class AnamClient {
       return 'Only one of sessionToken or apiKey should be used';
     }
 
-    // Validate proxy configuration
+    // Validate gateway configuration
     const apiGatewayError = validateApiGatewayConfig(options?.api?.apiGateway);
     if (apiGatewayError) {
       return apiGatewayError;
