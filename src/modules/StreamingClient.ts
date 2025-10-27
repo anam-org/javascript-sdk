@@ -29,11 +29,6 @@ const SUCCESS_METRIC_POLLING_TIMEOUT_MS = 15000; // After this time we will stop
 const STATS_COLLECTION_INTERVAL_MS = 5000;
 const ICE_CANDIDATE_POOL_SIZE = 2; // Optimisation to speed up connection time
 
-// Data channel message types
-const DATA_CHANNEL_MESSAGE_TYPE = {
-  SPEECH_TEXT: 'speechText',
-} as const;
-
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
