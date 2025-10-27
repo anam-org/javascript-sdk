@@ -15,6 +15,7 @@ import {
   WebRtcTextMessageEvent,
   ConnectionClosedCode,
   ApiGatewayConfig,
+  DataChannelMessage,
 } from '../types';
 import { TalkMessageStream } from '../types/TalkMessageStream';
 import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
@@ -27,11 +28,6 @@ import {
 const SUCCESS_METRIC_POLLING_TIMEOUT_MS = 15000; // After this time we will stop polling for the first frame and consider the session a failure.
 const STATS_COLLECTION_INTERVAL_MS = 5000;
 const ICE_CANDIDATE_POOL_SIZE = 2; // Optimisation to speed up connection time
-
-// Data channel message types
-const DATA_CHANNEL_MESSAGE_TYPE = {
-  SPEECH_TEXT: 'speechText',
-} as const;
 
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
@@ -669,7 +665,7 @@ export class StreamingClient {
 
         // Handle known message types
         switch (message.messageType) {
-          case DATA_CHANNEL_MESSAGE_TYPE.SPEECH_TEXT:
+          case DataChannelMessage.SPEECH_TEXT:
             this.internalEventEmitter.emit(
               InternalEvent.WEBRTC_CHAT_MESSAGE_RECEIVED,
               message.data as WebRtcTextMessageEvent,
