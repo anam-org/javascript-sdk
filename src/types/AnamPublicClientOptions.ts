@@ -1,7 +1,8 @@
-import { CoreApiRestClientOptions } from '../types';
+import { ApiOptions } from '../types';
 import { VoiceDetectionOptions } from './VoiceDetectionOptions';
+
 export interface AnamPublicClientOptions {
-  api?: CoreApiRestClientOptions;
+  api?: ApiOptions;
   voiceDetection?: VoiceDetectionOptions;
   audioDeviceId?: string;
   disableInputAudio?: boolean;

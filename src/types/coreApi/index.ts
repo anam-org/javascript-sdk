@@ -1,4 +1,6 @@
-export type { CoreApiRestClientOptions } from './CoreApiRestClientOptions';
+export type { ApiOptions } from './ApiOptions';
+// for backwards compatibility with deprecated name
+export type { ApiOptions as CoreApiOptions } from './ApiOptions';
 export type {
   StartSessionResponse,
   ClientConfigResponse,

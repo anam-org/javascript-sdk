@@ -9,6 +9,7 @@ import {
   setMetricsContext,
 } from './lib/ClientMetrics';
 import { generateCorrelationId } from './lib/correlationId';
+import { validateApiGatewayConfig } from './lib/validateApiGatewayConfig';
 import {
   CoreApiRestClient,
   InternalEventEmitter,
@@ -115,6 +116,12 @@ export default class AnamClient {
     }
     if (options?.apiKey && sessionToken) {
       return 'Only one of sessionToken or apiKey should be used';
+    }
+
+    // Validate gateway configuration
+    const apiGatewayError = validateApiGatewayConfig(options?.api?.apiGateway);
+    if (apiGatewayError) {
+      return apiGatewayError;
     }
 
     // Validate persona configuration based on session token
@@ -226,6 +233,7 @@ export default class AnamClient {
             audioDeviceId: this.clientOptions?.audioDeviceId,
             disableInputAudio: this.clientOptions?.disableInputAudio,
           },
+          apiGateway: this.clientOptions?.api?.apiGateway,
           metrics: {
             showPeerConnectionStatsReport:
               this.clientOptions?.metrics?.showPeerConnectionStatsReport ??

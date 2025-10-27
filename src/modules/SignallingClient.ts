@@ -6,6 +6,7 @@ import {
   SignalMessageAction,
   SignallingClientOptions,
   ConnectionClosedCode,
+  ApiGatewayConfig,
 } from '../types';
 import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamPayload';
 
@@ -24,15 +25,18 @@ export class SignallingClient {
   private wsConnectionAttempts = 0;
   private socket: WebSocket | null = null;
   private heartBeatIntervalRef: ReturnType<typeof setInterval> | null = null;
+  private apiGatewayConfig: ApiGatewayConfig | undefined;
 
   constructor(
     sessionId: string,
     options: SignallingClientOptions,
     publicEventEmitter: PublicEventEmitter,
     internalEventEmitter: InternalEventEmitter,
+    apiGatewayConfig?: ApiGatewayConfig,
   ) {
     this.publicEventEmitter = publicEventEmitter;
     this.internalEventEmitter = internalEventEmitter;
+    this.apiGatewayConfig = apiGatewayConfig;
 
     if (!sessionId) {
       throw new Error('Signalling Client: sessionId is required');
@@ -51,15 +55,47 @@ export class SignallingClient {
     if (!url.baseUrl) {
       throw new Error('Signalling Client: baseUrl is required');
     }
-    const httpProtocol = url.protocol || 'https';
-    const initUrl = `${httpProtocol}://${url.baseUrl}`;
-    this.url = new URL(initUrl);
-    this.url.protocol = url.protocol === 'http' ? 'ws:' : 'wss:';
-    if (url.port) {
-      this.url.port = url.port;
+
+    // Construct WebSocket URL (with or without API Gateway)
+    if (this.apiGatewayConfig?.enabled && this.apiGatewayConfig?.baseUrl) {
+      // Use API Gateway WebSocket URL
+      const gatewayUrl = new URL(this.apiGatewayConfig.baseUrl);
+      const wsPath = this.apiGatewayConfig.wsPath ?? '/ws';
+
+      // Construct gateway WebSocket URL
+      gatewayUrl.protocol = gatewayUrl.protocol.replace('http', 'ws');
+      gatewayUrl.pathname = wsPath;
+      this.url = gatewayUrl;
+
+      // Construct the complete target WebSocket URL and pass it as a query parameter
+      const httpProtocol = url.protocol || 'https';
+      const targetProtocol = httpProtocol === 'http' ? 'ws' : 'wss';
+      const httpUrl = `${httpProtocol}://${url.baseUrl}`;
+      const targetWsPath = url.signallingPath ?? '/ws';
+
+      // Build complete target URL
+      const targetUrl = new URL(httpUrl);
+      targetUrl.protocol = targetProtocol === 'ws' ? 'ws:' : 'wss:';
+      if (url.port) {
+        targetUrl.port = url.port;
+      }
+      targetUrl.pathname = targetWsPath;
+      targetUrl.searchParams.append('session_id', sessionId);
+
+      // Pass complete target URL as query parameter
+      this.url.searchParams.append('target_url', targetUrl.href);
+    } else {
+      // Direct connection to Anam (original behavior)
+      const httpProtocol = url.protocol || 'https';
+      const initUrl = `${httpProtocol}://${url.baseUrl}`;
+      this.url = new URL(initUrl);
+      this.url.protocol = url.protocol === 'http' ? 'ws:' : 'wss:';
+      if (url.port) {
+        this.url.port = url.port;
+      }
+      this.url.pathname = url.signallingPath ?? '/ws';
+      this.url.searchParams.append('session_id', sessionId);
     }
-    this.url.pathname = url.signallingPath ?? '/ws';
-    this.url.searchParams.append('session_id', sessionId);
   }
 
   public stop() {
