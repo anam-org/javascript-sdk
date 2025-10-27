@@ -9,7 +9,7 @@ import {
   setMetricsContext,
 } from './lib/ClientMetrics';
 import { generateCorrelationId } from './lib/correlationId';
-import { validateProxyConfig } from './lib/validateProxyConfig';
+import { validateApiGatewayConfig } from './lib/validateApiGatewayConfig';
 import {
   CoreApiRestClient,
   InternalEventEmitter,
@@ -119,9 +119,9 @@ export default class AnamClient {
     }
 
     // Validate proxy configuration
-    const proxyError = validateProxyConfig(options?.api?.proxy);
-    if (proxyError) {
-      return proxyError;
+    const apiGatewayError = validateApiGatewayConfig(options?.api?.apiGateway);
+    if (apiGatewayError) {
+      return apiGatewayError;
     }
 
     // Validate persona configuration based on session token
@@ -233,7 +233,7 @@ export default class AnamClient {
             audioDeviceId: this.clientOptions?.audioDeviceId,
             disableInputAudio: this.clientOptions?.disableInputAudio,
           },
-          proxy: this.clientOptions?.api?.proxy,
+          apiGateway: this.clientOptions?.api?.apiGateway,
           metrics: {
             showPeerConnectionStatsReport:
               this.clientOptions?.metrics?.showPeerConnectionStatsReport ??

@@ -1,19 +1,23 @@
-import { ProxyConfig } from '../types/ProxyConfig';
+import { ApiGatewayConfig } from '../types/ApiGatewayConfig';
 
 export class EngineApiRestClient {
   private baseUrl: string;
   private sessionId: string;
-  private proxyConfig: ProxyConfig | undefined;
+  private apiGatewayConfig: ApiGatewayConfig | undefined;
 
-  constructor(baseUrl: string, sessionId: string, proxyConfig?: ProxyConfig) {
+  constructor(
+    baseUrl: string,
+    sessionId: string,
+    apiGatewayConfig?: ApiGatewayConfig,
+  ) {
     this.baseUrl = baseUrl;
     this.sessionId = sessionId;
-    this.proxyConfig = proxyConfig;
+    this.apiGatewayConfig = apiGatewayConfig;
   }
 
   public async sendTalkCommand(content: string): Promise<void> {
     try {
-      // Determine the URL and headers based on proxy configuration
+      // Determine the URL and headers based on API Gateway configuration
       let url: string;
       let headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -22,15 +26,11 @@ export class EngineApiRestClient {
       const targetPath = `/talk`;
       const queryString = `?session_id=${this.sessionId}`;
 
-      if (this.proxyConfig?.enabled && this.proxyConfig?.engine) {
-        // Use proxy base URL with same endpoint path
-        url = `${this.proxyConfig.engine}${targetPath}${queryString}`;
-        // Add standard forwarding headers
+      if (this.apiGatewayConfig?.enabled && this.apiGatewayConfig?.baseUrl) {
+        // Use gateway base URL with same endpoint path
+        url = `${this.apiGatewayConfig.baseUrl}${targetPath}${queryString}`;
+        // Add complete target URL header for gateway routing
         const targetUrl = new URL(`${this.baseUrl}${targetPath}${queryString}`);
-        headers['X-Forwarded-Host'] = targetUrl.host;
-        headers['X-Forwarded-Proto'] = targetUrl.protocol.slice(0, -1);
-        headers['X-Original-URI'] = `${targetPath}${queryString}`;
-        // full original target URL for convenience
         headers['X-Anam-Target-Url'] = targetUrl.href;
       } else {
         // Direct call to Anam engine

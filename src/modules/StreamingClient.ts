@@ -14,7 +14,7 @@ import {
   StreamingClientOptions,
   WebRtcTextMessageEvent,
   ConnectionClosedCode,
-  ProxyConfig,
+  ApiGatewayConfig,
 } from '../types';
 import { TalkMessageStream } from '../types/TalkMessageStream';
 import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
@@ -34,7 +34,7 @@ export class StreamingClient {
   private signallingClient: SignallingClient;
   private engineApiRestClient: EngineApiRestClient;
   private iceServers: RTCIceServer[];
-  private proxyConfig: ProxyConfig | undefined;
+  private apiGatewayConfig: ApiGatewayConfig | undefined;
   private peerConnection: RTCPeerConnection | null = null;
   private connectionReceivedAnswer = false;
   private remoteIceCandidateBuffer: RTCIceCandidate[] = [];
@@ -63,7 +63,7 @@ export class StreamingClient {
   ) {
     this.publicEventEmitter = publicEventEmitter;
     this.internalEventEmitter = internalEventEmitter;
-    this.proxyConfig = options.proxy;
+    this.apiGatewayConfig = options.apiGateway;
     // initialize input audio state
     const { inputAudio } = options;
     this.inputAudioState = inputAudio.inputAudioState;
@@ -88,13 +88,13 @@ export class StreamingClient {
       options.signalling,
       this.publicEventEmitter,
       this.internalEventEmitter,
-      this.proxyConfig,
+      this.apiGatewayConfig,
     );
     // initialize engine API client
     this.engineApiRestClient = new EngineApiRestClient(
       options.engine.baseUrl,
       sessionId,
-      this.proxyConfig,
+      this.apiGatewayConfig,
     );
     this.audioDeviceId = options.inputAudio.audioDeviceId;
     this.showPeerConnectionStatsReport =

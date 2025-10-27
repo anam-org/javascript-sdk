@@ -6,7 +6,7 @@ import {
   SignalMessageAction,
   SignallingClientOptions,
   ConnectionClosedCode,
-  ProxyConfig,
+  ApiGatewayConfig,
 } from '../types';
 import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamPayload';
 
@@ -25,18 +25,18 @@ export class SignallingClient {
   private wsConnectionAttempts = 0;
   private socket: WebSocket | null = null;
   private heartBeatIntervalRef: ReturnType<typeof setInterval> | null = null;
-  private proxyConfig: ProxyConfig | undefined;
+  private apiGatewayConfig: ApiGatewayConfig | undefined;
 
   constructor(
     sessionId: string,
     options: SignallingClientOptions,
     publicEventEmitter: PublicEventEmitter,
     internalEventEmitter: InternalEventEmitter,
-    proxyConfig?: ProxyConfig,
+    apiGatewayConfig?: ApiGatewayConfig,
   ) {
     this.publicEventEmitter = publicEventEmitter;
     this.internalEventEmitter = internalEventEmitter;
-    this.proxyConfig = proxyConfig;
+    this.apiGatewayConfig = apiGatewayConfig;
 
     if (!sessionId) {
       throw new Error('Signalling Client: sessionId is required');
@@ -56,29 +56,34 @@ export class SignallingClient {
       throw new Error('Signalling Client: baseUrl is required');
     }
 
-    // Construct WebSocket URL (with or without proxy)
-    if (this.proxyConfig?.enabled && this.proxyConfig?.websocket) {
-      // Use proxy WebSocket URL
-      this.url = new URL(this.proxyConfig.websocket);
-      this.url.searchParams.append('session_id', sessionId);
+    // Construct WebSocket URL (with or without API Gateway)
+    if (this.apiGatewayConfig?.enabled && this.apiGatewayConfig?.baseUrl) {
+      // Use API Gateway WebSocket URL
+      const gatewayUrl = new URL(this.apiGatewayConfig.baseUrl);
+      const wsPath = this.apiGatewayConfig.wsPath ?? '/ws';
 
-      // Add forwarding information as query parameters for proxy routing
+      // Construct gateway WebSocket URL
+      gatewayUrl.protocol = gatewayUrl.protocol.replace('http', 'ws');
+      gatewayUrl.pathname = wsPath;
+      this.url = gatewayUrl;
+
+      // Construct the complete target WebSocket URL and pass it as a query parameter
       const httpProtocol = url.protocol || 'https';
       const targetProtocol = httpProtocol === 'http' ? 'ws' : 'wss';
+      const httpUrl = `${httpProtocol}://${url.baseUrl}`;
+      const targetWsPath = url.signallingPath ?? '/ws';
 
-      // Parse baseUrl to extract just the hostname (it may contain path segments)
-      const tempUrl = new URL(`${httpProtocol}://${url.baseUrl}`);
-      const targetHost = tempUrl.hostname;
-      const targetPort = url.port || tempUrl.port;
-      const basePath = tempUrl.pathname !== '/' ? tempUrl.pathname : '';
-      const wsPath = basePath + (url.signallingPath ?? '/ws');
-
-      this.url.searchParams.append('x_forwarded_proto', targetProtocol);
-      this.url.searchParams.append('x_forwarded_host', targetHost);
-      if (targetPort && targetPort !== '80' && targetPort !== '443') {
-        this.url.searchParams.append('x_forwarded_port', targetPort);
+      // Build complete target URL
+      const targetUrl = new URL(httpUrl);
+      targetUrl.protocol = targetProtocol === 'ws' ? 'ws:' : 'wss:';
+      if (url.port) {
+        targetUrl.port = url.port;
       }
-      this.url.searchParams.append('x_original_uri', wsPath);
+      targetUrl.pathname = targetWsPath;
+      targetUrl.searchParams.append('session_id', sessionId);
+
+      // Pass complete target URL as query parameter
+      this.url.searchParams.append('target_url', targetUrl.href);
     } else {
       // Direct connection to Anam (original behavior)
       const httpProtocol = url.protocol || 'https';

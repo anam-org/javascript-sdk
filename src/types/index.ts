@@ -4,7 +4,7 @@ export { SignalMessageAction } from './signalling'; // need to export this expli
 export type * from './streaming';
 export type * from './coreApi';
 export type { PersonaConfig } from './PersonaConfig';
-export type { ProxyConfig } from './ProxyConfig';
+export type { ApiGatewayConfig } from './ApiGatewayConfig';
 export type { InputAudioState } from './InputAudioState';
 export { AudioPermissionState } from './InputAudioState';
 export type * from './messageHistory';

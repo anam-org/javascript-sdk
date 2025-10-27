@@ -8,7 +8,7 @@ import {
   ApiOptions,
   PersonaConfig,
   StartSessionResponse,
-  ProxyConfig,
+  ApiGatewayConfig,
 } from '../types';
 import { StartSessionOptions } from '../types/coreApi/StartSessionOptions';
 import { isCustomPersonaConfig } from '../types/PersonaConfig';
@@ -18,7 +18,7 @@ export class CoreApiRestClient {
   private apiVersion: string;
   private apiKey: string | null;
   private sessionToken: string | null;
-  private proxyConfig: ProxyConfig | undefined;
+  private apiGatewayConfig: ApiGatewayConfig | undefined;
 
   constructor(sessionToken?: string, apiKey?: string, options?: ApiOptions) {
     if (!sessionToken && !apiKey) {
@@ -28,26 +28,23 @@ export class CoreApiRestClient {
     this.apiKey = apiKey || null;
     this.baseUrl = options?.baseUrl || DEFAULT_API_BASE_URL;
     this.apiVersion = options?.apiVersion || DEFAULT_API_VERSION;
-    this.proxyConfig = options?.proxy || undefined;
+    this.apiGatewayConfig = options?.apiGateway || undefined;
   }
 
   /**
-   * Builds URL and headers for a request, applying proxy configuration if enabled
+   * Builds URL and headers for a request, applying API Gateway configuration if enabled
    */
-  private buildProxiedUrlAndHeaders(
+  private buildGatewayUrlAndHeaders(
     targetPath: string,
     baseHeaders: Record<string, string>,
   ): { url: string; headers: Record<string, string> } {
-    if (this.proxyConfig?.enabled && this.proxyConfig?.api) {
-      // Use proxy base URL with same endpoint path
-      const url = `${this.proxyConfig.api}${targetPath}`;
-      // Add standard forwarding headers
+    if (this.apiGatewayConfig?.enabled && this.apiGatewayConfig?.baseUrl) {
+      // Use gateway base URL with same endpoint path
+      const url = `${this.apiGatewayConfig.baseUrl}${targetPath}`;
+      // Add complete target URL header for gateway routing
       const targetUrl = new URL(`${this.baseUrl}${targetPath}`);
       const headers = {
         ...baseHeaders,
-        'X-Forwarded-Host': targetUrl.host,
-        'X-Forwarded-Proto': targetUrl.protocol.slice(0, -1),
-        'X-Original-URI': targetPath,
         'X-Anam-Target-Url': targetUrl.href,
       };
       return { url, headers };
@@ -84,7 +81,7 @@ export class CoreApiRestClient {
 
     try {
       const targetPath = `${this.apiVersion}/engine/session`;
-      const { url, headers } = this.buildProxiedUrlAndHeaders(targetPath, {
+      const { url, headers } = this.buildGatewayUrlAndHeaders(targetPath, {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.sessionToken}`,
       });
@@ -211,7 +208,7 @@ export class CoreApiRestClient {
     }
     try {
       const targetPath = `${this.apiVersion}/auth/session-token`;
-      const { url, headers } = this.buildProxiedUrlAndHeaders(targetPath, {
+      const { url, headers } = this.buildGatewayUrlAndHeaders(targetPath, {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.apiKey}`,
       });

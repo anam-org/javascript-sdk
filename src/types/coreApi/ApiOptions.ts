@@ -1,7 +1,7 @@
-import { ProxyConfig } from '../ProxyConfig';
+import { ApiGatewayConfig } from '../ApiGatewayConfig';
 
 export interface ApiOptions {
   baseUrl?: string;
   apiVersion?: string;
-  proxy?: ProxyConfig;
+  apiGateway?: ApiGatewayConfig;
 }

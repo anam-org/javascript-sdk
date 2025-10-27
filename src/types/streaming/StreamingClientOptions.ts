@@ -1,14 +1,14 @@
 import { SignallingClientOptions } from '../../types';
 import { EngineApiRestClientOptions } from '../engineApi/EngineApiRestClientOptions';
 import { InputAudioOptions } from './InputAudioOptions';
-import { ProxyConfig } from '../ProxyConfig';
+import { ApiGatewayConfig } from '../ApiGatewayConfig';
 
 export interface StreamingClientOptions {
   engine: EngineApiRestClientOptions;
   signalling: SignallingClientOptions;
   iceServers: RTCIceServer[];
   inputAudio: InputAudioOptions;
-  proxy?: ProxyConfig;
+  apiGateway?: ApiGatewayConfig;
   metrics?: {
     showPeerConnectionStatsReport?: boolean;
     peerConnectionStatsReportOutputFormat?: 'console' | 'json';
