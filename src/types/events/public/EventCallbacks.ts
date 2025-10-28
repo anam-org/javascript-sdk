@@ -3,8 +3,7 @@ import {
   Message,
   MessageStreamEvent,
   AnamEvent,
-  ToolCallEvent,
-  ClientEventEvent,
+  ClientToolEvent,
 } from '../../index';
 
 export type EventCallbacks = {
@@ -28,6 +27,7 @@ export type EventCallbacks = {
   [AnamEvent.MIC_PERMISSION_GRANTED]: () => void;
   [AnamEvent.MIC_PERMISSION_DENIED]: (error: string) => void;
   [AnamEvent.INPUT_AUDIO_DEVICE_CHANGED]: (deviceId: string) => void;
-  [AnamEvent.TOOL_CALL_RECEIVED]: (toolCall: ToolCallEvent) => void;
-  [AnamEvent.CLIENT_EVENT_RECEIVED]: (clientEvent: ClientEventEvent) => void;
+  [AnamEvent.CLIENT_TOOL_EVENT_RECEIVED]: (
+    clientToolEvent: ClientToolEvent,
+  ) => void;
 };

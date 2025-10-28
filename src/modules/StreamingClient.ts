@@ -13,7 +13,7 @@ import {
   AnamEvent,
   ApiGatewayConfig,
   AudioPermissionState,
-  ClientEventEvent,
+  ClientToolEvent,
   ConnectionClosedCode,
   DataChannelMessage,
   InputAudioState,
@@ -21,7 +21,6 @@ import {
   SignalMessage,
   SignalMessageAction,
   StreamingClientOptions,
-  ToolCallEvent,
   WebRtcTextMessageEvent,
 } from '../types';
 import { TalkMessageStream } from '../types/TalkMessageStream';
@@ -673,24 +672,14 @@ export class StreamingClient {
               message.data as WebRtcTextMessageEvent,
             );
             break;
-          case DataChannelMessage.TOOL_CALL:
+          case DataChannelMessage.CLIENT_TOOL_EVENT:
             this.internalEventEmitter.emit(
-              InternalEvent.WEBRTC_TOOL_CALL_RECEIVED,
-              message.data as ToolCallEvent,
+              InternalEvent.WEBRTC_CLIENT_TOOL_EVENT_RECEIVED,
+              message.data as ClientToolEvent,
             );
             this.publicEventEmitter.emit(
-              AnamEvent.TOOL_CALL_RECEIVED,
-              message.data as ToolCallEvent,
-            );
-            break;
-          case DataChannelMessage.CLIENT_EVENT:
-            this.internalEventEmitter.emit(
-              InternalEvent.WEBRTC_CLIENT_EVENT_RECEIVED,
-              message.data as ClientEventEvent,
-            );
-            this.publicEventEmitter.emit(
-              AnamEvent.CLIENT_EVENT_RECEIVED,
-              message.data as ClientEventEvent,
+              AnamEvent.CLIENT_TOOL_EVENT_RECEIVED,
+              message.data as ClientToolEvent,
             );
             break;
           // Unknown message types are silently ignored to maintain forward compatibility
