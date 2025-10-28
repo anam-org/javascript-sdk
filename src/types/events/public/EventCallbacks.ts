@@ -1,5 +1,11 @@
 import { ConnectionClosedCode } from './ConnectionClosedCodes';
-import { Message, MessageStreamEvent, AnamEvent } from '../../index';
+import {
+  Message,
+  MessageStreamEvent,
+  AnamEvent,
+  ToolCallEvent,
+  ClientEventEvent,
+} from '../../index';
 
 export type EventCallbacks = {
   [AnamEvent.MESSAGE_HISTORY_UPDATED]: (messages: Message[]) => void;
@@ -22,4 +28,6 @@ export type EventCallbacks = {
   [AnamEvent.MIC_PERMISSION_GRANTED]: () => void;
   [AnamEvent.MIC_PERMISSION_DENIED]: (error: string) => void;
   [AnamEvent.INPUT_AUDIO_DEVICE_CHANGED]: (deviceId: string) => void;
+  [AnamEvent.TOOL_CALL_RECEIVED]: (toolCall: ToolCallEvent) => void;
+  [AnamEvent.CLIENT_EVENT_RECEIVED]: (clientEvent: ClientEventEvent) => void;
 };

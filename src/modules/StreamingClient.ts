@@ -1,4 +1,9 @@
 import {
+  ClientMetricMeasurement,
+  createRTCStatsReport,
+  sendClientMetric,
+} from '../lib/ClientMetrics';
+import {
   EngineApiRestClient,
   InternalEventEmitter,
   PublicEventEmitter,
@@ -6,24 +11,21 @@ import {
 } from '../modules';
 import {
   AnamEvent,
-  InputAudioState,
+  ApiGatewayConfig,
   AudioPermissionState,
+  ClientEventEvent,
+  ConnectionClosedCode,
+  DataChannelMessage,
+  InputAudioState,
   InternalEvent,
   SignalMessage,
   SignalMessageAction,
   StreamingClientOptions,
+  ToolCallEvent,
   WebRtcTextMessageEvent,
-  ConnectionClosedCode,
-  ApiGatewayConfig,
-  DataChannelMessage,
 } from '../types';
 import { TalkMessageStream } from '../types/TalkMessageStream';
 import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
-import {
-  ClientMetricMeasurement,
-  createRTCStatsReport,
-  sendClientMetric,
-} from '../lib/ClientMetrics';
 
 const SUCCESS_METRIC_POLLING_TIMEOUT_MS = 15000; // After this time we will stop polling for the first frame and consider the session a failure.
 const STATS_COLLECTION_INTERVAL_MS = 5000;
@@ -669,6 +671,26 @@ export class StreamingClient {
             this.internalEventEmitter.emit(
               InternalEvent.WEBRTC_CHAT_MESSAGE_RECEIVED,
               message.data as WebRtcTextMessageEvent,
+            );
+            break;
+          case DataChannelMessage.TOOL_CALL:
+            this.internalEventEmitter.emit(
+              InternalEvent.WEBRTC_TOOL_CALL_RECEIVED,
+              message.data as ToolCallEvent,
+            );
+            this.publicEventEmitter.emit(
+              AnamEvent.TOOL_CALL_RECEIVED,
+              message.data as ToolCallEvent,
+            );
+            break;
+          case DataChannelMessage.CLIENT_EVENT:
+            this.internalEventEmitter.emit(
+              InternalEvent.WEBRTC_CLIENT_EVENT_RECEIVED,
+              message.data as ClientEventEvent,
+            );
+            this.publicEventEmitter.emit(
+              AnamEvent.CLIENT_EVENT_RECEIVED,
+              message.data as ClientEventEvent,
             );
             break;
           // Unknown message types are silently ignored to maintain forward compatibility
