@@ -1,29 +1,32 @@
 import {
-  EngineApiRestClient,
-  InternalEventEmitter,
-  PublicEventEmitter,
-  SignallingClient,
-} from '../modules';
-import {
-  AnamEvent,
-  InputAudioState,
-  AudioPermissionState,
-  InternalEvent,
-  SignalMessage,
-  SignalMessageAction,
-  StreamingClientOptions,
-  WebRtcTextMessageEvent,
-  ConnectionClosedCode,
-  ApiGatewayConfig,
-  DataChannelMessage,
-} from '../types';
-import { TalkMessageStream } from '../types/TalkMessageStream';
-import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
-import {
   ClientMetricMeasurement,
   createRTCStatsReport,
   sendClientMetric,
 } from '../lib/ClientMetrics';
+import {
+  EngineApiRestClient,
+  InternalEventEmitter,
+  PublicEventEmitter,
+  SignallingClient,
+  ToolCallManager,
+} from '../modules';
+import {
+  AnamEvent,
+  ApiGatewayConfig,
+  AudioPermissionState,
+  ClientToolEvent,
+  ConnectionClosedCode,
+  DataChannelMessage,
+  InputAudioState,
+  InternalEvent,
+  SignalMessage,
+  SignalMessageAction,
+  StreamingClientOptions,
+  WebRtcClientToolEvent,
+  WebRtcTextMessageEvent,
+} from '../types';
+import { TalkMessageStream } from '../types/TalkMessageStream';
+import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
 
 const SUCCESS_METRIC_POLLING_TIMEOUT_MS = 15000; // After this time we will stop polling for the first frame and consider the session a failure.
 const STATS_COLLECTION_INTERVAL_MS = 5000;
@@ -669,6 +672,22 @@ export class StreamingClient {
             this.internalEventEmitter.emit(
               InternalEvent.WEBRTC_CHAT_MESSAGE_RECEIVED,
               message.data as WebRtcTextMessageEvent,
+            );
+            break;
+          case DataChannelMessage.CLIENT_TOOL_EVENT:
+            const webRtcToolEvent = message.data as WebRtcClientToolEvent;
+
+            this.internalEventEmitter.emit(
+              InternalEvent.WEBRTC_CLIENT_TOOL_EVENT_RECEIVED,
+              webRtcToolEvent,
+            );
+            const clientToolEvent =
+              ToolCallManager.WebRTCClientToolEventToClientToolEvent(
+                webRtcToolEvent,
+              );
+            this.publicEventEmitter.emit(
+              AnamEvent.CLIENT_TOOL_EVENT_RECEIVED,
+              clientToolEvent,
             );
             break;
           // Unknown message types are silently ignored to maintain forward compatibility

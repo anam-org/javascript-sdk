@@ -5,3 +5,4 @@ export { InternalEventEmitter } from './InternalEventEmitter';
 export { MessageHistoryClient } from './MessageHistoryClient';
 export { PublicEventEmitter } from './PublicEventEmitter';
 export { StreamingClient } from './StreamingClient';
+export { ToolCallManager } from './ToolCallManager';
