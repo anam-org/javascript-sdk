@@ -8,6 +8,7 @@ import {
   InternalEventEmitter,
   PublicEventEmitter,
   SignallingClient,
+  ToolCallManager,
 } from '../modules';
 import {
   AnamEvent,
@@ -21,6 +22,7 @@ import {
   SignalMessage,
   SignalMessageAction,
   StreamingClientOptions,
+  WebRtcClientToolEvent,
   WebRtcTextMessageEvent,
 } from '../types';
 import { TalkMessageStream } from '../types/TalkMessageStream';
@@ -673,13 +675,19 @@ export class StreamingClient {
             );
             break;
           case DataChannelMessage.CLIENT_TOOL_EVENT:
+            const webRtcToolEvent = message.data as WebRtcClientToolEvent;
+
             this.internalEventEmitter.emit(
               InternalEvent.WEBRTC_CLIENT_TOOL_EVENT_RECEIVED,
-              message.data as ClientToolEvent,
+              webRtcToolEvent,
             );
+            const clientToolEvent =
+              ToolCallManager.WebRTCClientToolEventToClientToolEvent(
+                webRtcToolEvent,
+              );
             this.publicEventEmitter.emit(
               AnamEvent.CLIENT_TOOL_EVENT_RECEIVED,
-              message.data as ClientToolEvent,
+              clientToolEvent,
             );
             break;
           // Unknown message types are silently ignored to maintain forward compatibility
