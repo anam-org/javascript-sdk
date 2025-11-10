@@ -200,13 +200,21 @@ export default class AnamClient {
       engineProtocol,
       signallingEndpoint,
     } = response;
-    const { heartbeatIntervalSeconds, maxWsReconnectionAttempts, iceServers } =
-      clientConfig;
+    const {
+      heartbeatIntervalSeconds,
+      maxWsReconnectionAttempts,
+      iceServers: defaultIceServers,
+    } = clientConfig;
 
     this.sessionId = sessionId;
     setMetricsContext({
       sessionId: this.sessionId,
     });
+
+    // Use custom TURN server if provided, otherwise use server-provided ICE servers
+    const iceServers = this.clientOptions?.customTurnServers
+      ? this.clientOptions.customTurnServers
+      : defaultIceServers;
 
     try {
       this.streamingClient = new StreamingClient(
