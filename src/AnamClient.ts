@@ -212,8 +212,8 @@ export default class AnamClient {
     });
 
     // Use custom TURN server if provided, otherwise use server-provided ICE servers
-    const iceServers = this.clientOptions?.customTurnServers
-      ? this.clientOptions.customTurnServers
+    const iceServers = this.clientOptions?.iceServers
+      ? this.clientOptions.iceServers
       : defaultIceServers;
 
     try {
