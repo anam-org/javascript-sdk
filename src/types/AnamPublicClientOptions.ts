@@ -10,4 +10,5 @@ export interface AnamPublicClientOptions {
     showPeerConnectionStatsReport?: boolean;
     peerConnectionStatsReportOutputFormat?: 'console' | 'json';
   };
+  iceServers?: RTCIceServer[];
 }
