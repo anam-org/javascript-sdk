@@ -502,8 +502,10 @@ export class StreamingClient {
         const sessionId = signalMessage.sessionId as string;
         this.publicEventEmitter.emit(AnamEvent.SESSION_READY, sessionId);
         break;
+      case SignalMessageAction.HEARTBEAT:
+        break;
       default:
-        console.error(
+        console.warn(
           'StreamingClient - onSignalMessage: unknown signal message action type. Is your anam-sdk version up to date?',
           signalMessage,
         );
