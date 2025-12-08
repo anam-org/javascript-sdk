@@ -5,6 +5,7 @@ import {
   DEFAULT_ANAM_API_VERSION,
   DEFAULT_ANAM_METRICS_BASE_URL,
   sendClientMetric,
+  setClientMetricsApiGateway,
   setClientMetricsBaseUrl,
   setMetricsContext,
 } from './lib/ClientMetrics';
@@ -76,6 +77,11 @@ export default class AnamClient {
         options.api.baseUrl || DEFAULT_ANAM_METRICS_BASE_URL,
         options.api.apiVersion || DEFAULT_ANAM_API_VERSION,
       );
+    }
+
+    // Pass API Gateway config to metrics module so metrics are routed through the gateway
+    if (options?.api?.apiGateway?.enabled) {
+      setClientMetricsApiGateway(options.api.apiGateway);
     }
 
     this.publicEventEmitter = new PublicEventEmitter();

@@ -1,4 +1,5 @@
 import { CLIENT_METADATA } from './constants';
+import { ApiGatewayConfig } from '../types/ApiGatewayConfig';
 
 export const DEFAULT_ANAM_METRICS_BASE_URL = 'https://api.anam.ai';
 export const DEFAULT_ANAM_API_VERSION = '/v1';
@@ -13,6 +14,7 @@ export enum ClientMetricMeasurement {
 
 let anamCurrentBaseUrl = DEFAULT_ANAM_METRICS_BASE_URL;
 let anamCurrentApiVersion = DEFAULT_ANAM_API_VERSION;
+let apiGatewayConfig: ApiGatewayConfig | undefined;
 
 export const setClientMetricsBaseUrl = (
   baseUrl: string,
@@ -20,6 +22,12 @@ export const setClientMetricsBaseUrl = (
 ) => {
   anamCurrentBaseUrl = baseUrl;
   anamCurrentApiVersion = apiVersion;
+};
+
+export const setClientMetricsApiGateway = (
+  config: ApiGatewayConfig | undefined,
+) => {
+  apiGatewayConfig = config;
 };
 
 export interface AnamMetricsContext {
@@ -60,20 +68,31 @@ export const sendClientMetric = async (
       metricTags.attemptCorrelationId = anamMetricsContext.attemptCorrelationId;
     }
 
-    await fetch(
-      `${anamCurrentBaseUrl}${anamCurrentApiVersion}/metrics/client`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name,
-          value,
-          tags: metricTags,
-        }),
-      },
-    );
+    // Determine URL and headers based on API Gateway configuration
+    const targetPath = `${anamCurrentApiVersion}/metrics/client`;
+    let url: string;
+    let headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (apiGatewayConfig?.enabled && apiGatewayConfig?.baseUrl) {
+      // Route through gateway
+      url = `${apiGatewayConfig.baseUrl}${targetPath}`;
+      headers['X-Anam-Target-Url'] = `${anamCurrentBaseUrl}${targetPath}`;
+    } else {
+      // Direct call to Anam API
+      url = `${anamCurrentBaseUrl}${targetPath}`;
+    }
+
+    await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        name,
+        value,
+        tags: metricTags,
+      }),
+    });
   } catch (error) {
     console.error('Failed to send error metric:', error);
   }
