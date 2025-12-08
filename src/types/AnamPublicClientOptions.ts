@@ -9,6 +9,12 @@ export interface AnamPublicClientOptions {
   metrics?: {
     showPeerConnectionStatsReport?: boolean;
     peerConnectionStatsReportOutputFormat?: 'console' | 'json';
+    /**
+     * When true, disables sending client metrics to Anam's telemetry endpoint.
+     * Useful for privacy-conscious deployments or air-gapped environments.
+     * @default false
+     */
+    disableClientMetrics?: boolean;
   };
   iceServers?: RTCIceServer[];
 }

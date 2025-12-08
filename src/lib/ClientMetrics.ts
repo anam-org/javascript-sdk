@@ -15,6 +15,7 @@ export enum ClientMetricMeasurement {
 let anamCurrentBaseUrl = DEFAULT_ANAM_METRICS_BASE_URL;
 let anamCurrentApiVersion = DEFAULT_ANAM_API_VERSION;
 let apiGatewayConfig: ApiGatewayConfig | undefined;
+let metricsDisabled = false;
 
 export const setClientMetricsBaseUrl = (
   baseUrl: string,
@@ -28,6 +29,10 @@ export const setClientMetricsApiGateway = (
   config: ApiGatewayConfig | undefined,
 ) => {
   apiGatewayConfig = config;
+};
+
+export const setClientMetricsDisabled = (disabled: boolean) => {
+  metricsDisabled = disabled;
 };
 
 export interface AnamMetricsContext {
@@ -51,6 +56,11 @@ export const sendClientMetric = async (
   value: string,
   tags?: Record<string, string | number>,
 ) => {
+  // Skip sending metrics if disabled
+  if (metricsDisabled) {
+    return;
+  }
+
   try {
     const metricTags: Record<string, string | number> = {
       ...CLIENT_METADATA,

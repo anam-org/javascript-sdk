@@ -7,6 +7,7 @@ import {
   sendClientMetric,
   setClientMetricsApiGateway,
   setClientMetricsBaseUrl,
+  setClientMetricsDisabled,
   setMetricsContext,
 } from './lib/ClientMetrics';
 import { generateCorrelationId } from './lib/correlationId';
@@ -82,6 +83,11 @@ export default class AnamClient {
     // Pass API Gateway config to metrics module so metrics are routed through the gateway
     if (options?.api?.apiGateway?.enabled) {
       setClientMetricsApiGateway(options.api.apiGateway);
+    }
+
+    // Allow disabling client metrics telemetry
+    if (options?.metrics?.disableClientMetrics) {
+      setClientMetricsDisabled(true);
     }
 
     this.publicEventEmitter = new PublicEventEmitter();
