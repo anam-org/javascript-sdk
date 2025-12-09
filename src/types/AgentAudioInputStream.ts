@@ -1,0 +1,68 @@
+import { SignallingClient } from '../modules/SignallingClient';
+import { AgentAudioInputConfig } from './signalling/AgentAudioInputConfig';
+import { AgentAudioInputPayload } from './signalling/AgentAudioInputPayload';
+
+export class AgentAudioInputStream {
+  private signallingClient: SignallingClient;
+  private config: AgentAudioInputConfig;
+  private sequenceNumber: number = 0;
+
+  constructor(
+    config: AgentAudioInputConfig,
+    signallingClient: SignallingClient,
+  ) {
+    this.config = config;
+    this.signallingClient = signallingClient;
+  }
+
+  /**
+   * Send PCM audio chunk to server.
+   * @param audioData - Raw PCM audio bytes (ArrayBuffer/Uint8Array) or base64-encoded string
+   */
+  public sendAudioChunk(audioData: ArrayBuffer | Uint8Array | string): void {
+    const base64 =
+      typeof audioData === 'string'
+        ? audioData
+        : this.arrayBufferToBase64(audioData);
+
+    const payload: AgentAudioInputPayload = {
+      audioData: base64,
+      encoding: this.config.encoding,
+      sampleRate: this.config.sampleRate,
+      channels: this.config.channels,
+      sequenceNumber: this.sequenceNumber++,
+    };
+
+    this.signallingClient.sendAgentAudioInput(payload);
+  }
+
+  /**
+   * Signal end of the current audio sequence/turn.
+   * Sends AGENT_AUDIO_INPUT_END signal message and resets sequence number.
+   */
+  public endSequence(): void {
+    this.signallingClient.sendAgentAudioInputEnd();
+    this.sequenceNumber = 0;
+  }
+
+  /**
+   * Get the current sequence number (number of chunks sent in current sequence).
+   */
+  public getSequenceNumber(): number {
+    return this.sequenceNumber;
+  }
+
+  /**
+   * Get the audio format configuration for this stream.
+   */
+  public getConfig(): AgentAudioInputConfig {
+    return this.config;
+  }
+
+  private arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
+    const bytes =
+      buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+    const binary = Array.from(bytes, byte => String.fromCharCode(byte)).join('');
+    return btoa(binary);
+  }
+}

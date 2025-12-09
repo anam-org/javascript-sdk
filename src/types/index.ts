@@ -14,3 +14,4 @@ export type * from './events';
 export { AnamEvent } from './events'; // need to export this explicitly to avoid enum import issues
 export { InternalEvent } from './events'; // need to export this explicitly to avoid enum import issues
 export { ConnectionClosedCode } from './events'; // need to export this explicitly to avoid enum import issues
+export { AgentAudioInputStream } from './AgentAudioInputStream';

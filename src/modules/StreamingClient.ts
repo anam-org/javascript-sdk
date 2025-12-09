@@ -13,6 +13,7 @@ import {
 import {
   AnamEvent,
   ApiGatewayConfig,
+  AgentAudioInputConfig,
   AudioPermissionState,
   ClientToolEvent,
   ConnectionClosedCode,
@@ -25,6 +26,7 @@ import {
   WebRtcClientToolEvent,
   WebRtcTextMessageEvent,
 } from '../types';
+import { AgentAudioInputStream } from '../types/AgentAudioInputStream';
 import { TalkMessageStream } from '../types/TalkMessageStream';
 import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
 
@@ -58,6 +60,7 @@ export class StreamingClient {
   private showPeerConnectionStatsReport: boolean = false;
   private peerConnectionStatsReportOutputFormat: 'console' | 'json' = 'console';
   private statsCollectionInterval: ReturnType<typeof setInterval> | null = null;
+  private agentAudioInputStream: AgentAudioInputStream | null = null;
 
   constructor(
     sessionId: string,
@@ -409,6 +412,20 @@ export class StreamingClient {
       this.internalEventEmitter,
       this.signallingClient,
     );
+  }
+
+  public createAgentAudioInputStream(
+    config: AgentAudioInputConfig,
+  ): AgentAudioInputStream {
+    this.agentAudioInputStream = new AgentAudioInputStream(
+      config,
+      this.signallingClient,
+    );
+    return this.agentAudioInputStream;
+  }
+
+  public getAgentAudioInputStream(): AgentAudioInputStream | null {
+    return this.agentAudioInputStream;
   }
 
   private async initPeerConnection() {

@@ -22,6 +22,7 @@ import {
 import {
   AnamClientOptions,
   AnamEvent,
+  AgentAudioInputConfig,
   AudioPermissionState,
   ConnectionClosedCode,
   EventCallbacks,
@@ -30,6 +31,7 @@ import {
   StartSessionOptions,
   StartSessionResponse,
 } from './types';
+import { AgentAudioInputStream } from './types/AgentAudioInputStream';
 import { TalkMessageStream } from './types/TalkMessageStream';
 export default class AnamClient {
   private publicEventEmitter: PublicEventEmitter;
@@ -612,6 +614,17 @@ export default class AnamClient {
     }
 
     return this.streamingClient.startTalkMessageStream(correlationId);
+  }
+
+  public createAgentAudioInputStream(
+    config: AgentAudioInputConfig,
+  ): AgentAudioInputStream {
+    if (!this.streamingClient) {
+      throw new Error(
+        'Failed to create agent audio input stream: session is not started.',
+      );
+    }
+    return this.streamingClient.createAgentAudioInputStream(config);
   }
 
   /**
