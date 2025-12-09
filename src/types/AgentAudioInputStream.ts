@@ -16,10 +16,13 @@ export class AgentAudioInputStream {
 
   /**
    * Send PCM audio chunk to server.
-   * @param audioData - Raw PCM audio bytes
+   * @param audioData - Raw PCM audio bytes (ArrayBuffer/Uint8Array) or base64-encoded string
    */
-  public sendAudioChunk(audioData: ArrayBuffer | Uint8Array): void {
-    const base64 = this.arrayBufferToBase64(audioData);
+  public sendAudioChunk(audioData: ArrayBuffer | Uint8Array | string): void {
+    const base64 =
+      typeof audioData === 'string'
+        ? audioData
+        : this.arrayBufferToBase64(audioData);
 
     const payload: AgentAudioInputPayload = {
       audioData: base64,
