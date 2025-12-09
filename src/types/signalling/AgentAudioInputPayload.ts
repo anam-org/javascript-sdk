@@ -3,7 +3,7 @@ export interface AgentAudioInputPayload {
   audioData: string;
 
   /** 'pcm_s16le' (16-bit signed) or 'pcm_f32le' (32-bit float) */
-  encoding: string;
+  encoding: 'pcm_s16le' | 'pcm_f32le';
 
   /** Sample rate in Hz (e.g., 16000, 24000, 44100) */
   sampleRate: number;
