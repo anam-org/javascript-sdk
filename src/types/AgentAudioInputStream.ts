@@ -5,6 +5,7 @@ import { AgentAudioInputPayload } from './signalling/AgentAudioInputPayload';
 export class AgentAudioInputStream {
   private signallingClient: SignallingClient;
   private config: AgentAudioInputConfig;
+  private sequenceNumber: number = 0;
 
   constructor(
     config: AgentAudioInputConfig,
@@ -29,6 +30,7 @@ export class AgentAudioInputStream {
       encoding: this.config.encoding,
       sampleRate: this.config.sampleRate,
       channels: this.config.channels,
+      sequenceNumber: this.sequenceNumber++,
     };
 
     this.signallingClient.sendAgentAudioInput(payload);
@@ -36,10 +38,18 @@ export class AgentAudioInputStream {
 
   /**
    * Signal end of the current audio sequence/turn.
-   * Sends AGENT_AUDIO_INPUT_END signal message.
+   * Sends AGENT_AUDIO_INPUT_END signal message and resets sequence number.
    */
   public endSequence(): void {
     this.signallingClient.sendAgentAudioInputEnd();
+    this.sequenceNumber = 0;
+  }
+
+  /**
+   * Get the current sequence number (number of chunks sent in current sequence).
+   */
+  public getSequenceNumber(): number {
+    return this.sequenceNumber;
   }
 
   /**

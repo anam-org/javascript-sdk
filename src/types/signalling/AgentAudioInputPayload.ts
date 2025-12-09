@@ -10,4 +10,7 @@ export interface AgentAudioInputPayload {
 
   /** 1 = mono, 2 = stereo */
   channels: number;
+
+  /** Sequence number for ordering (starts at 0, resets on endSequence) */
+  sequenceNumber: number;
 }
