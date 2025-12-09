@@ -616,29 +616,6 @@ export default class AnamClient {
     return this.streamingClient.startTalkMessageStream(correlationId);
   }
 
-  /**
-   * Create agent audio input stream for sending external audio to engine.
-   * Call once after session starts. Stream persists for session lifetime.
-   *
-   * @param config - Audio format configuration (encoding, sampleRate, channels)
-   * @returns AgentAudioInputStream instance for sending audio chunks
-   * @throws Error if session is not started
-   *
-   * @example
-   * ```typescript
-   * const stream = client.createAgentAudioInputStream({
-   *   encoding: 'pcm_s16le',
-   *   sampleRate: 24000,
-   *   channels: 1,
-   * });
-   *
-   * // Send audio as it arrives
-   * stream.sendAudioChunk(pcmAudioData);
-   *
-   * // Signal end of sequence
-   * stream.endSequence();
-   * ```
-   */
   public createAgentAudioInputStream(
     config: AgentAudioInputConfig,
   ): AgentAudioInputStream {
