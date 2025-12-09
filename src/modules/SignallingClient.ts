@@ -7,6 +7,7 @@ import {
   SignallingClientOptions,
   ConnectionClosedCode,
   ApiGatewayConfig,
+  AgentAudioInputPayload,
 } from '../types';
 import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamPayload';
 
@@ -155,6 +156,24 @@ export class SignallingClient {
       payload: payload,
     };
     this.sendSignalMessage(chatMessage);
+  }
+
+  public sendAgentAudioInput(payload: AgentAudioInputPayload): void {
+    const message: SignalMessage = {
+      actionType: SignalMessageAction.AGENT_AUDIO_INPUT,
+      sessionId: this.sessionId,
+      payload: payload,
+    };
+    this.sendSignalMessage(message);
+  }
+
+  public sendAgentAudioInputEnd(): void {
+    const message: SignalMessage = {
+      actionType: SignalMessageAction.AGENT_AUDIO_INPUT_END,
+      sessionId: this.sessionId,
+      payload: {},
+    };
+    this.sendSignalMessage(message);
   }
 
   private closeSocket() {

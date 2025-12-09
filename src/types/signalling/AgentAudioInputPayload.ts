@@ -1,0 +1,13 @@
+export interface AgentAudioInputPayload {
+  /** Base64-encoded PCM audio data */
+  audioData: string;
+
+  /** 'pcm_s16le' (16-bit signed) or 'pcm_f32le' (32-bit float) */
+  encoding: string;
+
+  /** Sample rate in Hz (e.g., 16000, 24000, 44100) */
+  sampleRate: number;
+
+  /** 1 = mono, 2 = stereo */
+  channels: number;
+}
