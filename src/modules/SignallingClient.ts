@@ -6,6 +6,8 @@ import {
   SignalMessageAction,
   SignallingClientOptions,
   ConnectionClosedCode,
+  ApiGatewayConfig,
+  AgentAudioInputPayload,
 } from '../types';
 import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamPayload';
 
@@ -24,15 +26,18 @@ export class SignallingClient {
   private wsConnectionAttempts = 0;
   private socket: WebSocket | null = null;
   private heartBeatIntervalRef: ReturnType<typeof setInterval> | null = null;
+  private apiGatewayConfig: ApiGatewayConfig | undefined;
 
   constructor(
     sessionId: string,
     options: SignallingClientOptions,
     publicEventEmitter: PublicEventEmitter,
     internalEventEmitter: InternalEventEmitter,
+    apiGatewayConfig?: ApiGatewayConfig,
   ) {
     this.publicEventEmitter = publicEventEmitter;
     this.internalEventEmitter = internalEventEmitter;
+    this.apiGatewayConfig = apiGatewayConfig;
 
     if (!sessionId) {
       throw new Error('Signalling Client: sessionId is required');
@@ -67,6 +72,17 @@ export class SignallingClient {
       }
       this.url.pathname = url.signallingPath ?? '/ws';
       this.url.searchParams.append('session_id', sessionId);
+
+      // If API Gateway is enabled, wrap the URL for gateway routing
+      if (this.apiGatewayConfig?.enabled && this.apiGatewayConfig?.baseUrl) {
+        const targetUrl = this.url.href;
+        const gatewayUrl = new URL(this.apiGatewayConfig.baseUrl);
+        const wsPath = this.apiGatewayConfig.wsPath ?? '/ws';
+        gatewayUrl.protocol = gatewayUrl.protocol.replace('http', 'ws');
+        gatewayUrl.pathname = wsPath;
+        gatewayUrl.searchParams.append('target_url', targetUrl);
+        this.url = gatewayUrl;
+      }
     }
   }
 
@@ -127,6 +143,24 @@ export class SignallingClient {
       payload: payload,
     };
     this.sendSignalMessage(chatMessage);
+  }
+
+  public sendAgentAudioInput(payload: AgentAudioInputPayload): void {
+    const message: SignalMessage = {
+      actionType: SignalMessageAction.AGENT_AUDIO_INPUT,
+      sessionId: this.sessionId,
+      payload: payload,
+    };
+    this.sendSignalMessage(message);
+  }
+
+  public sendAgentAudioInputEnd(): void {
+    const message: SignalMessage = {
+      actionType: SignalMessageAction.AGENT_AUDIO_INPUT_END,
+      sessionId: this.sessionId,
+      payload: {},
+    };
+    this.sendSignalMessage(message);
   }
 
   /**

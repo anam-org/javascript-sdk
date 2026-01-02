@@ -5,10 +5,13 @@ import {
   DEFAULT_ANAM_API_VERSION,
   DEFAULT_ANAM_METRICS_BASE_URL,
   sendClientMetric,
+  setClientMetricsApiGateway,
   setClientMetricsBaseUrl,
+  setClientMetricsDisabled,
   setMetricsContext,
 } from './lib/ClientMetrics';
 import { generateCorrelationId } from './lib/correlationId';
+import { validateApiGatewayConfig } from './lib/validateApiGatewayConfig';
 import {
   CoreApiRestClient,
   InternalEventEmitter,
@@ -20,6 +23,8 @@ import { ExternalSessionClient } from './modules/ExternalSessionClient';
 import {
   AnamClientOptions,
   AnamEvent,
+  AgentAudioInputConfig,
+  AudioPermissionState,
   ConnectionClosedCode,
   EventCallbacks,
   InputAudioState,
@@ -27,6 +32,7 @@ import {
   StartSessionOptions,
   StartSessionResponse,
 } from './types';
+import { AgentAudioInputStream } from './types/AgentAudioInputStream';
 import { TalkMessageStream } from './types/TalkMessageStream';
 export default class AnamClient {
   private publicEventEmitter: PublicEventEmitter;
@@ -36,7 +42,10 @@ export default class AnamClient {
 
   private personaConfig: PersonaConfig | undefined;
   private clientOptions: AnamClientOptions | undefined;
-  private inputAudioState: InputAudioState = { isMuted: false };
+  private inputAudioState: InputAudioState = {
+    isMuted: false,
+    permissionState: AudioPermissionState.NOT_REQUESTED,
+  };
 
   private sessionId: string | null = null;
   private organizationId: string | null = null;
@@ -73,6 +82,16 @@ export default class AnamClient {
         options.api.baseUrl || DEFAULT_ANAM_METRICS_BASE_URL,
         options.api.apiVersion || DEFAULT_ANAM_API_VERSION,
       );
+    }
+
+    // Pass API Gateway config to metrics module so metrics are routed through the gateway
+    if (options?.api?.apiGateway?.enabled) {
+      setClientMetricsApiGateway(options.api.apiGateway);
+    }
+
+    // Allow disabling client metrics telemetry
+    if (options?.metrics?.disableClientMetrics) {
+      setClientMetricsDisabled(true);
     }
 
     this.publicEventEmitter = new PublicEventEmitter();
@@ -121,6 +140,12 @@ export default class AnamClient {
     }
     if (options?.apiKey && sessionToken) {
       return 'Only one of sessionToken or apiKey should be used';
+    }
+
+    // Validate gateway configuration
+    const apiGatewayError = validateApiGatewayConfig(options?.api?.apiGateway);
+    if (apiGatewayError) {
+      return apiGatewayError;
     }
 
     // Validate persona configuration based on session token
@@ -216,13 +241,21 @@ export default class AnamClient {
       engineProtocol = response.engineProtocol as 'http' | 'https';
       signallingEndpoint = response.signallingEndpoint;
     }
-    const { heartbeatIntervalSeconds, maxWsReconnectionAttempts, iceServers } =
-      clientConfig;
+    const {
+      heartbeatIntervalSeconds,
+      maxWsReconnectionAttempts,
+      iceServers: defaultIceServers,
+    } = clientConfig;
 
     this.sessionId = sessionId;
     setMetricsContext({
       sessionId: this.sessionId,
     });
+
+    // Use custom ICE servers if provided, otherwise use server-provided ICE servers
+    const iceServers = this.clientOptions?.iceServers
+      ? this.clientOptions.iceServers
+      : defaultIceServers;
 
     try {
       // Build signalling config; if in proxy mode, supply absolute WS URL to our proxy
@@ -275,6 +308,7 @@ export default class AnamClient {
             audioDeviceId: this.clientOptions?.audioDeviceId,
             disableInputAudio: this.clientOptions?.disableInputAudio,
           },
+          apiGateway: this.clientOptions?.api?.apiGateway,
           metrics: {
             showPeerConnectionStatsReport:
               this.clientOptions?.metrics?.showPeerConnectionStatsReport ??
@@ -598,6 +632,28 @@ export default class AnamClient {
     return this.inputAudioState;
   }
 
+  public async changeAudioInputDevice(deviceId: string): Promise<void> {
+    if (this.clientOptions?.disableInputAudio) {
+      throw new Error(
+        'AnamClient: Cannot change audio input device because input audio is disabled.',
+      );
+    }
+
+    if (!this._isStreaming) {
+      throw new Error(
+        'AnamClient: Cannot change audio input device while not streaming. Start streaming first.',
+      );
+    }
+
+    if (!this.streamingClient) {
+      throw new Error(
+        'AnamClient: Cannot change audio input device because streaming client is not available. Start streaming first.',
+      );
+    }
+
+    await this.streamingClient.changeAudioInputDevice(deviceId);
+  }
+
   public createTalkMessageStream(correlationId?: string): TalkMessageStream {
     if (!this.streamingClient) {
       throw new Error(
@@ -611,6 +667,17 @@ export default class AnamClient {
     }
 
     return this.streamingClient.startTalkMessageStream(correlationId);
+  }
+
+  public createAgentAudioInputStream(
+    config: AgentAudioInputConfig,
+  ): AgentAudioInputStream {
+    if (!this.streamingClient) {
+      throw new Error(
+        'Failed to create agent audio input stream: session is not started.',
+      );
+    }
+    return this.streamingClient.createAgentAudioInputStream(config);
   }
 
   /**

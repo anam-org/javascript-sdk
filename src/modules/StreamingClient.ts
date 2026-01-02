@@ -1,34 +1,46 @@
 import {
+  ClientMetricMeasurement,
+  createRTCStatsReport,
+  sendClientMetric,
+} from '../lib/ClientMetrics';
+import {
   EngineApiRestClient,
   InternalEventEmitter,
   PublicEventEmitter,
   SignallingClient,
+  ToolCallManager,
 } from '../modules';
 import {
   AnamEvent,
+  ApiGatewayConfig,
+  AgentAudioInputConfig,
+  AudioPermissionState,
+  ClientToolEvent,
+  ConnectionClosedCode,
+  DataChannelMessage,
   InputAudioState,
   InternalEvent,
   SignalMessage,
   SignalMessageAction,
   StreamingClientOptions,
+  WebRtcClientToolEvent,
   WebRtcTextMessageEvent,
-  ConnectionClosedCode,
 } from '../types';
+import { AgentAudioInputStream } from '../types/AgentAudioInputStream';
 import { TalkMessageStream } from '../types/TalkMessageStream';
 import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
-import {
-  ClientMetricMeasurement,
-  createRTCStatsReport,
-  sendClientMetric,
-} from '../lib/ClientMetrics';
 
 const SUCCESS_METRIC_POLLING_TIMEOUT_MS = 15000; // After this time we will stop polling for the first frame and consider the session a failure.
+const STATS_COLLECTION_INTERVAL_MS = 5000;
+const ICE_CANDIDATE_POOL_SIZE = 2; // Optimisation to speed up connection time
+
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
   private signallingClient: SignallingClient;
   private engineApiRestClient: EngineApiRestClient;
   private iceServers: RTCIceServer[];
+  private apiGatewayConfig: ApiGatewayConfig | undefined;
   private peerConnection: RTCPeerConnection | null = null;
   private connectionReceivedAnswer = false;
   private remoteIceCandidateBuffer: RTCIceCandidate[] = [];
@@ -37,13 +49,18 @@ export class StreamingClient {
   private videoElement: HTMLVideoElement | null = null;
   private videoStream: MediaStream | null = null;
   private audioStream: MediaStream | null = null;
-  private inputAudioState: InputAudioState = { isMuted: false };
+  private inputAudioState: InputAudioState = {
+    isMuted: false,
+    permissionState: AudioPermissionState.NOT_REQUESTED,
+  };
   private audioDeviceId: string | undefined;
   private disableInputAudio: boolean;
   private successMetricPoller: ReturnType<typeof setInterval> | null = null;
   private successMetricFired = false;
   private showPeerConnectionStatsReport: boolean = false;
   private peerConnectionStatsReportOutputFormat: 'console' | 'json' = 'console';
+  private statsCollectionInterval: ReturnType<typeof setInterval> | null = null;
+  private agentAudioInputStream: AgentAudioInputStream | null = null;
 
   constructor(
     sessionId: string,
@@ -53,6 +70,7 @@ export class StreamingClient {
   ) {
     this.publicEventEmitter = publicEventEmitter;
     this.internalEventEmitter = internalEventEmitter;
+    this.apiGatewayConfig = options.apiGateway;
     // initialize input audio state
     const { inputAudio } = options;
     this.inputAudioState = inputAudio.inputAudioState;
@@ -77,11 +95,13 @@ export class StreamingClient {
       options.signalling,
       this.publicEventEmitter,
       this.internalEventEmitter,
+      this.apiGatewayConfig,
     );
     // initialize engine API client
     this.engineApiRestClient = new EngineApiRestClient(
       options.engine.baseUrl,
       sessionId,
+      this.apiGatewayConfig,
     );
     this.audioDeviceId = options.inputAudio.audioDeviceId;
     this.showPeerConnectionStatsReport =
@@ -113,6 +133,47 @@ export class StreamingClient {
   private unmuteAllAudioTracks() {
     this.inputAudioStream?.getAudioTracks().forEach((track) => {
       track.enabled = true;
+    });
+  }
+
+  private startStatsCollection() {
+    if (this.statsCollectionInterval) {
+      return;
+    }
+
+    // Send stats every STATS_COLLECTION_INTERVAL_MS seconds
+    this.statsCollectionInterval = setInterval(async () => {
+      if (
+        !this.peerConnection ||
+        !this.dataChannel ||
+        this.dataChannel.readyState !== 'open'
+      ) {
+        return;
+      }
+
+      try {
+        const stats = await this.peerConnection.getStats();
+        this.sendClientSideMetrics(stats);
+      } catch (error) {
+        console.error('Failed to collect and send stats:', error);
+      }
+    }, STATS_COLLECTION_INTERVAL_MS);
+  }
+
+  private sendClientSideMetrics(stats: RTCStatsReport) {
+    stats.forEach((report: RTCStats) => {
+      // Process inbound-rtp stats for both video and audio
+      if (report.type === 'inbound-rtp') {
+        const metrics = {
+          message_type: 'remote_rtp_stats',
+          data: report,
+        };
+
+        // Send the metrics via data channel
+        if (this.dataChannel && this.dataChannel.readyState === 'open') {
+          this.dataChannel.send(JSON.stringify(metrics));
+        }
+      }
     });
   }
 
@@ -220,6 +281,66 @@ export class StreamingClient {
     return this.peerConnection;
   }
 
+  public async changeAudioInputDevice(deviceId: string): Promise<void> {
+    if (!this.peerConnection) {
+      throw new Error(
+        'StreamingClient - changeAudioInputDevice: peer connection is not initialized. Start streaming first.',
+      );
+    }
+
+    if (deviceId === null || deviceId === undefined) {
+      throw new Error(
+        'StreamingClient - changeAudioInputDevice: deviceId is required',
+      );
+    }
+
+    // Store the current mute state to preserve it
+    const wasMuted = this.inputAudioState.isMuted;
+
+    try {
+      // Stop the current audio stream tracks
+      if (this.inputAudioStream) {
+        this.inputAudioStream.getAudioTracks().forEach((track) => {
+          track.stop();
+        });
+      }
+
+      // Request new audio stream with the new device ID
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+        deviceId: {
+          exact: deviceId,
+        },
+      };
+
+      this.inputAudioStream = await navigator.mediaDevices.getUserMedia({
+        audio: audioConstraints,
+      });
+
+      // Update the stored device ID
+      this.audioDeviceId = deviceId;
+
+      // Replace the audio track in the peer connection
+      await this.setupAudioTrack();
+
+      // Restore the mute state
+      if (wasMuted) {
+        this.muteAllAudioTracks();
+      }
+
+      // Emit event to notify that the device has changed
+      this.publicEventEmitter.emit(
+        AnamEvent.INPUT_AUDIO_DEVICE_CHANGED,
+        deviceId,
+      );
+    } catch (error) {
+      console.error('Failed to change audio input device:', error);
+      throw new Error(
+        `StreamingClient - changeAudioInputDevice: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   public getInputAudioStream(): MediaStream | null {
     return this.inputAudioStream;
   }
@@ -262,7 +383,7 @@ export class StreamingClient {
       // start the connection
       this.signallingClient.connect();
     } catch (error) {
-      console.log('StreamingClient - startConnection: error', error);
+      console.error('StreamingClient - startConnection: error', error);
       this.handleWebrtcFailure(error);
     }
   }
@@ -293,9 +414,24 @@ export class StreamingClient {
     );
   }
 
+  public createAgentAudioInputStream(
+    config: AgentAudioInputConfig,
+  ): AgentAudioInputStream {
+    this.agentAudioInputStream = new AgentAudioInputStream(
+      config,
+      this.signallingClient,
+    );
+    return this.agentAudioInputStream;
+  }
+
+  public getAgentAudioInputStream(): AgentAudioInputStream | null {
+    return this.agentAudioInputStream;
+  }
+
   private async initPeerConnection() {
     this.peerConnection = new RTCPeerConnection({
       iceServers: this.iceServers,
+      iceCandidatePoolSize: ICE_CANDIDATE_POOL_SIZE,
     });
     // set event handlers
     this.peerConnection.onicecandidate = this.onIceCandidate.bind(this);
@@ -317,6 +453,18 @@ export class StreamingClient {
       this.peerConnection.addTransceiver('audio', { direction: 'recvonly' });
     } else {
       this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+
+      // Handle audio setup after transceivers are configured
+      if (this.inputAudioStream) {
+        // User provided an audio stream, set it up immediately
+        await this.setupAudioTrack();
+      } else {
+        // No user stream, start microphone permission request asynchronously
+        // Don't await - let it run in parallel with connection setup
+        this.requestMicrophonePermissionAsync().catch((error) => {
+          console.error('Async microphone permission request failed:', error);
+        });
+      }
     }
   }
 
@@ -346,7 +494,6 @@ export class StreamingClient {
         break;
       case SignalMessageAction.END_SESSION:
         const reason = signalMessage.payload as string;
-        console.log('StreamingClient - onSignalMessage: reason', reason);
         this.publicEventEmitter.emit(
           AnamEvent.CONNECTION_CLOSED,
           ConnectionClosedCode.SERVER_CLOSED_CONNECTION,
@@ -372,8 +519,10 @@ export class StreamingClient {
         const sessionId = signalMessage.sessionId as string;
         this.publicEventEmitter.emit(AnamEvent.SESSION_READY, sessionId);
         break;
+      case SignalMessageAction.HEARTBEAT:
+        break;
       default:
-        console.error(
+        console.warn(
           'StreamingClient - onSignalMessage: unknown signal message action type. Is your anam-sdk version up to date?',
           signalMessage,
         );
@@ -418,6 +567,8 @@ export class StreamingClient {
       this.peerConnection?.iceConnectionState === 'completed'
     ) {
       this.publicEventEmitter.emit(AnamEvent.CONNECTION_ESTABLISHED);
+      // Start collecting stats every 5 seconds
+      this.startStatsCollection();
     }
   }
 
@@ -500,48 +651,20 @@ export class StreamingClient {
       );
       return;
     }
+
     /**
-     * Audio
+     * Audio - Validate user-provided stream only
      *
-     * If the user hasn't provided an audio stream, capture the audio stream from the user's microphone and send it to the peer connection
-     * If input audio is disabled we don't send any audio to the peer connection
+     * If the user provided an audio stream, validate it has audio tracks
+     * Microphone permission request will be handled asynchronously
      */
-    if (!this.disableInputAudio) {
-      if (this.inputAudioStream) {
-        // verify the user provided stream has audio tracks
-        if (!this.inputAudioStream.getAudioTracks().length) {
-          throw new Error(
-            'StreamingClient - setupDataChannels: user provided stream does not have audio tracks',
-          );
-        }
-      } else {
-        const audioConstraints: MediaTrackConstraints = {
-          echoCancellation: true,
-        };
-
-        // If an audio device ID is provided in the options, use it
-        if (this.audioDeviceId) {
-          audioConstraints.deviceId = {
-            exact: this.audioDeviceId,
-          };
-        }
-
-        this.inputAudioStream = await navigator.mediaDevices.getUserMedia({
-          audio: audioConstraints,
-        });
+    if (!this.disableInputAudio && this.inputAudioStream) {
+      // verify the user provided stream has audio tracks
+      if (!this.inputAudioStream.getAudioTracks().length) {
+        throw new Error(
+          'StreamingClient - setupDataChannels: user provided stream does not have audio tracks',
+        );
       }
-
-      // mute the audio tracks if the user has muted the microphone
-      if (this.inputAudioState.isMuted) {
-        this.muteAllAudioTracks();
-      }
-      const audioTrack = this.inputAudioStream.getAudioTracks()[0];
-      this.peerConnection.addTrack(audioTrack, this.inputAudioStream);
-      // pass the stream to the callback if it exists
-      this.publicEventEmitter.emit(
-        AnamEvent.INPUT_AUDIO_STREAM_STARTED,
-        this.inputAudioStream,
-      );
     }
 
     /**
@@ -550,7 +673,7 @@ export class StreamingClient {
      * Create the data channel for sending and receiving text.
      * There is no input stream for text, instead the sending of data is triggered by a UI interaction.
      */
-    const dataChannel = this.peerConnection.createDataChannel('chat', {
+    const dataChannel = this.peerConnection.createDataChannel('session', {
       ordered: true,
     });
     dataChannel.onopen = () => {
@@ -559,12 +682,149 @@ export class StreamingClient {
     dataChannel.onclose = () => {};
     // pass text message to the message history client
     dataChannel.onmessage = (event) => {
-      const messageEvent = JSON.parse(event.data) as WebRtcTextMessageEvent;
-      this.internalEventEmitter.emit(
-        InternalEvent.WEBRTC_CHAT_MESSAGE_RECEIVED,
-        messageEvent,
-      );
+      try {
+        const message = JSON.parse(event.data);
+
+        // Handle known message types
+        switch (message.messageType) {
+          case DataChannelMessage.SPEECH_TEXT:
+            this.internalEventEmitter.emit(
+              InternalEvent.WEBRTC_CHAT_MESSAGE_RECEIVED,
+              message.data as WebRtcTextMessageEvent,
+            );
+            break;
+          case DataChannelMessage.CLIENT_TOOL_EVENT:
+            const webRtcToolEvent = message.data as WebRtcClientToolEvent;
+
+            this.internalEventEmitter.emit(
+              InternalEvent.WEBRTC_CLIENT_TOOL_EVENT_RECEIVED,
+              webRtcToolEvent,
+            );
+            const clientToolEvent =
+              ToolCallManager.WebRTCClientToolEventToClientToolEvent(
+                webRtcToolEvent,
+              );
+            this.publicEventEmitter.emit(
+              AnamEvent.CLIENT_TOOL_EVENT_RECEIVED,
+              clientToolEvent,
+            );
+            break;
+          // Unknown message types are silently ignored to maintain forward compatibility
+          default:
+            break;
+        }
+      } catch (error) {
+        console.error('Failed to parse data channel message:', error);
+      }
     };
+  }
+
+  /**
+   * Request microphone permission asynchronously without blocking connection
+   */
+  private async requestMicrophonePermissionAsync() {
+    if (this.inputAudioState.permissionState === AudioPermissionState.PENDING) {
+      return; // Already requesting
+    }
+
+    this.inputAudioState = {
+      ...this.inputAudioState,
+      permissionState: AudioPermissionState.PENDING,
+    };
+
+    this.publicEventEmitter.emit(AnamEvent.MIC_PERMISSION_PENDING);
+
+    try {
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+      };
+
+      // If an audio device ID is provided in the options, use it
+      if (this.audioDeviceId) {
+        audioConstraints.deviceId = {
+          exact: this.audioDeviceId,
+        };
+      }
+
+      this.inputAudioStream = await navigator.mediaDevices.getUserMedia({
+        audio: audioConstraints,
+      });
+
+      this.inputAudioState = {
+        ...this.inputAudioState,
+        permissionState: AudioPermissionState.GRANTED,
+      };
+
+      this.publicEventEmitter.emit(AnamEvent.MIC_PERMISSION_GRANTED);
+
+      // Now add the audio track to the existing connection
+      await this.setupAudioTrack();
+    } catch (error) {
+      console.error('Failed to get microphone permission:', error);
+      this.inputAudioState = {
+        ...this.inputAudioState,
+        permissionState: AudioPermissionState.DENIED,
+      };
+
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.publicEventEmitter.emit(
+        AnamEvent.MIC_PERMISSION_DENIED,
+        errorMessage,
+      );
+    }
+  }
+
+  /**
+   * Set up audio track and add it to the peer connection using replaceTrack
+   */
+  private async setupAudioTrack() {
+    if (!this.peerConnection || !this.inputAudioStream) {
+      return;
+    }
+
+    // verify the stream has audio tracks
+    if (!this.inputAudioStream.getAudioTracks().length) {
+      console.error(
+        'StreamingClient - setupAudioTrack: stream does not have audio tracks',
+      );
+      return;
+    }
+
+    // mute the audio tracks if the user has muted the microphone
+    if (this.inputAudioState.isMuted) {
+      this.muteAllAudioTracks();
+    }
+
+    const audioTrack = this.inputAudioStream.getAudioTracks()[0];
+
+    // Find the audio sender
+    const existingSenders = this.peerConnection.getSenders();
+    const audioSender = existingSenders.find(
+      (sender) =>
+        sender.track?.kind === 'audio' ||
+        (sender.track === null && sender.dtmf !== null), // audio sender without track
+    );
+
+    if (audioSender) {
+      // Replace existing track (or null track) with our audio track
+      try {
+        await audioSender.replaceTrack(audioTrack);
+      } catch (error) {
+        console.error('Failed to replace audio track:', error);
+        // Fallback: add track normally
+        this.peerConnection.addTrack(audioTrack, this.inputAudioStream);
+      }
+    } else {
+      // No audio sender found, add track normally
+      this.peerConnection.addTrack(audioTrack, this.inputAudioStream);
+    }
+
+    // pass the stream to the callback
+    this.publicEventEmitter.emit(
+      AnamEvent.INPUT_AUDIO_STREAM_STARTED,
+      this.inputAudioStream,
+    );
   }
 
   private async initPeerConnectionAndSendOffer() {
@@ -609,6 +869,11 @@ export class StreamingClient {
           console.log(report, undefined, 2);
         }
       }
+    }
+    // stop stats collection
+    if (this.statsCollectionInterval) {
+      clearInterval(this.statsCollectionInterval);
+      this.statsCollectionInterval = null;
     }
     // reset video frame polling
     if (this.successMetricPoller) {

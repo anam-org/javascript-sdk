@@ -5,9 +5,10 @@ import {
   DEFAULT_API_VERSION,
 } from '../lib/constants';
 import {
-  CoreApiRestClientOptions,
+  ApiOptions,
   PersonaConfig,
   StartSessionResponse,
+  ApiGatewayConfig,
 } from '../types';
 import { StartSessionOptions } from '../types/coreApi/StartSessionOptions';
 import { isCustomPersonaConfig } from '../types/PersonaConfig';
@@ -17,12 +18,9 @@ export class CoreApiRestClient {
   private apiVersion: string;
   private apiKey: string | null;
   private sessionToken: string | null;
+  private apiGatewayConfig: ApiGatewayConfig | undefined;
 
-  constructor(
-    sessionToken?: string,
-    apiKey?: string,
-    options?: CoreApiRestClientOptions,
-  ) {
+  constructor(sessionToken?: string, apiKey?: string, options?: ApiOptions) {
     if (!sessionToken && !apiKey) {
       throw new Error('Either sessionToken or apiKey must be provided');
     }
@@ -30,6 +28,33 @@ export class CoreApiRestClient {
     this.apiKey = apiKey || null;
     this.baseUrl = options?.baseUrl || DEFAULT_API_BASE_URL;
     this.apiVersion = options?.apiVersion || DEFAULT_API_VERSION;
+    this.apiGatewayConfig = options?.apiGateway || undefined;
+  }
+
+  /**
+   * Builds URL and headers for a request, applying API Gateway configuration if enabled
+   */
+  private buildGatewayUrlAndHeaders(
+    targetPath: string,
+    baseHeaders: Record<string, string>,
+  ): { url: string; headers: Record<string, string> } {
+    if (this.apiGatewayConfig?.enabled && this.apiGatewayConfig?.baseUrl) {
+      // Use gateway base URL with same endpoint path
+      const url = `${this.apiGatewayConfig.baseUrl}${targetPath}`;
+      // Add complete target URL header for gateway routing
+      const targetUrl = new URL(`${this.baseUrl}${targetPath}`);
+      const headers = {
+        ...baseHeaders,
+        'X-Anam-Target-Url': targetUrl.href,
+      };
+      return { url, headers };
+    } else {
+      // Direct call to Anam API
+      return {
+        url: `${this.baseUrl}${targetPath}`,
+        headers: baseHeaders,
+      };
+    }
   }
 
   public async startSession(
@@ -55,12 +80,15 @@ export class CoreApiRestClient {
     }
 
     try {
-      const response = await fetch(`${this.getApiUrl()}/engine/session`, {
+      const targetPath = `${this.apiVersion}/engine/session`;
+      const { url, headers } = this.buildGatewayUrlAndHeaders(targetPath, {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.sessionToken}`,
+      });
+
+      const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.sessionToken}`,
-        },
+        headers,
         body: JSON.stringify({
           personaConfig,
           sessionOptions,
@@ -179,12 +207,15 @@ export class CoreApiRestClient {
       body = { ...body, personaConfig };
     }
     try {
-      const response = await fetch(`${this.getApiUrl()}/auth/session-token`, {
+      const targetPath = `${this.apiVersion}/auth/session-token`;
+      const { url, headers } = this.buildGatewayUrlAndHeaders(targetPath, {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+      });
+
+      const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
-        },
+        headers,
         body: JSON.stringify(body),
       });
       const data = await response.json();
