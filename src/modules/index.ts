@@ -6,3 +6,4 @@ export { MessageHistoryClient } from './MessageHistoryClient';
 export { PublicEventEmitter } from './PublicEventEmitter';
 export { StreamingClient } from './StreamingClient';
 export { ToolCallManager } from './ToolCallManager';
+export { ReasoningHistoryClient } from './ReasoningHistoryClient';

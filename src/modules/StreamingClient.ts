@@ -25,6 +25,7 @@ import {
   StreamingClientOptions,
   WebRtcClientToolEvent,
   WebRtcTextMessageEvent,
+  WebRtcReasoningTextMessageEvent,
 } from '../types';
 import { AgentAudioInputStream } from '../types/AgentAudioInputStream';
 import { TalkMessageStream } from '../types/TalkMessageStream';
@@ -693,6 +694,7 @@ export class StreamingClient {
               message.data as WebRtcTextMessageEvent,
             );
             break;
+
           case DataChannelMessage.CLIENT_TOOL_EVENT:
             const webRtcToolEvent = message.data as WebRtcClientToolEvent;
 
@@ -707,6 +709,12 @@ export class StreamingClient {
             this.publicEventEmitter.emit(
               AnamEvent.CLIENT_TOOL_EVENT_RECEIVED,
               clientToolEvent,
+            );
+            break;
+          case DataChannelMessage.REASONING_TEXT:
+            this.internalEventEmitter.emit(
+              InternalEvent.WEBRTC_REASONING_TEXT_MESSAGE_RECEIVED,
+              message.data as WebRtcReasoningTextMessageEvent,
             );
             break;
           // Unknown message types are silently ignored to maintain forward compatibility
