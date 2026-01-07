@@ -3,6 +3,7 @@ import {
   SignalMessage,
   WebRtcTextMessageEvent,
   WebRtcClientToolEvent,
+  WebRtcReasoningTextMessageEvent,
 } from '../../index';
 
 export type InternalEventCallbacks = {
@@ -15,5 +16,8 @@ export type InternalEventCallbacks = {
   ) => void;
   [InternalEvent.WEBRTC_CLIENT_TOOL_EVENT_RECEIVED]: (
     webRtcToolEvent: WebRtcClientToolEvent,
+  ) => void;
+  [InternalEvent.WEBRTC_REASONING_TEXT_MESSAGE_RECEIVED]: (
+    message: WebRtcReasoningTextMessageEvent,
   ) => void;
 };

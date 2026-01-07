@@ -18,6 +18,7 @@ import {
   MessageHistoryClient,
   PublicEventEmitter,
   StreamingClient,
+  ReasoningHistoryClient,
 } from './modules';
 import {
   AnamClientOptions,
@@ -38,6 +39,7 @@ export default class AnamClient {
   private internalEventEmitter: InternalEventEmitter;
 
   private readonly messageHistoryClient: MessageHistoryClient;
+  private readonly reasoningHistoryClient: ReasoningHistoryClient;
 
   private personaConfig: PersonaConfig | undefined;
   private clientOptions: AnamClientOptions | undefined;
@@ -101,6 +103,11 @@ export default class AnamClient {
       options?.api,
     );
     this.messageHistoryClient = new MessageHistoryClient(
+      this.publicEventEmitter,
+      this.internalEventEmitter,
+    );
+
+    this.reasoningHistoryClient = new ReasoningHistoryClient(
       this.publicEventEmitter,
       this.internalEventEmitter,
     );

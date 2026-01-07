@@ -4,6 +4,8 @@ import {
   MessageStreamEvent,
   AnamEvent,
   ClientToolEvent,
+  ReasoningMessage,
+  ReasoningStreamEvent,
 } from '../../index';
 
 export type EventCallbacks = {
@@ -29,5 +31,11 @@ export type EventCallbacks = {
   [AnamEvent.INPUT_AUDIO_DEVICE_CHANGED]: (deviceId: string) => void;
   [AnamEvent.CLIENT_TOOL_EVENT_RECEIVED]: (
     clientToolEvent: ClientToolEvent,
+  ) => void;
+  [AnamEvent.REASONING_HISTORY_UPDATED]: (
+    thoughtMessages: ReasoningMessage[],
+  ) => void;
+  [AnamEvent.REASONING_STREAM_EVENT_RECEIVED]: (
+    thoughtEvent: ReasoningStreamEvent,
   ) => void;
 };

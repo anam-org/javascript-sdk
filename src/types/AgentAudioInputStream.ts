@@ -62,7 +62,9 @@ export class AgentAudioInputStream {
   private arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
     const bytes =
       buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-    const binary = Array.from(bytes, byte => String.fromCharCode(byte)).join('');
+    const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join(
+      '',
+    );
     return btoa(binary);
   }
 }
