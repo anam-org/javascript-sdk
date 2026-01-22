@@ -34,9 +34,11 @@ import {
 } from './types';
 import { AgentAudioInputStream } from './types/AgentAudioInputStream';
 import { TalkMessageStream } from './types/TalkMessageStream';
+import { ToolCallHandler, ToolCallManager } from './modules/ToolCallManager';
 export default class AnamClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
+  private toolCallManager: ToolCallManager;
 
   private readonly messageHistoryClient: MessageHistoryClient;
   private readonly reasoningHistoryClient: ReasoningHistoryClient;
@@ -96,6 +98,7 @@ export default class AnamClient {
 
     this.publicEventEmitter = new PublicEventEmitter();
     this.internalEventEmitter = new InternalEventEmitter();
+    this.toolCallManager = new ToolCallManager();
 
     this.apiClient = new CoreApiRestClient(
       sessionToken,
@@ -274,6 +277,7 @@ export default class AnamClient {
         },
         this.publicEventEmitter,
         this.internalEventEmitter,
+        this.toolCallManager,
       );
     } catch (error) {
       setMetricsContext({
@@ -653,5 +657,12 @@ export default class AnamClient {
 
   public getActiveSessionId(): string | null {
     return this.sessionId;
+  }
+
+  public registerToolCallHandler(
+    eventName: string,
+    handler: ToolCallHandler,
+  ): () => void {
+    return this.toolCallManager.registerHandler(eventName, handler);
   }
 }

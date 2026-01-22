@@ -5,3 +5,8 @@ export type { StreamingClientOptions } from './StreamingClientOptions';
 export type { InputAudioOptions } from './InputAudioOptions';
 export { DataChannelMessage } from './DataChannelMessage';
 export { WebRtcReasoningTextMessageEvent } from './WebRtcReasoningTextMessageEvent';
+export type {
+  ToolCallStartedPayload,
+  ToolCallCompletedPayload,
+  ToolCallFailedPayload,
+} from './ToolCallEvents';
