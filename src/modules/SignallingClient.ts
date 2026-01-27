@@ -53,40 +53,16 @@ export class SignallingClient {
     this.maxWsReconnectionAttempts =
       maxWsReconnectionAttempts || DEFAULT_WS_RECONNECTION_ATTEMPTS;
 
-    if (!url.baseUrl) {
-      throw new Error('Signalling Client: baseUrl is required');
-    }
-
-    // Construct WebSocket URL (with or without API Gateway)
-    if (this.apiGatewayConfig?.enabled && this.apiGatewayConfig?.baseUrl) {
-      // Use API Gateway WebSocket URL
-      const gatewayUrl = new URL(this.apiGatewayConfig.baseUrl);
-      const wsPath = this.apiGatewayConfig.wsPath ?? '/ws';
-
-      // Construct gateway WebSocket URL
-      gatewayUrl.protocol = gatewayUrl.protocol.replace('http', 'ws');
-      gatewayUrl.pathname = wsPath;
-      this.url = gatewayUrl;
-
-      // Construct the complete target WebSocket URL and pass it as a query parameter
-      const httpProtocol = url.protocol || 'https';
-      const targetProtocol = httpProtocol === 'http' ? 'ws' : 'wss';
-      const httpUrl = `${httpProtocol}://${url.baseUrl}`;
-      const targetWsPath = url.signallingPath ?? '/ws';
-
-      // Build complete target URL
-      const targetUrl = new URL(httpUrl);
-      targetUrl.protocol = targetProtocol === 'ws' ? 'ws:' : 'wss:';
-      if (url.port) {
-        targetUrl.port = url.port;
+    if (url.absoluteWsUrl) {
+      this.url = new URL(url.absoluteWsUrl);
+      // ensure session_id param exists
+      if (!this.url.searchParams.get('session_id')) {
+        this.url.searchParams.append('session_id', sessionId);
       }
-      targetUrl.pathname = targetWsPath;
-      targetUrl.searchParams.append('session_id', sessionId);
-
-      // Pass complete target URL as query parameter
-      this.url.searchParams.append('target_url', targetUrl.href);
     } else {
-      // Direct connection to Anam (original behavior)
+      if (!url.baseUrl) {
+        throw new Error('Signalling Client: baseUrl is required');
+      }
       const httpProtocol = url.protocol || 'https';
       const initUrl = `${httpProtocol}://${url.baseUrl}`;
       this.url = new URL(initUrl);
@@ -96,6 +72,17 @@ export class SignallingClient {
       }
       this.url.pathname = url.signallingPath ?? '/ws';
       this.url.searchParams.append('session_id', sessionId);
+
+      // If API Gateway is enabled, wrap the URL for gateway routing
+      if (this.apiGatewayConfig?.enabled && this.apiGatewayConfig?.baseUrl) {
+        const targetUrl = this.url.href;
+        const gatewayUrl = new URL(this.apiGatewayConfig.baseUrl);
+        const wsPath = this.apiGatewayConfig.wsPath ?? '/ws';
+        gatewayUrl.protocol = gatewayUrl.protocol.replace('http', 'ws');
+        gatewayUrl.pathname = wsPath;
+        gatewayUrl.searchParams.append('target_url', targetUrl);
+        this.url = gatewayUrl;
+      }
     }
   }
 
@@ -174,6 +161,34 @@ export class SignallingClient {
       payload: {},
     };
     this.sendSignalMessage(message);
+  }
+
+  /**
+   * Send a custom signaling message. Useful for proxy-side extensions.
+   */
+  public sendCustom(actionType: string, payload: any) {
+    const message: SignalMessage = {
+      actionType,
+      sessionId: this.sessionId,
+      payload,
+    };
+    this.sendSignalMessage(message);
+  }
+
+  /**
+   * Send binary data directly over the WebSocket if open.
+   */
+  public sendBinary(data: ArrayBuffer | Uint8Array) {
+    try {
+      if (this.socket?.readyState === WebSocket.OPEN) {
+        this.socket.send(data);
+      }
+    } catch (error) {
+      console.error(
+        'SignallingClient - sendBinary: error sending binary',
+        error,
+      );
+    }
   }
 
   private closeSocket() {
