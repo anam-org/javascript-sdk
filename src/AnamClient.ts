@@ -31,10 +31,11 @@ import {
   PersonaConfig,
   StartSessionOptions,
   StartSessionResponse,
+  ToolCallHandler,
 } from './types';
 import { AgentAudioInputStream } from './types/AgentAudioInputStream';
 import { TalkMessageStream } from './types/TalkMessageStream';
-import { ToolCallHandler, ToolCallManager } from './modules/ToolCallManager';
+import { ToolCallManager } from './modules/ToolCallManager';
 export default class AnamClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
@@ -98,7 +99,7 @@ export default class AnamClient {
 
     this.publicEventEmitter = new PublicEventEmitter();
     this.internalEventEmitter = new InternalEventEmitter();
-    this.toolCallManager = new ToolCallManager();
+    this.toolCallManager = new ToolCallManager(this.publicEventEmitter);
 
     this.apiClient = new CoreApiRestClient(
       sessionToken,

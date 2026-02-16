@@ -719,15 +719,27 @@ export class StreamingClient {
               message.data as WebRtcTextMessageEvent,
             );
             break;
-          case DataChannelMessage.TOOL_CALL_STARTED_EVENT:
+          case DataChannelMessage.CLIENT_TOOL_EVENT:
+            // legacy support for client tool events sent via data channel. New events should use the dedicated tool call event messages
+            // newer engines should only be sending client tool events via the dedicated tool call event messages, but we will keep supporting this for older engine versions
+            const webRtcToolEvent = message.data as WebRtcClientToolEvent;
+
             this.internalEventEmitter.emit(
-              InternalEvent.WEBRTC_TOOL_CALL_STARTED_EVENT_RECEIVED,
-              message.data as WebRtcToolCallStartedEvent,
+              InternalEvent.WEBRTC_CLIENT_TOOL_EVENT_RECEIVED,
+              webRtcToolEvent,
+            );
+            const clientToolEvent =
+              ToolCallManager.WebRTCClientToolEventToClientToolEvent(
+                webRtcToolEvent,
+              );
+            this.publicEventEmitter.emit(
+              AnamEvent.CLIENT_TOOL_EVENT_RECEIVED,
+              clientToolEvent,
             );
             break;
-          case DataChannelMessage.TOOL_CALL_COMPLETED_EVENT:
+          case DataChannelMessage.TOOL_CALL_STARTED_EVENT:
             // for backward compatibility we will emit specific client tool events, for client tool types
-            const toolCallEvent = message.data as WebRtcToolCallCompletedEvent;
+            const toolCallEvent = message.data as WebRtcToolCallStartedEvent;
             if (toolCallEvent.tool_type === 'client') {
               this.internalEventEmitter.emit(
                 InternalEvent.WEBRTC_CLIENT_TOOL_EVENT_RECEIVED,
@@ -745,20 +757,50 @@ export class StreamingClient {
               );
               this.publicEventEmitter.emit(
                 AnamEvent.CLIENT_TOOL_EVENT_RECEIVED,
-                ToolCallManager.WebRTCToolCallCompletedEventToClientToolEvent(
+                ToolCallManager.WebRTCToolCallStartedEventToClientToolEvent(
                   toolCallEvent,
                 ),
               );
             }
+            const webRtcToolCallStartedEvent =
+              message.data as WebRtcToolCallStartedEvent;
+            this.publicEventEmitter.emit(
+              AnamEvent.TOOL_CALL_STARTED_EVENT_RECEIVED,
+              this.toolCallManager.WebRTCToolCallStartedEventToToolCallStartedPayload(
+                webRtcToolCallStartedEvent,
+              ),
+            );
+            this.internalEventEmitter.emit(
+              InternalEvent.WEBRTC_TOOL_CALL_STARTED_EVENT_RECEIVED,
+              webRtcToolCallStartedEvent,
+            );
+            break;
+          case DataChannelMessage.TOOL_CALL_COMPLETED_EVENT:
+            const webRtcToolCallCompletedEvent =
+              message.data as WebRtcToolCallCompletedEvent;
+            this.publicEventEmitter.emit(
+              AnamEvent.TOOL_CALL_COMPLETED_EVENT_RECEIVED,
+              this.toolCallManager.webRTCToolCallCompletedEventToToolCallCompletedPayload(
+                webRtcToolCallCompletedEvent,
+              ),
+            );
             this.internalEventEmitter.emit(
               InternalEvent.WEBRTC_TOOL_CALL_COMPLETED_EVENT_RECEIVED,
-              message.data as WebRtcToolCallCompletedEvent,
+              webRtcToolCallCompletedEvent,
             );
             break;
           case DataChannelMessage.TOOL_CALL_FAILED_EVENT:
+            const webRtcToolCallFailedEvent =
+              message.data as WebRtcToolCallFailedEvent;
+            this.publicEventEmitter.emit(
+              AnamEvent.TOOL_CALL_FAILED_EVENT_RECEIVED,
+              this.toolCallManager.webRTCToolCallFailedEventToToolCallFailedPayload(
+                webRtcToolCallFailedEvent,
+              ),
+            );
             this.internalEventEmitter.emit(
               InternalEvent.WEBRTC_TOOL_CALL_FAILED_EVENT_RECEIVED,
-              message.data as WebRtcToolCallFailedEvent,
+              webRtcToolCallFailedEvent,
             );
             break;
           case DataChannelMessage.REASONING_TEXT:
@@ -964,6 +1006,9 @@ export class StreamingClient {
         error,
       );
     }
+
+    // clear pending tool calls
+    this.toolCallManager.clearPendingCalls();
 
     // close the peer connection
     try {
