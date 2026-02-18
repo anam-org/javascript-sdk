@@ -11,6 +11,7 @@ import {
   ApiGatewayConfig,
 } from '../types';
 import { StartSessionOptions } from '../types/coreApi/StartSessionOptions';
+import { ElevenLabsAgentSettings } from '../types/ElevenLabsAgentSettings';
 import { isCustomPersonaConfig } from '../types/PersonaConfig';
 
 export class CoreApiRestClient {
@@ -60,6 +61,7 @@ export class CoreApiRestClient {
   public async startSession(
     personaConfig?: PersonaConfig,
     sessionOptions?: StartSessionOptions,
+    environment?: { elevenLabsAgentSettings?: ElevenLabsAgentSettings },
   ): Promise<StartSessionResponse> {
     if (!this.sessionToken) {
       if (!personaConfig) {
@@ -69,7 +71,10 @@ export class CoreApiRestClient {
           400,
         );
       }
-      this.sessionToken = await this.unsafe_getSessionToken(personaConfig);
+      this.sessionToken = await this.unsafe_getSessionToken(
+        personaConfig,
+        environment,
+      );
     }
 
     // Check if brainType is being used and log deprecation warning
@@ -185,6 +190,7 @@ export class CoreApiRestClient {
 
   public async unsafe_getSessionToken(
     personaConfig: PersonaConfig,
+    environment?: { elevenLabsAgentSettings?: ElevenLabsAgentSettings },
   ): Promise<string> {
     console.warn(
       'Using unsecure method. This method should not be used in production.',
@@ -200,11 +206,18 @@ export class CoreApiRestClient {
       );
     }
 
-    let body: { clientLabel: string; personaConfig?: PersonaConfig } = {
+    let body: {
+      clientLabel: string;
+      personaConfig?: PersonaConfig;
+      environment?: { elevenLabsAgentSettings?: ElevenLabsAgentSettings };
+    } = {
       clientLabel: 'js-sdk-api-key',
     };
     if (isCustomPersonaConfig(personaConfig)) {
       body = { ...body, personaConfig };
+    }
+    if (environment) {
+      body = { ...body, environment };
     }
     try {
       const targetPath = `${this.apiVersion}/auth/session-token`;

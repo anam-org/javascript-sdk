@@ -213,6 +213,7 @@ export default class AnamClient {
     const response: StartSessionResponse = await this.apiClient.startSession(
       config,
       sessionOptions,
+      this.clientOptions?.environment,
     );
     const {
       sessionId,
