@@ -738,34 +738,10 @@ export class StreamingClient {
             );
             break;
           case DataChannelMessage.TOOL_CALL_STARTED_EVENT:
-            // for backward compatibility we will emit specific client tool events, for client tool types
-            const toolCallEvent = message.data as WebRtcToolCallStartedEvent;
-            if (toolCallEvent.tool_type === 'client') {
-              this.internalEventEmitter.emit(
-                InternalEvent.WEBRTC_CLIENT_TOOL_EVENT_RECEIVED,
-                {
-                  event_uid: toolCallEvent.event_uid,
-                  session_id: toolCallEvent.session_id,
-                  event_name: toolCallEvent.tool_name,
-                  event_data: toolCallEvent.arguments,
-                  timestamp: toolCallEvent.timestamp,
-                  timestamp_user_action: toolCallEvent.timestamp_user_action,
-                  user_action_correlation_id:
-                    toolCallEvent.user_action_correlation_id,
-                  used_outside_engine: toolCallEvent.used_outside_engine,
-                } as WebRtcClientToolEvent,
-              );
-              this.publicEventEmitter.emit(
-                AnamEvent.CLIENT_TOOL_EVENT_RECEIVED,
-                ToolCallManager.WebRTCToolCallStartedEventToClientToolEvent(
-                  toolCallEvent,
-                ),
-              );
-            }
             const webRtcToolCallStartedEvent =
               message.data as WebRtcToolCallStartedEvent;
             this.publicEventEmitter.emit(
-              AnamEvent.TOOL_CALL_STARTED_EVENT_RECEIVED,
+              AnamEvent.TOOL_CALL_STARTED,
               this.toolCallManager.WebRTCToolCallStartedEventToToolCallStartedPayload(
                 webRtcToolCallStartedEvent,
               ),
@@ -779,7 +755,7 @@ export class StreamingClient {
             const webRtcToolCallCompletedEvent =
               message.data as WebRtcToolCallCompletedEvent;
             this.publicEventEmitter.emit(
-              AnamEvent.TOOL_CALL_COMPLETED_EVENT_RECEIVED,
+              AnamEvent.TOOL_CALL_COMPLETED,
               this.toolCallManager.webRTCToolCallCompletedEventToToolCallCompletedPayload(
                 webRtcToolCallCompletedEvent,
               ),
@@ -793,7 +769,7 @@ export class StreamingClient {
             const webRtcToolCallFailedEvent =
               message.data as WebRtcToolCallFailedEvent;
             this.publicEventEmitter.emit(
-              AnamEvent.TOOL_CALL_FAILED_EVENT_RECEIVED,
+              AnamEvent.TOOL_CALL_FAILED,
               this.toolCallManager.webRTCToolCallFailedEventToToolCallFailedPayload(
                 webRtcToolCallFailedEvent,
               ),

@@ -661,9 +661,9 @@ export default class AnamClient {
   }
 
   public registerToolCallHandler(
-    eventName: string,
+    toolName: string,
     handler: ToolCallHandler,
   ): () => void {
-    return this.toolCallManager.registerHandler(eventName, handler);
+    return this.toolCallManager.registerHandler(toolName, handler);
   }
 }

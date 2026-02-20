@@ -31,24 +31,22 @@ const calculateExecutionTime = (
 
 export class ToolCallManager {
   private publicEventEmitter: PublicEventEmitter;
-  private handlers: Record<string, ToolCallHandler> = {};
-  private pendingCalls: Record<string, PendingToolCall> = {};
+  private handlers: Record<string, ToolCallHandler> = Object.create(null);
+  private pendingCalls: Record<string, PendingToolCall> = Object.create(null);
 
   constructor(publicEventEmitter: PublicEventEmitter) {
     this.publicEventEmitter = publicEventEmitter;
   }
 
   clearPendingCalls(): void {
-    this.pendingCalls = {};
+    this.pendingCalls = Object.create(null);
   }
 
-  registerHandler(eventName: string, handler: ToolCallHandler): () => void {
-    const handlerId = Math.random().toString(36).substring(2, 15);
-
-    this.handlers[eventName] = handler;
+  registerHandler(toolName: string, handler: ToolCallHandler): () => void {
+    this.handlers[toolName] = handler;
 
     return () => {
-      delete this.handlers[eventName];
+      delete this.handlers[toolName];
     };
   }
 
@@ -130,10 +128,7 @@ export class ToolCallManager {
     }
 
     if (toolCallEvent.tool_type === 'client') {
-      this.publicEventEmitter.emit(
-        AnamEvent.TOOL_CALL_COMPLETED_EVENT_RECEIVED,
-        payload,
-      );
+      this.publicEventEmitter.emit(AnamEvent.TOOL_CALL_COMPLETED, payload);
     }
 
     try {
@@ -168,10 +163,7 @@ export class ToolCallManager {
     }
 
     if (toolCallEvent.tool_type === 'client') {
-      this.publicEventEmitter.emit(
-        AnamEvent.TOOL_CALL_FAILED_EVENT_RECEIVED,
-        payload,
-      );
+      this.publicEventEmitter.emit(AnamEvent.TOOL_CALL_FAILED, payload);
     }
 
     try {
