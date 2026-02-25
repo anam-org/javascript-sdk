@@ -7,6 +7,8 @@ export interface ToolCallStartedPayload {
   toolSubtype?: string;
   arguments: Record<string, any>;
   timestamp: string;
+  timestampUserAction: string;
+  userActionCorrelationId: string;
 }
 
 export interface ToolCallCompletedPayload {
@@ -18,6 +20,8 @@ export interface ToolCallCompletedPayload {
   result: any;
   executionTime: number; // ms
   timestamp: string;
+  timestampUserAction: string;
+  userActionCorrelationId: string;
 }
 
 export interface ToolCallFailedPayload {
@@ -29,4 +33,6 @@ export interface ToolCallFailedPayload {
   errorMessage: string;
   executionTime: number; // ms
   timestamp: string;
+  timestampUserAction: string;
+  userActionCorrelationId: string;
 }

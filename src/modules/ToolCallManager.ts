@@ -216,6 +216,8 @@ export class ToolCallManager {
       toolSubtype: webRtcEvent.tool_subtype,
       arguments: webRtcEvent.arguments,
       timestamp: webRtcEvent.timestamp,
+      timestampUserAction: webRtcEvent.timestamp_user_action,
+      userActionCorrelationId: webRtcEvent.user_action_correlation_id,
     };
   }
 
@@ -237,6 +239,8 @@ export class ToolCallManager {
       result: webRtcEvent.result,
       executionTime: executionTime > 0 ? executionTime : 0,
       timestamp: webRtcEvent.timestamp,
+      timestampUserAction: webRtcEvent.timestamp_user_action,
+      userActionCorrelationId: webRtcEvent.user_action_correlation_id,
     };
   }
 
@@ -258,6 +262,8 @@ export class ToolCallManager {
       errorMessage: webRtcEvent.error_message,
       executionTime: executionTime > 0 ? executionTime : 0,
       timestamp: webRtcEvent.timestamp,
+      timestampUserAction: webRtcEvent.timestamp_user_action,
+      userActionCorrelationId: webRtcEvent.user_action_correlation_id,
     };
   }
 }
