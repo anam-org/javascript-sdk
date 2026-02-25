@@ -3,4 +3,5 @@ export interface ReasoningStreamEvent {
   content: string;
   endOfThought: boolean;
   role: string;
+  thoughtDuration?: number;
 }

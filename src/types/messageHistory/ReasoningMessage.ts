@@ -2,4 +2,5 @@ export interface ReasoningMessage {
   id: string;
   content: string;
   role: string;
+  duration?: number;
 }

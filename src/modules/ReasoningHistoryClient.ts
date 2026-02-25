@@ -33,6 +33,7 @@ export class ReasoningHistoryClient {
       content: event.content,
       endOfThought: event.end_of_thought,
       role: event.role,
+      thoughtDuration: event.thought_duration,
     };
   }
 
@@ -51,6 +52,7 @@ export class ReasoningHistoryClient {
       id: ReasoningStreamEvent.id,
       content: ReasoningStreamEvent.content,
       role: ReasoningStreamEvent.role,
+      duration: ReasoningStreamEvent.thoughtDuration,
     };
 
     const existingMessageIndex = this.reasoning_messages.findIndex(
@@ -60,6 +62,7 @@ export class ReasoningHistoryClient {
       // update existing message
       const existingMessage = this.reasoning_messages[existingMessageIndex];
       existingMessage.content += message.content;
+      existingMessage.duration = message.duration;
       this.reasoning_messages[existingMessageIndex] = existingMessage;
     } else {
       // new message

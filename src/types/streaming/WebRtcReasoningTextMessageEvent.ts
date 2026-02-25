@@ -4,4 +4,5 @@ export interface WebRtcReasoningTextMessageEvent {
   content: string;
   role: string;
   end_of_thought: boolean;
+  thought_duration?: number;
 }
