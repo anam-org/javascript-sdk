@@ -6,6 +6,9 @@ import {
   ClientToolEvent,
   ReasoningMessage,
   ReasoningStreamEvent,
+  ToolCallFailedPayload,
+  ToolCallCompletedPayload,
+  ToolCallStartedPayload,
 } from '../../index';
 
 export type EventCallbacks = {
@@ -32,6 +35,13 @@ export type EventCallbacks = {
   [AnamEvent.CLIENT_TOOL_EVENT_RECEIVED]: (
     clientToolEvent: ClientToolEvent,
   ) => void;
+  [AnamEvent.TOOL_CALL_STARTED]: (
+    toolCallEvent: ToolCallStartedPayload,
+  ) => void;
+  [AnamEvent.TOOL_CALL_COMPLETED]: (
+    toolCallEvent: ToolCallCompletedPayload,
+  ) => void;
+  [AnamEvent.TOOL_CALL_FAILED]: (toolCallEvent: ToolCallFailedPayload) => void;
   [AnamEvent.REASONING_HISTORY_UPDATED]: (
     thoughtMessages: ReasoningMessage[],
   ) => void;

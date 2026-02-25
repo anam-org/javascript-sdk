@@ -15,3 +15,4 @@ export { AnamEvent } from './events'; // need to export this explicitly to avoid
 export { InternalEvent } from './events'; // need to export this explicitly to avoid enum import issues
 export { ConnectionClosedCode } from './events'; // need to export this explicitly to avoid enum import issues
 export { AgentAudioInputStream } from './AgentAudioInputStream';
+export type * from './toolCalling';
