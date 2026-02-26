@@ -18,6 +18,7 @@ export interface ToolCallCompletedPayload {
   result: any;
   executionTime: number; // ms
   timestamp: string;
+  documentsAccessed?: string[]; // List of file names accessed during the tool call, if applicable (RAG tools only)
 }
 
 export interface ToolCallFailedPayload {
