@@ -7,6 +7,8 @@ export interface ToolCallStartedPayload {
   toolSubtype?: string;
   arguments: Record<string, any>;
   timestamp: string;
+  timestampUserAction: string;
+  userActionCorrelationId: string;
 }
 
 export interface ToolCallCompletedPayload {
@@ -19,6 +21,8 @@ export interface ToolCallCompletedPayload {
   executionTime: number; // ms
   timestamp: string;
   documentsAccessed?: string[]; // List of file names accessed during the tool call, if applicable (RAG tools only)
+  timestampUserAction: string;
+  userActionCorrelationId: string;
 }
 
 export interface ToolCallFailedPayload {
@@ -30,4 +34,6 @@ export interface ToolCallFailedPayload {
   errorMessage: string;
   executionTime: number; // ms
   timestamp: string;
+  timestampUserAction: string;
+  userActionCorrelationId: string;
 }
