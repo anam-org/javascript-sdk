@@ -15,6 +15,7 @@ export interface WebRtcToolCallEventBase {
 export interface WebRtcToolCallStartedEvent extends WebRtcToolCallEventBase {}
 export interface WebRtcToolCallCompletedEvent extends WebRtcToolCallEventBase {
   result: any;
+  documents_accessed?: string[]; // List of file names accessed during the tool call, if applicable (RAG tools only)
 }
 export interface WebRtcToolCallFailedEvent extends WebRtcToolCallEventBase {
   error_message: string;

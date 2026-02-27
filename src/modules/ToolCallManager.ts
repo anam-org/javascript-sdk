@@ -239,6 +239,7 @@ export class ToolCallManager {
       result: webRtcEvent.result,
       executionTime: executionTime > 0 ? executionTime : 0,
       timestamp: webRtcEvent.timestamp,
+      documentsAccessed: webRtcEvent.documents_accessed, // Include accessed files if present
       timestampUserAction: webRtcEvent.timestamp_user_action,
       userActionCorrelationId: webRtcEvent.user_action_correlation_id,
     };
