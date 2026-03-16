@@ -785,6 +785,18 @@ export class StreamingClient {
               message.data as WebRtcReasoningTextMessageEvent,
             );
             break;
+          case DataChannelMessage.USER_SPEECH_STARTED:
+            this.publicEventEmitter.emit(
+              AnamEvent.USER_SPEECH_STARTED,
+              message.data?.user_action_correlation_id,
+            );
+            break;
+          case DataChannelMessage.USER_SPEECH_ENDED:
+            this.publicEventEmitter.emit(
+              AnamEvent.USER_SPEECH_ENDED,
+              message.data?.user_action_correlation_id,
+            );
+            break;
           // Unknown message types are silently ignored to maintain forward compatibility
           default:
             break;
