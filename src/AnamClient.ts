@@ -515,6 +515,32 @@ export default class AnamClient {
     this.sendDataMessage(body);
   }
 
+  /**
+   * Add context information to the active streaming session.
+   * This allows injecting additional context (e.g., DOM state, user actions)
+   * that the persona can use to inform its responses.
+   * @param content - The context content string to send
+   * @throws Error if not currently streaming or no active session
+   */
+  public addContext(content: string): void {
+    if (!this._isStreaming) {
+      throw new Error('Failed to add context: not currently streaming');
+    }
+
+    const sessionId = this.getActiveSessionId();
+    if (!sessionId) {
+      throw new Error('Failed to add context: no active session');
+    }
+
+    const body = JSON.stringify({
+      message_type: 'context',
+      session_id: sessionId,
+      content,
+    });
+
+    this.sendDataMessage(body);
+  }
+
   public async stopStreaming(): Promise<void> {
     if (this.streamingClient) {
       this.publicEventEmitter.emit(
