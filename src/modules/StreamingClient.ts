@@ -788,13 +788,13 @@ export class StreamingClient {
           case DataChannelMessage.USER_SPEECH_STARTED:
             this.publicEventEmitter.emit(
               AnamEvent.USER_SPEECH_STARTED,
-              message.data?.user_action_correlation_id,
+              message.data?.user_action_correlation_id ?? 'unknown',
             );
             break;
           case DataChannelMessage.USER_SPEECH_ENDED:
             this.publicEventEmitter.emit(
               AnamEvent.USER_SPEECH_ENDED,
-              message.data?.user_action_correlation_id,
+              message.data?.user_action_correlation_id ?? 'unknown',
             );
             break;
           // Unknown message types are silently ignored to maintain forward compatibility
