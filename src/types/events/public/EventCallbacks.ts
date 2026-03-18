@@ -48,4 +48,6 @@ export type EventCallbacks = {
   [AnamEvent.REASONING_STREAM_EVENT_RECEIVED]: (
     thoughtEvent: ReasoningStreamEvent,
   ) => void;
+  [AnamEvent.USER_SPEECH_STARTED]: (correlationId: string) => void;
+  [AnamEvent.USER_SPEECH_ENDED]: (correlationId: string) => void;
 };

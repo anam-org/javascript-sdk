@@ -5,4 +5,6 @@ export enum DataChannelMessage {
   TOOL_CALL_COMPLETED_EVENT = 'toolCallCompleted',
   TOOL_CALL_FAILED_EVENT = 'toolCallFailed',
   REASONING_TEXT = 'reasoningText',
+  USER_SPEECH_STARTED = 'userSpeechStarted',
+  USER_SPEECH_ENDED = 'userSpeechEnded',
 }
