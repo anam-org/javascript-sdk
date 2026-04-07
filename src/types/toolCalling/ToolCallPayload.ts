@@ -1,6 +1,7 @@
 // Event payloads
 export interface ToolCallStartedPayload {
   eventUid: string;
+  sessionId: string;
   toolCallId: string;
   toolName: string;
   toolType: string;
@@ -13,6 +14,7 @@ export interface ToolCallStartedPayload {
 
 export interface ToolCallCompletedPayload {
   eventUid: string;
+  sessionId: string;
   toolCallId: string;
   toolName: string;
   toolType: string;
@@ -25,8 +27,18 @@ export interface ToolCallCompletedPayload {
   userActionCorrelationId: string;
 }
 
+export interface ToolCallResultReceivedPayload {
+  sessionId: string;
+  toolCallId: string;
+  result?: string;
+  errorMessage?: string;
+  userActionCorrelationId: string;
+  timestampUserAction: string;
+}
+
 export interface ToolCallFailedPayload {
   eventUid: string;
+  sessionId: string;
   toolCallId: string;
   toolName: string;
   toolType: string;

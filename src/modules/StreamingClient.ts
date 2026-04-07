@@ -26,6 +26,7 @@ import {
   WebRtcReasoningTextMessageEvent,
 } from '../types';
 import { AgentAudioInputStream } from '../types/AgentAudioInputStream';
+import { ToolCallResultReceivedPayload } from '../types/toolCalling/ToolCallPayload';
 import { TalkMessageStream } from '../types/TalkMessageStream';
 import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
 import {
@@ -112,6 +113,10 @@ export class StreamingClient {
       this.toolCallManager.processToolCallFailedEvent.bind(
         this.toolCallManager,
       ),
+    );
+    this.internalEventEmitter.addListener(
+      InternalEvent.TOOL_CALL_RESULT_READY,
+      this.onToolCallResultReceived.bind(this),
     );
     // set ice servers
     this.iceServers = options.iceServers;
@@ -377,6 +382,28 @@ export class StreamingClient {
 
   public getAudioStream(): MediaStream | null {
     return this.audioStream;
+  }
+
+  private onToolCallResultReceived(
+    payload: ToolCallResultReceivedPayload,
+  ): void {
+    const message: Record<string, string> = {
+      session_id: payload.sessionId,
+      message_type: 'tool_result',
+      tool_call_id: payload.toolCallId,
+      user_action_correlation_id: payload.userActionCorrelationId,
+      timestamp_user_action: payload.timestampUserAction,
+    };
+
+    if (payload.result !== undefined) {
+      message.result = payload.result;
+    }
+
+    if (payload.errorMessage) {
+      message.error = payload.errorMessage;
+    }
+
+    this.sendDataMessage(JSON.stringify(message));
   }
 
   public sendDataMessage(message: string) {
@@ -994,9 +1021,6 @@ export class StreamingClient {
         error,
       );
     }
-
-    // clear pending tool calls
-    this.toolCallManager.clearPendingCalls();
 
     // close the peer connection
     try {

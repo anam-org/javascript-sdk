@@ -4,6 +4,7 @@ import {
   WebRtcTextMessageEvent,
   WebRtcClientToolEvent,
   WebRtcReasoningTextMessageEvent,
+  ToolCallResultReceivedPayload,
 } from '../../index';
 import {
   WebRtcToolCallCompletedEvent,
@@ -33,5 +34,8 @@ export type InternalEventCallbacks = {
   ) => void;
   [InternalEvent.WEBRTC_REASONING_TEXT_MESSAGE_RECEIVED]: (
     message: WebRtcReasoningTextMessageEvent,
+  ) => void;
+  [InternalEvent.TOOL_CALL_RESULT_READY]: (
+    payload: ToolCallResultReceivedPayload,
   ) => void;
 };

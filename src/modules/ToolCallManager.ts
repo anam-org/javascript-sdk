@@ -2,6 +2,7 @@ import { ClientToolEvent, WebRtcClientToolEvent } from '../types/streaming';
 import {
   ToolCallCompletedPayload,
   ToolCallFailedPayload,
+  ToolCallResultReceivedPayload,
   ToolCallStartedPayload,
 } from '../types/toolCalling/ToolCallPayload';
 import {
@@ -10,8 +11,9 @@ import {
   WebRtcToolCallStartedEvent,
 } from '../types/streaming/WebRtcToolCallEvent';
 import { ToolCallHandler } from '../types/toolCalling/ToolCallHandler';
+import { InternalEventEmitter } from './InternalEventEmitter';
 import { PublicEventEmitter } from './PublicEventEmitter';
-import { AnamEvent } from '../types';
+import { AnamEvent, InternalEvent } from '../types';
 
 type PendingToolCall = {
   payload: ToolCallStartedPayload;
@@ -31,15 +33,39 @@ const calculateExecutionTime = (
 
 export class ToolCallManager {
   private publicEventEmitter: PublicEventEmitter;
+  private internalEventEmitter: InternalEventEmitter;
   private handlers: Record<string, ToolCallHandler> = Object.create(null);
   private pendingCalls: Record<string, PendingToolCall> = Object.create(null);
+  private failedCalls: Record<string, ToolCallFailedPayload> =
+    Object.create(null);
+  private activeSessionId: string | null = null;
 
-  constructor(publicEventEmitter: PublicEventEmitter) {
+  constructor(
+    publicEventEmitter: PublicEventEmitter,
+    internalEventEmitter: InternalEventEmitter,
+  ) {
     this.publicEventEmitter = publicEventEmitter;
+    this.internalEventEmitter = internalEventEmitter;
+  }
+
+  setActiveSession(sessionId: string): void {
+    this.activeSessionId = sessionId;
+    this.clearPendingCalls();
+    this.clearFailedCalls();
+  }
+
+  clearSessionState(): void {
+    this.activeSessionId = null;
+    this.clearPendingCalls();
+    this.clearFailedCalls();
   }
 
   clearPendingCalls(): void {
     this.pendingCalls = Object.create(null);
+  }
+
+  clearFailedCalls(): void {
+    this.failedCalls = Object.create(null);
   }
 
   registerHandler(toolName: string, handler: ToolCallHandler): () => void {
@@ -51,6 +77,10 @@ export class ToolCallManager {
   }
 
   async processToolCallStartedEvent(toolCallEvent: WebRtcToolCallStartedEvent) {
+    if (this.activeSessionId !== toolCallEvent.session_id) {
+      return;
+    }
+
     const { tool_name, timestamp } = toolCallEvent;
 
     const payload =
@@ -77,6 +107,14 @@ export class ToolCallManager {
     try {
       let result = await handler.onStart(payload);
       if (toolCallEvent.tool_type === 'client') {
+        this.sendToolResult({
+          sessionId: toolCallEvent.session_id,
+          toolCallId: toolCallEvent.tool_call_id,
+          userActionCorrelationId: toolCallEvent.user_action_correlation_id,
+          timestampUserAction: toolCallEvent.timestamp_user_action,
+          result: result ?? undefined,
+          errorMessage: undefined,
+        });
         await this.processToolCallCompletedEvent({
           ...toolCallEvent,
           result: result,
@@ -85,19 +123,23 @@ export class ToolCallManager {
         return;
       }
     } catch (error) {
-      if (error instanceof Error) {
-        await this.processToolCallFailedEvent({
-          ...toolCallEvent,
-          error_message: `Error in onStart handler: ${error.message}`,
-          timestamp: new Date().toISOString(),
-        });
-      } else {
-        await this.processToolCallFailedEvent({
-          ...toolCallEvent,
-          error_message: `Error in onStart handler: ${String(error)}`,
-          timestamp: new Date().toISOString(),
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      if (toolCallEvent.tool_type === 'client') {
+        this.sendToolResult({
+          sessionId: toolCallEvent.session_id,
+          toolCallId: toolCallEvent.tool_call_id,
+          userActionCorrelationId: toolCallEvent.user_action_correlation_id,
+          timestampUserAction: toolCallEvent.timestamp_user_action,
+          result: undefined,
+          errorMessage: `Error in handler: ${errorMessage}`,
         });
       }
+      await this.processToolCallFailedEvent({
+        ...toolCallEvent,
+        error_message: `Error in onStart handler: ${errorMessage}`,
+        timestamp: new Date().toISOString(),
+      });
       return;
     }
   }
@@ -106,6 +148,16 @@ export class ToolCallManager {
     toolCallEvent: WebRtcToolCallCompletedEvent,
   ) {
     const { tool_name, tool_call_id, timestamp } = toolCallEvent;
+
+    if (this.activeSessionId !== toolCallEvent.session_id) {
+      return;
+    }
+
+    if (tool_call_id in this.failedCalls) {
+      // If this call was previously marked as failed, do not process it as completed
+      delete this.failedCalls[tool_call_id]; // Clean up failed call record
+      return;
+    }
 
     const payload =
       this.webRTCToolCallCompletedEventToToolCallCompletedPayload(
@@ -145,8 +197,15 @@ export class ToolCallManager {
   async processToolCallFailedEvent(toolCallEvent: WebRtcToolCallFailedEvent) {
     const { tool_name, tool_call_id, timestamp } = toolCallEvent;
 
+    if (this.activeSessionId !== toolCallEvent.session_id) {
+      return;
+    }
+
     const payload =
       this.webRTCToolCallFailedEventToToolCallFailedPayload(toolCallEvent);
+
+    // Mark the call as failed
+    this.failedCalls[tool_call_id] = payload;
 
     if (tool_call_id in this.pendingCalls) {
       delete this.pendingCalls[tool_call_id];
@@ -172,6 +231,32 @@ export class ToolCallManager {
       console.error(`Error in onFail handler for tool ${tool_name}:`, error);
       return;
     }
+  }
+
+  /**
+   * Emits a tool result event so it can be sent back to the engine.
+   * The StreamingClient listens for this event and sends the data channel message.
+   */
+  sendToolResult(result: {
+    sessionId: string;
+    toolCallId: string;
+    userActionCorrelationId: string;
+    timestampUserAction: string;
+    result?: string;
+    errorMessage?: string;
+  }): void {
+    const payload: ToolCallResultReceivedPayload = {
+      sessionId: result.sessionId,
+      toolCallId: result.toolCallId,
+      result: result.result,
+      errorMessage: result.errorMessage,
+      userActionCorrelationId: result.userActionCorrelationId,
+      timestampUserAction: result.timestampUserAction,
+    };
+    this.internalEventEmitter.emit(
+      InternalEvent.TOOL_CALL_RESULT_READY,
+      payload,
+    );
   }
 
   /**
@@ -210,6 +295,7 @@ export class ToolCallManager {
   ): ToolCallStartedPayload {
     return {
       eventUid: webRtcEvent.event_uid,
+      sessionId: webRtcEvent.session_id,
       toolCallId: webRtcEvent.tool_call_id,
       toolName: webRtcEvent.tool_name,
       toolType: webRtcEvent.tool_type,
@@ -232,6 +318,7 @@ export class ToolCallManager {
 
     return {
       eventUid: webRtcEvent.event_uid,
+      sessionId: webRtcEvent.session_id,
       toolCallId: webRtcEvent.tool_call_id,
       toolName: webRtcEvent.tool_name,
       toolType: webRtcEvent.tool_type,
@@ -256,6 +343,7 @@ export class ToolCallManager {
 
     return {
       eventUid: webRtcEvent.event_uid,
+      sessionId: webRtcEvent.session_id,
       toolCallId: webRtcEvent.tool_call_id,
       toolName: webRtcEvent.tool_name,
       toolType: webRtcEvent.tool_type,
