@@ -99,7 +99,10 @@ export default class AnamClient {
 
     this.publicEventEmitter = new PublicEventEmitter();
     this.internalEventEmitter = new InternalEventEmitter();
-    this.toolCallManager = new ToolCallManager(this.publicEventEmitter);
+    this.toolCallManager = new ToolCallManager(
+      this.publicEventEmitter,
+      this.internalEventEmitter,
+    );
 
     this.apiClient = new CoreApiRestClient(
       sessionToken,
@@ -232,6 +235,7 @@ export default class AnamClient {
     } = clientConfig;
 
     this.sessionId = sessionId;
+    this.toolCallManager.setActiveSession(sessionId);
     setMetricsContext({
       sessionId: this.sessionId,
     });
@@ -281,6 +285,7 @@ export default class AnamClient {
         this.toolCallManager,
       );
     } catch (error) {
+      this.toolCallManager.clearSessionState();
       setMetricsContext({
         sessionId: null,
       });
@@ -547,6 +552,7 @@ export default class AnamClient {
         AnamEvent.CONNECTION_CLOSED,
         ConnectionClosedCode.NORMAL,
       );
+      this.toolCallManager.clearSessionState();
       await this.streamingClient.stopConnection();
       this.streamingClient = null;
       this.sessionId = null;
