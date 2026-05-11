@@ -124,11 +124,11 @@ directorNotes: {
 }
 ```
 
-You can also include basic emotion cue tags in `talk()` or `createTalkMessageStream()` text. Recognised cue tags are removed from spoken text and apply until the next cue tag or the end of the current turn.
+You can also include basic emotion cue tags in `talk()` or `createTalkMessageStream()` text. Recognised cue tags are removed from spoken text and apply until the next cue tag or the end of the current turn. The `[laughter]` cue triggers Cartesia laughter nonverbalism and uses playful avatar direction.
 
 ```typescript
 await anamClient.talk(
-  '[happy] Great to see you. [concerned] That sounds difficult.',
+  '[happy] Great to see you. [laughter] [concerned] That sounds difficult.',
 );
 ```
 
