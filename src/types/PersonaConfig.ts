@@ -4,14 +4,15 @@ export type DirectorNotesStylePreset =
   | 'neutral'
   | 'warm'
   | 'supportive'
+  | 'curious'
   | 'serious'
+  | 'playful'
+  | 'distressed'
+  | 'disinterested'
   | 'confident'
   | 'enthusiastic'
-  | 'playful'
-  | 'curious'
-  | 'distressed'
   | 'angry'
-  | 'disinterested';
+  | 'rage';
 
 export type DirectorNotes =
   | {
