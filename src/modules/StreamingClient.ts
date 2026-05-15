@@ -576,7 +576,7 @@ export class StreamingClient {
         break;
       default:
         console.warn(
-          'StreamingClient - onSignalMessage: unknown signal message action type. Is your anam-sdk version up to date?',
+          'StreamingClient - onSignalMessage: unknown signal message action type. Is your @anam-ai/js-sdk version up to date?',
           signalMessage,
         );
     }

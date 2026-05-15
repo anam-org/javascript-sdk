@@ -115,7 +115,7 @@ export class SignallingClient {
   public async sendOffer(localDescription: RTCSessionDescription) {
     const offerMessagePayload = {
       connectionDescription: localDescription,
-      userUid: this.sessionId, // TODO: this should be renamed to session Id on the server
+      userUid: this.sessionId, // TODO: this should be renamed to session ID on the server
     };
     const offerMessage: SignalMessage = {
       actionType: SignalMessageAction.OFFER,

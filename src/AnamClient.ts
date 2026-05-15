@@ -338,7 +338,7 @@ export default class AnamClient {
     );
     if (this.clientOptions?.disableInputAudio && userProvidedAudioStream) {
       console.warn(
-        'AnamClient:Input audio is disabled. User provided audio stream will be ignored.',
+        'AnamClient: Input audio is disabled. User-provided audio stream will be ignored.',
       );
     }
     await this.startSessionIfNeeded(userProvidedAudioStream);
@@ -404,7 +404,7 @@ export default class AnamClient {
     );
     if (this.clientOptions?.disableInputAudio && userProvidedAudioStream) {
       console.warn(
-        'AnamClient:Input audio is disabled. User provided audio stream will be ignored.',
+        'AnamClient: Input audio is disabled. User-provided audio stream will be ignored.',
       );
     }
     try {
@@ -514,7 +514,7 @@ export default class AnamClient {
     const body = JSON.stringify({
       message_type: 'interrupt',
       session_id: sessionId,
-      timestamp: new Date().toISOString(), // removing Z not needed
+      timestamp: new Date().toISOString(), // Removing the trailing Z is unnecessary.
     });
 
     this.sendDataMessage(body);
