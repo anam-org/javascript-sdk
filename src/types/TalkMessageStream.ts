@@ -55,7 +55,7 @@ export class TalkMessageStream {
     }
 
     if (this.state !== TalkMessageStreamState.STREAMING) {
-      console.warn('Talk stream is not active state: ' + this.state);
+      console.warn('Talk stream is not in an active state: ' + this.state);
       return;
     }
 

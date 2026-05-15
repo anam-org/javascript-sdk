@@ -187,7 +187,7 @@ export class CoreApiRestClient {
     personaConfig: PersonaConfig,
   ): Promise<string> {
     console.warn(
-      'Using unsecure method. This method should not be used in production.',
+      'Using an insecure method. This method should not be used in production.',
     );
     if (!this.apiKey) {
       throw new Error('No apiKey provided');
