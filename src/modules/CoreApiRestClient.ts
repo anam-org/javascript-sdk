@@ -13,6 +13,7 @@ import {
   PersonaConfig,
   StartSessionResponse,
   ApiGatewayConfig,
+  SessionOptions,
 } from '../types';
 import { RetryOptions } from '../types/coreApi/ApiOptions';
 import { StartSessionOptions } from '../types/coreApi/StartSessionOptions';
@@ -32,8 +33,14 @@ export class CoreApiRestClient {
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private retryOptions: ResolvedRetryOptions;
   private requestTimeoutMs: number;
+  private tokenSessionOptions: SessionOptions | undefined;
 
-  constructor(sessionToken?: string, apiKey?: string, options?: ApiOptions) {
+  constructor(
+    sessionToken?: string,
+    apiKey?: string,
+    options?: ApiOptions,
+    tokenSessionOptions?: SessionOptions,
+  ) {
     if (!sessionToken && !apiKey) {
       throw new Error('Either sessionToken or apiKey must be provided');
     }
@@ -50,6 +57,7 @@ export class CoreApiRestClient {
         DEFAULT_START_SESSION_REQUEST_TIMEOUT_MS,
       ),
     );
+    this.tokenSessionOptions = tokenSessionOptions;
   }
 
   /**
@@ -90,7 +98,10 @@ export class CoreApiRestClient {
           400,
         );
       }
-      this.sessionToken = await this.unsafe_getSessionToken(personaConfig);
+      this.sessionToken = await this.unsafe_getSessionToken(
+        personaConfig,
+        this.tokenSessionOptions,
+      );
     }
 
     // Check if brainType is being used and log deprecation warning
@@ -248,6 +259,7 @@ export class CoreApiRestClient {
 
   public async unsafe_getSessionToken(
     personaConfig: PersonaConfig,
+    sessionOptions?: SessionOptions,
   ): Promise<string> {
     console.warn(
       'Using an insecure method. This method should not be used in production.',
@@ -263,11 +275,20 @@ export class CoreApiRestClient {
       );
     }
 
-    let body: { clientLabel: string; personaConfig?: PersonaConfig } = {
+    this.validateSessionOptions(sessionOptions);
+
+    let body: {
+      clientLabel: string;
+      personaConfig?: PersonaConfig;
+      sessionOptions?: SessionOptions;
+    } = {
       clientLabel: 'js-sdk-api-key',
     };
     if (isCustomPersonaConfig(personaConfig)) {
       body = { ...body, personaConfig };
+    }
+    if (sessionOptions) {
+      body = { ...body, sessionOptions };
     }
     try {
       const targetPath = `${this.apiVersion}/auth/session-token`;
@@ -290,6 +311,36 @@ export class CoreApiRestClient {
 
   private getApiUrl(): string {
     return `${this.baseUrl}${this.apiVersion}`;
+  }
+
+  private validateSessionOptions(sessionOptions?: SessionOptions): void {
+    if (!sessionOptions) {
+      return;
+    }
+
+    const hasVideoWidth = sessionOptions.videoWidth !== undefined;
+    const hasVideoHeight = sessionOptions.videoHeight !== undefined;
+
+    if (hasVideoWidth !== hasVideoHeight) {
+      throw new ClientError(
+        'videoWidth and videoHeight must be provided together',
+        ErrorCode.CLIENT_ERROR_CODE_VALIDATION_ERROR,
+        400,
+      );
+    }
+
+    for (const [name, value] of [
+      ['videoWidth', sessionOptions.videoWidth],
+      ['videoHeight', sessionOptions.videoHeight],
+    ] as const) {
+      if (value !== undefined && (!Number.isInteger(value) || value <= 0)) {
+        throw new ClientError(
+          `${name} must be a positive integer`,
+          ErrorCode.CLIENT_ERROR_CODE_VALIDATION_ERROR,
+          400,
+        );
+      }
+    }
   }
 }
 
