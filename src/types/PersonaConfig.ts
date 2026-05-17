@@ -11,8 +11,7 @@ export type DirectorNotesStylePreset =
   | 'disinterested'
   | 'confident'
   | 'enthusiastic'
-  | 'angry'
-  | 'rage';
+  | 'angry';
 
 export type DirectorNotes =
   | {
