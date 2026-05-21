@@ -6,6 +6,7 @@ import {
   DEFAULT_START_SESSION_INITIAL_BACKOFF_MS,
   DEFAULT_START_SESSION_MAX_ATTEMPTS,
   DEFAULT_START_SESSION_MAX_BACKOFF_MS,
+  DEFAULT_START_SESSION_REQUEST_TIMEOUT_MS,
 } from '../lib/constants';
 import {
   ApiOptions,
@@ -30,6 +31,7 @@ export class CoreApiRestClient {
   private sessionToken: string | null;
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private retryOptions: ResolvedRetryOptions;
+  private requestTimeoutMs: number;
 
   constructor(sessionToken?: string, apiKey?: string, options?: ApiOptions) {
     if (!sessionToken && !apiKey) {
@@ -41,6 +43,13 @@ export class CoreApiRestClient {
     this.apiVersion = options?.apiVersion || DEFAULT_API_VERSION;
     this.apiGatewayConfig = options?.apiGateway || undefined;
     this.retryOptions = resolveRetryOptions(options?.retry);
+    this.requestTimeoutMs = Math.max(
+      0,
+      asFiniteNumber(
+        options?.requestTimeoutMs,
+        DEFAULT_START_SESSION_REQUEST_TIMEOUT_MS,
+      ),
+    );
   }
 
   /**
@@ -111,6 +120,12 @@ export class CoreApiRestClient {
     personaConfig?: PersonaConfig,
     sessionOptions?: StartSessionOptions,
   ): Promise<StartSessionResponse> {
+    const controller =
+      this.requestTimeoutMs > 0 ? new AbortController() : undefined;
+    const timeoutHandle =
+      controller !== undefined
+        ? setTimeout(() => controller.abort(), this.requestTimeoutMs)
+        : undefined;
     try {
       const targetPath = `${this.apiVersion}/engine/session`;
       const { url, headers } = this.buildGatewayUrlAndHeaders(targetPath, {
@@ -126,6 +141,7 @@ export class CoreApiRestClient {
           sessionOptions,
           clientMetadata: CLIENT_METADATA,
         }),
+        signal: controller?.signal,
       });
 
       const data = await response.json();
@@ -212,6 +228,10 @@ export class CoreApiRestClient {
         500,
         { cause: error instanceof Error ? error.message : String(error) },
       );
+    } finally {
+      if (timeoutHandle !== undefined) {
+        clearTimeout(timeoutHandle);
+      }
     }
   }
 

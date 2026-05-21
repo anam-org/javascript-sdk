@@ -26,4 +26,11 @@ export interface ApiOptions {
    * retried.
    */
   retry?: RetryOptions;
+  /**
+   * Per-attempt timeout for the session-start request, in milliseconds.
+   * If an attempt does not complete within this window it is aborted,
+   * which lets the retry policy treat the failure as transient. Set to 0
+   * to disable. Defaults to 10000.
+   */
+  requestTimeoutMs?: number;
 }

@@ -16,3 +16,6 @@ export const CLIENT_METADATA = {
 export const DEFAULT_START_SESSION_MAX_ATTEMPTS = 3;
 export const DEFAULT_START_SESSION_INITIAL_BACKOFF_MS = 250;
 export const DEFAULT_START_SESSION_MAX_BACKOFF_MS = 2000;
+// Per-attempt timeout. Without this, a hung connection (no TCP reset)
+// would block the retry loop from ever firing.
+export const DEFAULT_START_SESSION_REQUEST_TIMEOUT_MS = 10000;
