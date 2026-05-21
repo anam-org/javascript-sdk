@@ -274,19 +274,30 @@ export class CoreApiRestClient {
 }
 
 function resolveRetryOptions(options?: RetryOptions): ResolvedRetryOptions {
+  // NaN/Infinity would silently break the retry loop or remove the backoff
+  // cap, so coerce non-finite numerics back to the defaults before flooring.
   const maxAttempts = Math.max(
     1,
-    options?.maxAttempts ?? DEFAULT_START_SESSION_MAX_ATTEMPTS,
+    Math.floor(
+      asFiniteNumber(options?.maxAttempts, DEFAULT_START_SESSION_MAX_ATTEMPTS),
+    ),
   );
   const initialBackoffMs = Math.max(
     0,
-    options?.initialBackoffMs ?? DEFAULT_START_SESSION_INITIAL_BACKOFF_MS,
+    asFiniteNumber(
+      options?.initialBackoffMs,
+      DEFAULT_START_SESSION_INITIAL_BACKOFF_MS,
+    ),
   );
   const maxBackoffMs = Math.max(
     initialBackoffMs,
-    options?.maxBackoffMs ?? DEFAULT_START_SESSION_MAX_BACKOFF_MS,
+    asFiniteNumber(options?.maxBackoffMs, DEFAULT_START_SESSION_MAX_BACKOFF_MS),
   );
   return { maxAttempts, initialBackoffMs, maxBackoffMs };
+}
+
+function asFiniteNumber(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
 function isRetryableError(error: unknown): boolean {
