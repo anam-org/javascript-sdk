@@ -214,7 +214,7 @@ export class CoreApiRestClient {
           throw new ClientError(
             'Unknown error when starting session',
             ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
-            500,
+            response.status,
             { cause: data.message },
           );
       }
