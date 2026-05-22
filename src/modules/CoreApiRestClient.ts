@@ -3,6 +3,10 @@ import {
   CLIENT_METADATA,
   DEFAULT_API_BASE_URL,
   DEFAULT_API_VERSION,
+  DEFAULT_START_SESSION_INITIAL_BACKOFF_MS,
+  DEFAULT_START_SESSION_MAX_ATTEMPTS,
+  DEFAULT_START_SESSION_MAX_BACKOFF_MS,
+  DEFAULT_START_SESSION_REQUEST_TIMEOUT_MS,
 } from '../lib/constants';
 import {
   ApiOptions,
@@ -10,8 +14,15 @@ import {
   StartSessionResponse,
   ApiGatewayConfig,
 } from '../types';
+import { RetryOptions } from '../types/coreApi/ApiOptions';
 import { StartSessionOptions } from '../types/coreApi/StartSessionOptions';
 import { isCustomPersonaConfig } from '../types/PersonaConfig';
+
+interface ResolvedRetryOptions {
+  maxAttempts: number;
+  initialBackoffMs: number;
+  maxBackoffMs: number;
+}
 
 export class CoreApiRestClient {
   private baseUrl: string;
@@ -19,6 +30,8 @@ export class CoreApiRestClient {
   private apiKey: string | null;
   private sessionToken: string | null;
   private apiGatewayConfig: ApiGatewayConfig | undefined;
+  private retryOptions: ResolvedRetryOptions;
+  private requestTimeoutMs: number;
 
   constructor(sessionToken?: string, apiKey?: string, options?: ApiOptions) {
     if (!sessionToken && !apiKey) {
@@ -29,6 +42,14 @@ export class CoreApiRestClient {
     this.baseUrl = options?.baseUrl || DEFAULT_API_BASE_URL;
     this.apiVersion = options?.apiVersion || DEFAULT_API_VERSION;
     this.apiGatewayConfig = options?.apiGateway || undefined;
+    this.retryOptions = resolveRetryOptions(options?.retry);
+    this.requestTimeoutMs = Math.max(
+      0,
+      asFiniteNumber(
+        options?.requestTimeoutMs,
+        DEFAULT_START_SESSION_REQUEST_TIMEOUT_MS,
+      ),
+    );
   }
 
   /**
@@ -79,6 +100,32 @@ export class CoreApiRestClient {
       );
     }
 
+    const { maxAttempts } = this.retryOptions;
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await this.attemptStartSession(personaConfig, sessionOptions);
+      } catch (error) {
+        lastError = error;
+        if (attempt >= maxAttempts || !isRetryableError(error)) {
+          throw error;
+        }
+        await sleep(this.computeBackoffDelay(attempt));
+      }
+    }
+    throw lastError;
+  }
+
+  private async attemptStartSession(
+    personaConfig?: PersonaConfig,
+    sessionOptions?: StartSessionOptions,
+  ): Promise<StartSessionResponse> {
+    const controller =
+      this.requestTimeoutMs > 0 ? new AbortController() : undefined;
+    const timeoutHandle =
+      controller !== undefined
+        ? setTimeout(() => controller.abort(), this.requestTimeoutMs)
+        : undefined;
     try {
       const targetPath = `${this.apiVersion}/engine/session`;
       const { url, headers } = this.buildGatewayUrlAndHeaders(targetPath, {
@@ -94,6 +141,7 @@ export class CoreApiRestClient {
           sessionOptions,
           clientMetadata: CLIENT_METADATA,
         }),
+        signal: controller?.signal,
       });
 
       const data = await response.json();
@@ -166,7 +214,7 @@ export class CoreApiRestClient {
           throw new ClientError(
             'Unknown error when starting session',
             ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
-            500,
+            response.status,
             { cause: data.message },
           );
       }
@@ -180,7 +228,22 @@ export class CoreApiRestClient {
         500,
         { cause: error instanceof Error ? error.message : String(error) },
       );
+    } finally {
+      if (timeoutHandle !== undefined) {
+        clearTimeout(timeoutHandle);
+      }
     }
+  }
+
+  private computeBackoffDelay(attempt: number): number {
+    const { initialBackoffMs, maxBackoffMs } = this.retryOptions;
+    const exponential = Math.min(
+      maxBackoffMs,
+      initialBackoffMs * Math.pow(2, attempt - 1),
+    );
+    // Equal jitter: half deterministic, half random. Avoids both thundering
+    // herd and zero-delay retries that would hammer a recovering origin.
+    return Math.floor(exponential / 2 + Math.random() * (exponential / 2));
   }
 
   public async unsafe_getSessionToken(
@@ -228,4 +291,44 @@ export class CoreApiRestClient {
   private getApiUrl(): string {
     return `${this.baseUrl}${this.apiVersion}`;
   }
+}
+
+function resolveRetryOptions(options?: RetryOptions): ResolvedRetryOptions {
+  // NaN/Infinity would silently break the retry loop or remove the backoff
+  // cap, so coerce non-finite numerics back to the defaults before flooring.
+  const maxAttempts = Math.max(
+    1,
+    Math.floor(
+      asFiniteNumber(options?.maxAttempts, DEFAULT_START_SESSION_MAX_ATTEMPTS),
+    ),
+  );
+  const initialBackoffMs = Math.max(
+    0,
+    asFiniteNumber(
+      options?.initialBackoffMs,
+      DEFAULT_START_SESSION_INITIAL_BACKOFF_MS,
+    ),
+  );
+  const maxBackoffMs = Math.max(
+    initialBackoffMs,
+    asFiniteNumber(options?.maxBackoffMs, DEFAULT_START_SESSION_MAX_BACKOFF_MS),
+  );
+  return { maxAttempts, initialBackoffMs, maxBackoffMs };
+}
+
+function asFiniteNumber(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function isRetryableError(error: unknown): boolean {
+  if (error instanceof ClientError) {
+    return error.statusCode >= 500 && error.statusCode < 600;
+  }
+  // Unwrapped errors (e.g. fetch network failures that escape attemptStartSession
+  // without being normalized to a ClientError) are treated as transient.
+  return true;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

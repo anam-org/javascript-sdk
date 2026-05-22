@@ -1,4 +1,4 @@
-export type { ApiOptions } from './ApiOptions';
+export type { ApiOptions, RetryOptions } from './ApiOptions';
 // for backwards compatibility with deprecated name
 export type { ApiOptions as CoreApiOptions } from './ApiOptions';
 export type {
