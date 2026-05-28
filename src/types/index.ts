@@ -5,6 +5,7 @@ export type * from './streaming';
 export { DataChannelMessage } from './streaming';
 export type * from './coreApi';
 export type { PersonaConfig } from './PersonaConfig';
+export type { DirectorNotes, PresetStyle } from './DirectorNotes';
 export type { ApiGatewayConfig } from './ApiGatewayConfig';
 export type { InputAudioState } from './InputAudioState';
 export { AudioPermissionState } from './InputAudioState';
