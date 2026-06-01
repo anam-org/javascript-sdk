@@ -17,4 +17,11 @@ export interface AnamPublicClientOptions {
     disableClientMetrics?: boolean;
   };
   iceServers?: RTCIceServer[];
+  /**
+   * Full RTCConfiguration passed through to the underlying RTCPeerConnection.
+   * Use e.g. `{ iceTransportPolicy: 'relay' }` to force TURN-relay-only on
+   * networks that drop UDP. The top-level `iceServers` option (when set) takes
+   * precedence over `rtcConfiguration.iceServers`.
+   */
+  rtcConfiguration?: RTCConfiguration;
 }
