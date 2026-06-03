@@ -62,3 +62,18 @@ export type DirectorNotes =
       customStylePrompt: string;
       presetStyle?: never;
     });
+
+/**
+ * Partial Director Notes update for a LIVE (streaming) session, applied via
+ * {@link AnamClient.updateDirectorNotes} over the data channel. All fields are
+ * optional — send only what changes.
+ *
+ * Only Cara 4 avatars support mid-session updates, and the engine applies only
+ * `presetStyle` and the strength values live. `presetStyle: null` resets to the
+ * session-start style. `customStylePrompt` cannot be changed mid-session (start
+ * a new session to change it), so it is intentionally not part of this type.
+ * No-op on engines that don't support dynamic updates.
+ */
+export interface RuntimeDirectorNotes extends DirectorNotesStrengths {
+  presetStyle?: PresetStyle | null;
+}

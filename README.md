@@ -142,3 +142,23 @@ directorNotes: {
   styleStrength: 1.2,
 }
 ```
+
+### Changing the style mid-session
+
+On Cara 4 you can change the style **without restarting** the session via `updateDirectorNotes`, for example to react to the conversation in real time. The engine applies `presetStyle` (pass `null` to reset to the session-start style) and the strength values immediately. `customStylePrompt` cannot be changed mid-session — start a new session to change it.
+
+```typescript
+// while the session is streaming:
+
+// switch to a different preset style
+anamClient.updateDirectorNotes({ presetStyle: 'happy' });
+
+// adjust how strongly the style / speech-driven motion are followed
+anamClient.updateDirectorNotes({
+  styleStrength: 1.5,
+  speechMotionStrength: 1.2,
+});
+
+// reset to the style the session started with
+anamClient.updateDirectorNotes({ presetStyle: null });
+```
