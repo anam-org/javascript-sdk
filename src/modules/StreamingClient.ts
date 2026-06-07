@@ -39,8 +39,10 @@ import { ToolCallManager } from './ToolCallManager';
 const SUCCESS_METRIC_POLLING_TIMEOUT_MS = 15000; // After this time we will stop polling for the first frame and consider the session a failure.
 const STATS_COLLECTION_INTERVAL_MS = 5000;
 const ICE_CANDIDATE_POOL_SIZE = 2; // Optimisation to speed up connection time
+const ICE_RESTART_REQUEST_RETRY_INTERVAL_MS = 1000;
 
 export class StreamingClient {
+  private sessionId: string;
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
   private signallingClient: SignallingClient;
@@ -50,6 +52,12 @@ export class StreamingClient {
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private peerConnection: RTCPeerConnection | null = null;
   private connectionReceivedAnswer = false;
+  private hasEstablishedConnection = false;
+  private iceRestartInProgress = false;
+  private waitingForIceRestartOffer = false;
+  private iceRestartRequestRetryInterval: ReturnType<
+    typeof setInterval
+  > | null = null;
   private remoteIceCandidateBuffer: RTCIceCandidate[] = [];
   private inputAudioStream: MediaStream | null = null;
   private dataChannel: RTCDataChannel | null = null;
@@ -77,6 +85,7 @@ export class StreamingClient {
     internalEventEmitter: InternalEventEmitter,
     toolCallManager: ToolCallManager,
   ) {
+    this.sessionId = sessionId;
     this.publicEventEmitter = publicEventEmitter;
     this.internalEventEmitter = internalEventEmitter;
     this.toolCallManager = toolCallManager;
@@ -484,6 +493,13 @@ export class StreamingClient {
   }
 
   private async initPeerConnection() {
+    this.connectionReceivedAnswer = false;
+    this.hasEstablishedConnection = false;
+    this.iceRestartInProgress = false;
+    this.waitingForIceRestartOffer = false;
+    this.stopIceRestartRequestRetry();
+    this.remoteIceCandidateBuffer = [];
+
     this.peerConnection = new RTCPeerConnection({
       // SDK default first (caller's rtcConfiguration may override it)
       iceCandidatePoolSize: ICE_CANDIDATE_POOL_SIZE,
@@ -540,12 +556,30 @@ export class StreamingClient {
         await this.peerConnection.setRemoteDescription(answer);
         this.connectionReceivedAnswer = true;
         // flush the remote buffer
-        this.flushRemoteIceCandidateBuffer();
+        await this.flushRemoteIceCandidateBuffer();
+        break;
+      case SignalMessageAction.OFFER:
+        const offer = signalMessage.payload as RTCSessionDescriptionInit;
+        await this.peerConnection.setRemoteDescription(offer);
+        await this.flushRemoteIceCandidateBuffer();
+        const restartAnswer = await this.peerConnection.createAnswer();
+        await this.peerConnection.setLocalDescription(restartAnswer);
+        if (!this.peerConnection.localDescription) {
+          throw new Error(
+            'StreamingClient - onSignalMessage: local description is null after ICE restart answer',
+          );
+        }
+        await this.signallingClient.sendAnswer(
+          this.peerConnection.localDescription,
+        );
+        this.waitingForIceRestartOffer = false;
+        this.stopIceRestartRequestRetry();
+        await this.flushRemoteIceCandidateBuffer();
         break;
       case SignalMessageAction.ICE_CANDIDATE:
         const iceCandidateConfig = signalMessage.payload as RTCIceCandidateInit;
         const candidate = new RTCIceCandidate(iceCandidateConfig);
-        if (this.connectionReceivedAnswer) {
+        if (this.connectionReceivedAnswer && !this.waitingForIceRestartOffer) {
           await this.peerConnection.addIceCandidate(candidate);
         } else {
           this.remoteIceCandidateBuffer.push(candidate);
@@ -599,14 +633,24 @@ export class StreamingClient {
         );
         this.handleWebrtcFailure(err);
       }
+    } else if (this.waitingForIceRestartOffer) {
+      this.signallingClient.sendIceRestartRequest();
     }
   }
 
-  private flushRemoteIceCandidateBuffer() {
-    this.remoteIceCandidateBuffer.forEach((candidate) => {
-      this.peerConnection?.addIceCandidate(candidate);
-    });
+  private async flushRemoteIceCandidateBuffer() {
+    const bufferedCandidates = this.remoteIceCandidateBuffer;
     this.remoteIceCandidateBuffer = [];
+    for (const candidate of bufferedCandidates) {
+      try {
+        await this.peerConnection?.addIceCandidate(candidate);
+      } catch (error) {
+        console.warn(
+          'StreamingClient - flushRemoteIceCandidateBuffer: error adding ICE candidate',
+          error,
+        );
+      }
+    }
   }
 
   /**
@@ -625,14 +669,79 @@ export class StreamingClient {
       this.peerConnection?.iceConnectionState === 'connected' ||
       this.peerConnection?.iceConnectionState === 'completed'
     ) {
+      this.hasEstablishedConnection = true;
+      this.iceRestartInProgress = false;
+      this.waitingForIceRestartOffer = false;
+      this.stopIceRestartRequestRetry();
       this.publicEventEmitter.emit(AnamEvent.CONNECTION_ESTABLISHED);
       // Start collecting stats every 5 seconds
       this.startStatsCollection();
+    } else if (
+      this.peerConnection?.iceConnectionState === 'disconnected' ||
+      this.peerConnection?.iceConnectionState === 'failed'
+    ) {
+      this.logIceRestartState('ICE connection state requires restart');
+      void this.requestIceRestart();
+    }
+  }
+
+  private async requestIceRestart() {
+    if (
+      !this.peerConnection ||
+      !this.hasEstablishedConnection ||
+      this.iceRestartInProgress
+    ) {
+      this.logIceRestartState('Skipping ICE restart request', {
+        hasPeerConnection: Boolean(this.peerConnection),
+        hasEstablishedConnection: this.hasEstablishedConnection,
+        iceRestartInProgress: this.iceRestartInProgress,
+      });
+      return;
+    }
+
+    this.logIceRestartState('Requesting ICE restart');
+    this.iceRestartInProgress = true;
+    this.waitingForIceRestartOffer = true;
+    this.signallingClient.reconnect();
+    this.signallingClient.sendIceRestartRequest();
+    this.startIceRestartRequestRetry();
+  }
+
+  private startIceRestartRequestRetry() {
+    if (this.iceRestartRequestRetryInterval) {
+      return;
+    }
+
+    this.iceRestartRequestRetryInterval = setInterval(() => {
+      if (!this.waitingForIceRestartOffer || !this.hasEstablishedConnection) {
+        this.stopIceRestartRequestRetry();
+        return;
+      }
+      this.logIceRestartState('Retrying ICE restart request');
+      this.signallingClient.sendIceRestartRequest();
+    }, ICE_RESTART_REQUEST_RETRY_INTERVAL_MS);
+  }
+
+  private stopIceRestartRequestRetry() {
+    if (this.iceRestartRequestRetryInterval) {
+      clearInterval(this.iceRestartRequestRetryInterval);
+      this.iceRestartRequestRetryInterval = null;
     }
   }
 
   private onConnectionStateChange() {
-    if (this.peerConnection?.connectionState === 'closed') {
+    if (
+      this.peerConnection?.connectionState === 'connected' &&
+      this.hasEstablishedConnection === false
+    ) {
+      this.hasEstablishedConnection = true;
+    } else if (
+      this.peerConnection?.connectionState === 'disconnected' ||
+      this.peerConnection?.connectionState === 'failed'
+    ) {
+      this.logIceRestartState('Peer connection state requires restart');
+      void this.requestIceRestart();
+    } else if (this.peerConnection?.connectionState === 'closed') {
       console.error(
         'StreamingClient - onConnectionStateChange: Connection closed',
       );
@@ -640,6 +749,22 @@ export class StreamingClient {
         'The connection to our servers was lost. Please try again.',
       );
     }
+  }
+
+  private logIceRestartState(
+    message: string,
+    details?: Record<string, unknown>,
+  ) {
+    console.info('StreamingClient - ICE restart: ' + message, {
+      sessionId: this.sessionId,
+      iceConnectionState: this.peerConnection?.iceConnectionState,
+      connectionState: this.peerConnection?.connectionState,
+      signalingState: this.peerConnection?.signalingState,
+      hasEstablishedConnection: this.hasEstablishedConnection,
+      iceRestartInProgress: this.iceRestartInProgress,
+      waitingForIceRestartOffer: this.waitingForIceRestartOffer,
+      ...details,
+    });
   }
 
   private handleWebrtcFailure(err: any) {
@@ -1002,6 +1127,12 @@ export class StreamingClient {
       this.successMetricPoller = null;
     }
     this.successMetricFired = false;
+    this.connectionReceivedAnswer = false;
+    this.hasEstablishedConnection = false;
+    this.iceRestartInProgress = false;
+    this.waitingForIceRestartOffer = false;
+    this.stopIceRestartRequestRetry();
+    this.remoteIceCandidateBuffer = [];
 
     // stop the input audio stream
     try {

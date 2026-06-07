@@ -231,8 +231,11 @@ export default class AnamClient {
     const {
       heartbeatIntervalSeconds,
       maxWsReconnectionAttempts,
+      maxWsReconnectAttempts,
       iceServers: defaultIceServers,
     } = clientConfig;
+    const resolvedMaxWsReconnectionAttempts =
+      maxWsReconnectionAttempts ?? maxWsReconnectAttempts;
 
     this.sessionId = sessionId;
     this.toolCallManager.setActiveSession(sessionId);
@@ -256,7 +259,7 @@ export default class AnamClient {
           },
           signalling: {
             heartbeatIntervalSeconds,
-            maxWsReconnectionAttempts,
+            maxWsReconnectionAttempts: resolvedMaxWsReconnectionAttempts,
             url: {
               baseUrl: engineHost,
               protocol: engineProtocol,

@@ -8,5 +8,6 @@ export interface SignallingURLOptions {
 export interface SignallingClientOptions {
   heartbeatIntervalSeconds?: number;
   maxWsReconnectionAttempts?: number;
+  maxWsReconnectAttempts?: number;
   url: SignallingURLOptions;
 }

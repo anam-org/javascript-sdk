@@ -13,6 +13,8 @@ import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamP
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 5;
 const DEFAULT_WS_RECONNECTION_ATTEMPTS = 5;
+const DEFAULT_WS_RECOVERY_WINDOW_MS = 15000;
+const MAX_WS_RECONNECT_DELAY_MS = 1000;
 
 export class SignallingClient {
   private publicEventEmitter: PublicEventEmitter;
@@ -24,6 +26,7 @@ export class SignallingClient {
   private stopSignal = false;
   private sendingBuffer: SignalMessage[] = [];
   private wsConnectionAttempts = 0;
+  private wsReconnectStartedAt: number | null = null;
   private socket: WebSocket | null = null;
   private heartBeatIntervalRef: ReturnType<typeof setInterval> | null = null;
   private apiGatewayConfig: ApiGatewayConfig | undefined;
@@ -44,14 +47,20 @@ export class SignallingClient {
     }
     this.sessionId = sessionId;
 
-    const { heartbeatIntervalSeconds, maxWsReconnectionAttempts, url } =
-      options;
+    const {
+      heartbeatIntervalSeconds,
+      maxWsReconnectionAttempts,
+      maxWsReconnectAttempts,
+      url,
+    } = options;
 
     this.heartbeatIntervalSeconds =
       heartbeatIntervalSeconds || DEFAULT_HEARTBEAT_INTERVAL_SECONDS;
 
     this.maxWsReconnectionAttempts =
-      maxWsReconnectionAttempts || DEFAULT_WS_RECONNECTION_ATTEMPTS;
+      maxWsReconnectionAttempts ||
+      maxWsReconnectAttempts ||
+      DEFAULT_WS_RECONNECTION_ATTEMPTS;
 
     if (!url.baseUrl) {
       throw new Error('Signalling Client: baseUrl is required');
@@ -125,6 +134,24 @@ export class SignallingClient {
     this.sendSignalMessage(offerMessage);
   }
 
+  public async sendAnswer(localDescription: RTCSessionDescriptionInit) {
+    const answerMessage: SignalMessage = {
+      actionType: SignalMessageAction.ANSWER,
+      sessionId: this.sessionId,
+      payload: localDescription,
+    };
+    this.sendSignalMessage(answerMessage);
+  }
+
+  public sendIceRestartRequest() {
+    const iceRestartRequestMessage: SignalMessage = {
+      actionType: SignalMessageAction.ICE_RESTART_REQUEST,
+      sessionId: this.sessionId,
+      payload: {},
+    };
+    this.sendSignalMessage(iceRestartRequestMessage);
+  }
+
   public async sendIceCandidate(candidate: RTCIceCandidate) {
     const iceCandidateMessage: SignalMessage = {
       actionType: SignalMessageAction.ICE_CANDIDATE,
@@ -138,14 +165,18 @@ export class SignallingClient {
     if (this.socket?.readyState === WebSocket.OPEN) {
       try {
         this.socket.send(JSON.stringify(message));
+        this.logIceRestartSignalMessage(message, 'sent');
       } catch (error) {
         console.error(
           'SignallingClient - sendSignalMessage: error sending message',
           error,
         );
+        this.sendingBuffer.push(message);
+        this.logIceRestartSignalMessage(message, 'queued after send error');
       }
     } else {
       this.sendingBuffer.push(message);
+      this.logIceRestartSignalMessage(message, 'queued while websocket closed');
     }
   }
 
@@ -187,12 +218,47 @@ export class SignallingClient {
     }
   }
 
+  public reconnect() {
+    if (this.stopSignal) {
+      return;
+    }
+
+    console.info('SignallingClient - reconnect: reconnecting websocket', {
+      sessionId: this.sessionId,
+      readyState: this.socket?.readyState,
+      bufferedMessages: this.sendingBuffer.length,
+    });
+
+    if (this.socket) {
+      this.socket.onclose = null;
+      this.socket.onerror = null;
+      this.socket.onmessage = null;
+      this.socket.onopen = null;
+      try {
+        this.socket.close();
+      } catch (error) {
+        console.error(
+          'SignallingClient - reconnect: error closing socket',
+          error,
+        );
+      }
+      this.socket = null;
+    }
+    if (this.heartBeatIntervalRef) {
+      clearInterval(this.heartBeatIntervalRef);
+      this.heartBeatIntervalRef = null;
+    }
+
+    this.connect();
+  }
+
   private async onOpen(): Promise<void> {
     if (!this.socket) {
       throw new Error('SignallingClient - onOpen: socket is null');
     }
     try {
       this.wsConnectionAttempts = 0;
+      this.wsReconnectStartedAt = null;
       this.flushSendingBuffer();
       this.socket.onmessage = this.onMessage.bind(this);
       this.startSendingHeartBeats();
@@ -211,16 +277,27 @@ export class SignallingClient {
     if (this.stopSignal) {
       return;
     }
-    if (this.wsConnectionAttempts <= this.maxWsReconnectionAttempts) {
+    if (this.heartBeatIntervalRef) {
+      clearInterval(this.heartBeatIntervalRef);
+      this.heartBeatIntervalRef = null;
+    }
+    if (!this.wsReconnectStartedAt) {
+      this.wsReconnectStartedAt = Date.now();
+    }
+    const elapsedReconnectMs = Date.now() - this.wsReconnectStartedAt;
+    const shouldReconnect =
+      this.wsConnectionAttempts <= this.maxWsReconnectionAttempts ||
+      elapsedReconnectMs < DEFAULT_WS_RECOVERY_WINDOW_MS;
+
+    if (shouldReconnect) {
       this.socket = null;
-      setTimeout(() => {
-        this.connect();
-      }, 100 * this.wsConnectionAttempts);
+      setTimeout(
+        () => {
+          this.connect();
+        },
+        Math.min(100 * this.wsConnectionAttempts, MAX_WS_RECONNECT_DELAY_MS),
+      );
     } else {
-      if (this.heartBeatIntervalRef) {
-        clearInterval(this.heartBeatIntervalRef);
-        this.heartBeatIntervalRef = null;
-      }
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
         ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
@@ -241,12 +318,25 @@ export class SignallingClient {
       this.sendingBuffer.forEach((message: SignalMessage) => {
         if (this.socket?.readyState === WebSocket.OPEN) {
           this.socket.send(JSON.stringify(message));
+          this.logIceRestartSignalMessage(message, 'flushed');
         } else {
           newBuffer.push(message);
         }
       });
     }
     this.sendingBuffer = newBuffer;
+  }
+
+  private logIceRestartSignalMessage(message: SignalMessage, state: string) {
+    if (message.actionType !== SignalMessageAction.ICE_RESTART_REQUEST) {
+      return;
+    }
+
+    console.info('SignallingClient - ICE restart request ' + state, {
+      sessionId: this.sessionId,
+      readyState: this.socket?.readyState,
+      bufferedMessages: this.sendingBuffer.length,
+    });
   }
 
   private async onMessage(event: MessageEvent) {

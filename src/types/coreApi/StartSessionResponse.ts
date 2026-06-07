@@ -7,7 +7,8 @@ export interface StartSessionResponse {
 }
 
 export interface ClientConfigResponse {
-  heartbeatIntervalSeconds: number;
-  maxWsReconnectionAttempts: number;
+  heartbeatIntervalSeconds?: number;
+  maxWsReconnectionAttempts?: number;
+  maxWsReconnectAttempts?: number;
   iceServers: RTCIceServer[];
 }
