@@ -56,6 +56,33 @@ const anamClient = unsafe_createClientWithApiKey('your-api-key', {
 
 **NOTE**: the method `unsafe_createClientWithApiKey` is unsafe for production use cases because it requires exposing your api key to the client. When deploying to production see [production usage](#usage-in-production) first.
 
+### Output video dimensions
+
+Some avatar models support more than one output resolution — e.g. Cara 4 streams landscape (`1152x768`) or portrait (`768x1152`). Request a resolution by passing pixel dimensions via `sessionOptions`. The server validates the pair against the avatar model and rejects unsupported combinations.
+
+When you create the client with an API key (local development), set them in the client options:
+
+```typescript
+const anamClient = unsafe_createClientWithApiKey(
+  'your-api-key',
+  personaConfig,
+  {
+    sessionOptions: { videoWidth: 768, videoHeight: 1152 },
+  },
+);
+```
+
+In production you mint the session token server-side, so set them on that request instead (see [production usage](#usage-in-production)):
+
+```typescript
+body: JSON.stringify({
+  personaConfig: {
+    /* ... */
+  },
+  sessionOptions: { videoWidth: 768, videoHeight: 1152 },
+}),
+```
+
 Once you have an instance of the Anam client initialised you can start a session by streaming to audio and video elements in the DOM.
 
 ```typescript

@@ -108,6 +108,7 @@ export default class AnamClient {
       sessionToken,
       options?.apiKey,
       options?.api,
+      options?.sessionOptions,
     );
     this.messageHistoryClient = new MessageHistoryClient(
       this.publicEventEmitter,

@@ -6,3 +6,4 @@ export type {
   ClientConfigResponse,
 } from './StartSessionResponse';
 export { StartSessionOptions } from './StartSessionOptions';
+export type { SessionOptions } from './SessionOptions';

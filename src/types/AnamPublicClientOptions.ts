@@ -1,8 +1,16 @@
 import { ApiOptions } from '../types';
+import { SessionOptions } from './coreApi/SessionOptions';
 import { VoiceDetectionOptions } from './VoiceDetectionOptions';
 
 export interface AnamPublicClientOptions {
   api?: ApiOptions;
+  /**
+   * Session options (e.g. output `videoWidth`/`videoHeight`) applied when this
+   * client mints its own session token — i.e. only used with
+   * `unsafe_createClientWithApiKey`. When you create the token server-side, set
+   * these on that request instead. See {@link SessionOptions}.
+   */
+  sessionOptions?: SessionOptions;
   voiceDetection?: VoiceDetectionOptions;
   audioDeviceId?: string;
   disableInputAudio?: boolean;
