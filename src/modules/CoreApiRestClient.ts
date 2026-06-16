@@ -17,7 +17,6 @@ import {
 } from '../types';
 import { RetryOptions } from '../types/coreApi/ApiOptions';
 import { StartSessionOptions } from '../types/coreApi/StartSessionOptions';
-import { isCustomPersonaConfig } from '../types/PersonaConfig';
 
 interface ResolvedRetryOptions {
   maxAttempts: number;
@@ -280,18 +279,21 @@ export class CoreApiRestClient {
 
     assertValidSessionOptionsShape(sessionOptions);
 
-    let body: {
+    // Always forward the caller's personaConfig: the server resolves the avatar
+    // model from it (e.g. to validate sessionOptions dimensions and to mint the
+    // right token). Gating this on llmId/brainType previously dropped valid
+    // configs that reference a persona by id or use the default LLM, which the
+    // server then mis-classified as a model-less "legacy" session.
+    const body: {
       clientLabel: string;
-      personaConfig?: PersonaConfig;
+      personaConfig: PersonaConfig;
       sessionOptions?: SessionOptions;
     } = {
       clientLabel: 'js-sdk-api-key',
+      personaConfig,
     };
-    if (isCustomPersonaConfig(personaConfig)) {
-      body = { ...body, personaConfig };
-    }
     if (sessionOptions) {
-      body = { ...body, sessionOptions };
+      body.sessionOptions = sessionOptions;
     }
     try {
       const targetPath = `${this.apiVersion}/auth/session-token`;
