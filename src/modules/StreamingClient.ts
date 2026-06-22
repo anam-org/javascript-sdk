@@ -1093,6 +1093,9 @@ export class StreamingClient {
   }
 
   private async shutdown() {
+    this.connectionSetupAborted = true;
+    this.sessionConfigReady.resolve();
+
     if (this.showPeerConnectionStatsReport) {
       const stats = await this.peerConnection?.getStats();
       if (stats) {
