@@ -576,6 +576,10 @@ export class StreamingClient {
   }
 
   private async onSignalMessage(signalMessage: SignalMessage) {
+    if (this.connectionSetupAborted) {
+      return;
+    }
+
     if (signalMessage.actionType === SignalMessageAction.SESSION_CONFIG) {
       const sessionConfig = signalMessage.payload as SessionConfigSignalPayload;
       if (sessionConfig.iceServers) {

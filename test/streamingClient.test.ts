@@ -7,8 +7,10 @@ import {
 import { ToolCallManager } from '../src/modules/ToolCallManager';
 import { setClientMetricsDisabled } from '../src/lib/ClientMetrics';
 import {
+  AnamEvent,
   AudioPermissionState,
   InternalEvent,
+  SignalMessageAction,
   StreamingClientOptions,
 } from '../src/types';
 
@@ -123,5 +125,61 @@ describe('StreamingClient session config wait', () => {
     expect(peerConnectionConstructor).not.toHaveBeenCalled();
     expect(sendOffer).not.toHaveBeenCalled();
     expect(getUserMedia).not.toHaveBeenCalled();
+  });
+
+  it('ignores connection-independent signals after shutdown', async () => {
+    setClientMetricsDisabled(true);
+
+    const publicEventEmitter = new PublicEventEmitter();
+    const internalEventEmitter = new InternalEventEmitter();
+    const connectionClosed = vi.fn();
+    const serverWarning = vi.fn();
+    const sessionReady = vi.fn();
+    const talkStreamInterrupted = vi.fn();
+    publicEventEmitter.addListener(
+      AnamEvent.CONNECTION_CLOSED,
+      connectionClosed,
+    );
+    publicEventEmitter.addListener(AnamEvent.SERVER_WARNING, serverWarning);
+    publicEventEmitter.addListener(AnamEvent.SESSION_READY, sessionReady);
+    publicEventEmitter.addListener(
+      AnamEvent.TALK_STREAM_INTERRUPTED,
+      talkStreamInterrupted,
+    );
+
+    const client = new StreamingClient(
+      'stale-session-id',
+      createStreamingClientOptions(),
+      publicEventEmitter,
+      internalEventEmitter,
+      new ToolCallManager(publicEventEmitter, internalEventEmitter),
+    );
+
+    await client.stopConnection();
+    internalEventEmitter.emit(InternalEvent.SIGNAL_MESSAGE_RECEIVED, {
+      actionType: SignalMessageAction.END_SESSION,
+      sessionId: 'later-session-id',
+      payload: 'server ended',
+    });
+    internalEventEmitter.emit(InternalEvent.SIGNAL_MESSAGE_RECEIVED, {
+      actionType: SignalMessageAction.WARNING,
+      sessionId: 'later-session-id',
+      payload: 'warning',
+    });
+    internalEventEmitter.emit(InternalEvent.SIGNAL_MESSAGE_RECEIVED, {
+      actionType: SignalMessageAction.SESSION_READY,
+      sessionId: 'later-session-id',
+      payload: {},
+    });
+    internalEventEmitter.emit(InternalEvent.SIGNAL_MESSAGE_RECEIVED, {
+      actionType: SignalMessageAction.TALK_STREAM_INTERRUPTED,
+      sessionId: 'later-session-id',
+      payload: { correlationId: 'later-correlation-id' },
+    });
+
+    expect(connectionClosed).not.toHaveBeenCalled();
+    expect(serverWarning).not.toHaveBeenCalled();
+    expect(sessionReady).not.toHaveBeenCalled();
+    expect(talkStreamInterrupted).not.toHaveBeenCalled();
   });
 });
