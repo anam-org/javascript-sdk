@@ -83,8 +83,10 @@ export class StreamingClient {
   private internalEventEmitter: InternalEventEmitter;
   private signallingClient: SignallingClient;
   private engineApiRestClient: EngineApiRestClient;
-  private iceServers: RTCIceServer[];
-  private iceTransportPolicy: RTCIceTransportPolicy | undefined;
+  private callerIceServers: RTCIceServer[] | undefined;
+  private defaultIceServers: RTCIceServer[];
+  private serverIceServers: RTCIceServer[] | undefined;
+  private serverIceTransportPolicy: RTCIceTransportPolicy | undefined;
   private rtcConfiguration: RTCConfiguration | undefined;
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private peerConnection: RTCPeerConnection | null = null;
@@ -167,8 +169,9 @@ export class StreamingClient {
       InternalEvent.TOOL_CALL_RESULT_READY,
       this.onToolCallResultReceived.bind(this),
     );
-    // set ice servers
-    this.iceServers = options.iceServers;
+    // set ice server sources
+    this.callerIceServers = options.callerIceServers;
+    this.defaultIceServers = options.defaultIceServers;
     this.rtcConfiguration = options.rtcConfiguration;
     // initialize signalling client
     this.signallingClient = new SignallingClient(
@@ -536,8 +539,10 @@ export class StreamingClient {
       // SDK default first (caller's rtcConfiguration may override it)
       iceCandidatePoolSize: ICE_CANDIDATE_POOL_SIZE,
       ...buildRTCConfiguration(this.rtcConfiguration, {
-        iceServers: this.iceServers,
-        iceTransportPolicy: this.iceTransportPolicy,
+        callerIceServers: this.callerIceServers,
+        defaultIceServers: this.defaultIceServers,
+        serverIceServers: this.serverIceServers,
+        serverIceTransportPolicy: this.serverIceTransportPolicy,
       }),
     });
     // set event handlers
@@ -583,10 +588,10 @@ export class StreamingClient {
     if (signalMessage.actionType === SignalMessageAction.SESSION_CONFIG) {
       const sessionConfig = signalMessage.payload as SessionConfigSignalPayload;
       if (sessionConfig.iceServers) {
-        this.iceServers = sessionConfig.iceServers;
+        this.serverIceServers = sessionConfig.iceServers;
       }
       if (sessionConfig.iceTransportPolicy) {
-        this.iceTransportPolicy = sessionConfig.iceTransportPolicy;
+        this.serverIceTransportPolicy = sessionConfig.iceTransportPolicy;
       }
       if (sessionConfig.policy) {
         console.debug('StreamingClient - sessionconfig applied', {

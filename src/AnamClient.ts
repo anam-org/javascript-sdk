@@ -241,12 +241,9 @@ export default class AnamClient {
       sessionId: this.sessionId,
     });
 
-    // Use custom ICE servers if provided, otherwise use server-provided ICE servers.
-    // Precedence: top-level `iceServers` > `rtcConfiguration.iceServers` > server default.
-    const iceServers =
+    const callerIceServers =
       this.clientOptions?.iceServers ??
-      this.clientOptions?.rtcConfiguration?.iceServers ??
-      defaultIceServers;
+      this.clientOptions?.rtcConfiguration?.iceServers;
 
     try {
       this.streamingClient = new StreamingClient(
@@ -264,7 +261,8 @@ export default class AnamClient {
               signallingPath: signallingEndpoint,
             },
           },
-          iceServers,
+          callerIceServers,
+          defaultIceServers,
           supportsSessionConfig,
           rtcConfiguration: this.clientOptions?.rtcConfiguration,
           inputAudio: {

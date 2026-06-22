@@ -1,17 +1,25 @@
-import { SessionConfigSignalPayload } from '../types';
+export interface BuildRTCConfigurationOptions {
+  callerIceServers?: RTCIceServer[];
+  defaultIceServers: RTCIceServer[];
+  serverIceServers?: RTCIceServer[];
+  serverIceTransportPolicy?: RTCIceTransportPolicy;
+}
 
 export const buildRTCConfiguration = (
   rtcConfiguration: RTCConfiguration | undefined,
-  sessionConfig?: SessionConfigSignalPayload,
+  options: BuildRTCConfigurationOptions,
 ): RTCConfiguration => {
-  const serverIceServers = sessionConfig?.iceServers;
-  const serverIceTransportPolicy = sessionConfig?.iceTransportPolicy;
+  const iceServers =
+    options.callerIceServers ??
+    rtcConfiguration?.iceServers ??
+    options.serverIceServers ??
+    options.defaultIceServers;
+  const iceTransportPolicy =
+    rtcConfiguration?.iceTransportPolicy ?? options.serverIceTransportPolicy;
 
   return {
     ...rtcConfiguration,
-    ...(serverIceServers ? { iceServers: serverIceServers } : {}),
-    ...(serverIceTransportPolicy
-      ? { iceTransportPolicy: serverIceTransportPolicy }
-      : {}),
+    iceServers,
+    ...(iceTransportPolicy ? { iceTransportPolicy } : {}),
   };
 };

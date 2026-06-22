@@ -6,7 +6,8 @@ import { ApiGatewayConfig } from '../ApiGatewayConfig';
 export interface StreamingClientOptions {
   engine: EngineApiRestClientOptions;
   signalling: SignallingClientOptions;
-  iceServers: RTCIceServer[];
+  callerIceServers?: RTCIceServer[];
+  defaultIceServers: RTCIceServer[];
   supportsSessionConfig?: boolean;
   rtcConfiguration?: RTCConfiguration;
   inputAudio: InputAudioOptions;
