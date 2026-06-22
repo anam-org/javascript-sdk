@@ -81,7 +81,7 @@ export const sendClientMetric = async (
     // Determine URL and headers based on API Gateway configuration
     const targetPath = `${anamCurrentApiVersion}/metrics/client`;
     let url: string;
-    let headers: Record<string, string> = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
