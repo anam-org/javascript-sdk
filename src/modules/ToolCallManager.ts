@@ -105,7 +105,7 @@ export class ToolCallManager {
     }
 
     try {
-      const result = await handler.onStart(payload);
+      let result = await handler.onStart(payload);
       if (toolCallEvent.tool_type === 'client') {
         this.sendToolResult({
           sessionId: toolCallEvent.session_id,
@@ -147,7 +147,7 @@ export class ToolCallManager {
   async processToolCallCompletedEvent(
     toolCallEvent: WebRtcToolCallCompletedEvent,
   ) {
-    const { tool_name, tool_call_id } = toolCallEvent;
+    const { tool_name, tool_call_id, timestamp } = toolCallEvent;
 
     if (this.activeSessionId !== toolCallEvent.session_id) {
       return;
@@ -195,7 +195,7 @@ export class ToolCallManager {
   }
 
   async processToolCallFailedEvent(toolCallEvent: WebRtcToolCallFailedEvent) {
-    const { tool_name, tool_call_id } = toolCallEvent;
+    const { tool_name, tool_call_id, timestamp } = toolCallEvent;
 
     if (this.activeSessionId !== toolCallEvent.session_id) {
       return;
