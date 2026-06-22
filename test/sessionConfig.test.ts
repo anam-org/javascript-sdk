@@ -9,14 +9,26 @@ describe('buildRTCConfiguration', () => {
     { urls: ['turn:relay.example.com:3478?transport=udp'] },
   ];
 
-  it('uses resolved ice servers and preserves caller transport policy when session config is absent', () => {
+  it('preserves caller configuration when session config is absent', () => {
+    const callerConfiguration: RTCConfiguration = {
+      iceServers: [{ urls: ['turns:caller.example.com:443?transport=tcp'] }],
+      iceTransportPolicy: 'relay',
+      bundlePolicy: 'max-bundle',
+    };
+
+    expect(buildRTCConfiguration(callerConfiguration)).toEqual(
+      callerConfiguration,
+    );
+  });
+
+  it('uses server ice servers and preserves caller transport policy when transport policy is absent', () => {
     const configuration = buildRTCConfiguration(
       {
         iceServers: [{ urls: ['turns:caller.example.com:443?transport=tcp'] }],
         iceTransportPolicy: 'relay',
         bundlePolicy: 'max-bundle',
       },
-      fallbackIceServers,
+      { iceServers: fallbackIceServers },
     );
 
     expect(configuration).toEqual({
@@ -29,7 +41,6 @@ describe('buildRTCConfiguration', () => {
   it('applies relay session config from the server', () => {
     const configuration = buildRTCConfiguration(
       { iceTransportPolicy: 'all' },
-      fallbackIceServers,
       {
         iceServers: serverIceServers,
         iceTransportPolicy: 'relay',
@@ -44,7 +55,6 @@ describe('buildRTCConfiguration', () => {
   it('applies all session config from the server', () => {
     const configuration = buildRTCConfiguration(
       { iceTransportPolicy: 'relay' },
-      fallbackIceServers,
       {
         iceServers: serverIceServers,
         iceTransportPolicy: 'all',
@@ -62,7 +72,6 @@ describe('buildRTCConfiguration', () => {
         iceServers: [{ urls: ['turns:caller.example.com:443?transport=tcp'] }],
         iceTransportPolicy: 'all',
       },
-      fallbackIceServers,
       {
         iceServers: serverIceServers,
         iceTransportPolicy: 'relay',

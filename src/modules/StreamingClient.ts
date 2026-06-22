@@ -110,6 +110,8 @@ export class StreamingClient {
   private toolCallManager: ToolCallManager;
   private supportsSessionConfig: boolean;
   private sessionConfigReady: Deferred<void>;
+  private peerConnectionInitInProgress = false;
+  private connectionSetupAborted = false;
 
   constructor(
     sessionId: string,
@@ -533,7 +535,7 @@ export class StreamingClient {
     this.peerConnection = new RTCPeerConnection({
       // SDK default first (caller's rtcConfiguration may override it)
       iceCandidatePoolSize: ICE_CANDIDATE_POOL_SIZE,
-      ...buildRTCConfiguration(this.rtcConfiguration, this.iceServers, {
+      ...buildRTCConfiguration(this.rtcConfiguration, {
         iceServers: this.iceServers,
         iceTransportPolicy: this.iceTransportPolicy,
       }),
@@ -582,8 +584,36 @@ export class StreamingClient {
       if (sessionConfig.iceTransportPolicy) {
         this.iceTransportPolicy = sessionConfig.iceTransportPolicy;
       }
+      if (sessionConfig.policy) {
+        console.debug('StreamingClient - sessionconfig applied', {
+          policy: sessionConfig.policy,
+        });
+      }
       this.sessionConfigReady.resolve();
       return;
+    }
+
+    switch (signalMessage.actionType) {
+      case SignalMessageAction.END_SESSION:
+        this.connectionSetupAborted = true;
+        this.handleEndSessionSignal(signalMessage.payload as string);
+        return;
+      case SignalMessageAction.WARNING:
+        this.handleWarningSignal(signalMessage.payload as string);
+        return;
+      case SignalMessageAction.TALK_STREAM_INTERRUPTED:
+        this.handleTalkStreamInterruptedSignal(
+          signalMessage.payload as TalkStreamInterruptedSignalMessage,
+        );
+        return;
+      case SignalMessageAction.SESSION_READY:
+        this.publicEventEmitter.emit(
+          AnamEvent.SESSION_READY,
+          signalMessage.sessionId as string,
+        );
+        return;
+      case SignalMessageAction.HEARTBEAT:
+        return;
     }
 
     if (!this.peerConnection) {
@@ -609,35 +639,6 @@ export class StreamingClient {
           this.remoteIceCandidateBuffer.push(candidate);
         }
         break;
-      case SignalMessageAction.END_SESSION:
-        const reason = signalMessage.payload as string;
-        this.publicEventEmitter.emit(
-          AnamEvent.CONNECTION_CLOSED,
-          ConnectionClosedCode.SERVER_CLOSED_CONNECTION,
-          reason,
-        );
-        // close the peer connection
-        this.shutdown();
-        break;
-      case SignalMessageAction.WARNING:
-        const message = signalMessage.payload as string;
-        console.warn('Warning received from server: ' + message);
-        this.publicEventEmitter.emit(AnamEvent.SERVER_WARNING, message);
-        break;
-      case SignalMessageAction.TALK_STREAM_INTERRUPTED:
-        const chatMessage =
-          signalMessage.payload as TalkStreamInterruptedSignalMessage;
-        this.publicEventEmitter.emit(
-          AnamEvent.TALK_STREAM_INTERRUPTED,
-          chatMessage.correlationId,
-        );
-        break;
-      case SignalMessageAction.SESSION_READY:
-        const sessionId = signalMessage.sessionId as string;
-        this.publicEventEmitter.emit(AnamEvent.SESSION_READY, sessionId);
-        break;
-      case SignalMessageAction.HEARTBEAT:
-        break;
       default:
         console.warn(
           'StreamingClient - onSignalMessage: unknown signal message action type. Is your @anam-ai/js-sdk version up to date?',
@@ -647,20 +648,55 @@ export class StreamingClient {
   }
 
   private async onSignallingClientConnected() {
-    if (!this.peerConnection) {
-      try {
-        if (this.supportsSessionConfig) {
-          await this.waitForSessionConfig();
-        }
-        await this.initPeerConnectionAndSendOffer();
-      } catch (err) {
-        console.error(
-          'StreamingClient - onSignallingClientConnected: Error initializing peer connection',
-          err,
-        );
-        this.handleWebrtcFailure(err);
-      }
+    if (
+      this.peerConnection ||
+      this.peerConnectionInitInProgress ||
+      this.connectionSetupAborted
+    ) {
+      return;
     }
+
+    this.peerConnectionInitInProgress = true;
+    try {
+      if (this.supportsSessionConfig) {
+        await this.waitForSessionConfig();
+      }
+      if (this.peerConnection || this.connectionSetupAborted) {
+        return;
+      }
+      await this.initPeerConnectionAndSendOffer();
+    } catch (err) {
+      console.error(
+        'StreamingClient - onSignallingClientConnected: Error initializing peer connection',
+        err,
+      );
+      this.handleWebrtcFailure(err);
+    } finally {
+      this.peerConnectionInitInProgress = false;
+    }
+  }
+
+  private handleEndSessionSignal(reason: string) {
+    this.publicEventEmitter.emit(
+      AnamEvent.CONNECTION_CLOSED,
+      ConnectionClosedCode.SERVER_CLOSED_CONNECTION,
+      reason,
+    );
+    void this.shutdown();
+  }
+
+  private handleWarningSignal(message: string) {
+    console.warn('Warning received from server: ' + message);
+    this.publicEventEmitter.emit(AnamEvent.SERVER_WARNING, message);
+  }
+
+  private handleTalkStreamInterruptedSignal(
+    message: TalkStreamInterruptedSignalMessage,
+  ) {
+    this.publicEventEmitter.emit(
+      AnamEvent.TALK_STREAM_INTERRUPTED,
+      message.correlationId,
+    );
   }
 
   private async waitForSessionConfig() {
