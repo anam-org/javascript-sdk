@@ -20,6 +20,7 @@ import {
   InternalEvent,
   SignalMessage,
   SignalMessageAction,
+  SessionConfigSignalPayload,
   StreamingClientOptions,
   WebRtcClientToolEvent,
   WebRtcTextMessageEvent,
@@ -34,11 +35,48 @@ import {
   WebRtcToolCallFailedEvent,
   WebRtcToolCallStartedEvent,
 } from '../types/streaming/WebRtcToolCallEvent';
+import { buildRTCConfiguration } from '../lib/SessionConfig';
 import { ToolCallManager } from './ToolCallManager';
 
 const SUCCESS_METRIC_POLLING_TIMEOUT_MS = 15000; // After this time we will stop polling for the first frame and consider the session a failure.
 const STATS_COLLECTION_INTERVAL_MS = 5000;
 const ICE_CANDIDATE_POOL_SIZE = 2; // Optimisation to speed up connection time
+const SESSION_CONFIG_TIMEOUT_MS = 1500;
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+  reject: (reason?: unknown) => void;
+}
+
+const createDeferred = <T>(): Deferred<T> => {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+};
+
+const waitForPromiseWithTimeout = async (
+  promise: Promise<void>,
+  timeoutMs: number,
+): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(false), timeoutMs);
+    promise.then(
+      () => {
+        clearTimeout(timeout);
+        resolve(true);
+      },
+      () => {
+        clearTimeout(timeout);
+        resolve(false);
+      },
+    );
+  });
+};
 
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
@@ -46,6 +84,7 @@ export class StreamingClient {
   private signallingClient: SignallingClient;
   private engineApiRestClient: EngineApiRestClient;
   private iceServers: RTCIceServer[];
+  private iceTransportPolicy: RTCIceTransportPolicy | undefined;
   private rtcConfiguration: RTCConfiguration | undefined;
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private peerConnection: RTCPeerConnection | null = null;
@@ -69,6 +108,8 @@ export class StreamingClient {
   private statsCollectionInterval: ReturnType<typeof setInterval> | null = null;
   private agentAudioInputStream: AgentAudioInputStream | null = null;
   private toolCallManager: ToolCallManager;
+  private supportsSessionConfig: boolean;
+  private sessionConfigReady: Deferred<void>;
 
   constructor(
     sessionId: string,
@@ -88,6 +129,11 @@ export class StreamingClient {
       this.inputAudioStream = options.inputAudio.userProvidedMediaStream;
     }
     this.disableInputAudio = options.inputAudio.disableInputAudio === true;
+    this.supportsSessionConfig = options.supportsSessionConfig === true;
+    this.sessionConfigReady = createDeferred<void>();
+    if (!this.supportsSessionConfig) {
+      this.sessionConfigReady.resolve();
+    }
     // register event handlers
     this.internalEventEmitter.addListener(
       InternalEvent.WEB_SOCKET_OPEN,
@@ -487,10 +533,10 @@ export class StreamingClient {
     this.peerConnection = new RTCPeerConnection({
       // SDK default first (caller's rtcConfiguration may override it)
       iceCandidatePoolSize: ICE_CANDIDATE_POOL_SIZE,
-      // caller's full RTCConfiguration passthrough (e.g. iceTransportPolicy: 'relay')
-      ...this.rtcConfiguration,
-      // resolved iceServers always wins for its field (preserves backward compat)
-      iceServers: this.iceServers,
+      ...buildRTCConfiguration(this.rtcConfiguration, this.iceServers, {
+        iceServers: this.iceServers,
+        iceTransportPolicy: this.iceTransportPolicy,
+      }),
     });
     // set event handlers
     this.peerConnection.onicecandidate = this.onIceCandidate.bind(this);
@@ -528,6 +574,18 @@ export class StreamingClient {
   }
 
   private async onSignalMessage(signalMessage: SignalMessage) {
+    if (signalMessage.actionType === SignalMessageAction.SESSION_CONFIG) {
+      const sessionConfig = signalMessage.payload as SessionConfigSignalPayload;
+      if (sessionConfig.iceServers) {
+        this.iceServers = sessionConfig.iceServers;
+      }
+      if (sessionConfig.iceTransportPolicy) {
+        this.iceTransportPolicy = sessionConfig.iceTransportPolicy;
+      }
+      this.sessionConfigReady.resolve();
+      return;
+    }
+
     if (!this.peerConnection) {
       console.error(
         'StreamingClient - onSignalMessage: peerConnection is not initialized',
@@ -591,6 +649,9 @@ export class StreamingClient {
   private async onSignallingClientConnected() {
     if (!this.peerConnection) {
       try {
+        if (this.supportsSessionConfig) {
+          await this.waitForSessionConfig();
+        }
         await this.initPeerConnectionAndSendOffer();
       } catch (err) {
         console.error(
@@ -599,6 +660,23 @@ export class StreamingClient {
         );
         this.handleWebrtcFailure(err);
       }
+    }
+  }
+
+  private async waitForSessionConfig() {
+    const receivedSessionConfig = await waitForPromiseWithTimeout(
+      this.sessionConfigReady.promise,
+      SESSION_CONFIG_TIMEOUT_MS,
+    );
+    if (!receivedSessionConfig) {
+      console.warn(
+        'StreamingClient - sessionconfig was expected but not received before timeout',
+      );
+      void sendClientMetric(
+        ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_ERROR,
+        '1',
+        { error: 'session_config_timeout' },
+      );
     }
   }
 

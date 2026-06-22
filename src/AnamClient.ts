@@ -232,6 +232,7 @@ export default class AnamClient {
       heartbeatIntervalSeconds,
       maxWsReconnectionAttempts,
       iceServers: defaultIceServers,
+      supportsSessionConfig,
     } = clientConfig;
 
     this.sessionId = sessionId;
@@ -264,6 +265,7 @@ export default class AnamClient {
             },
           },
           iceServers,
+          supportsSessionConfig,
           rtcConfiguration: this.clientOptions?.rtcConfiguration,
           inputAudio: {
             inputAudioState: this.inputAudioState,

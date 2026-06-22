@@ -37,7 +37,7 @@
     "build:umd": "webpack --mode=production --config=webpack.config.js",
     "format": "prettier --write \"{src,test}/**/*.ts\"",
     "lint": "eslint \"{src,test}/**/*.ts\" --fix",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
     "watch": "nodemon -e ts --watch src --exec \"npm run build\"",
     "prepare": "husky"
   },
@@ -61,6 +61,7 @@
     "ts-loader": "^9.5.1",
     "typescript": "^5.4.5",
     "typescript-eslint": "^7.9.0",
+    "vitest": "^4.1.9",
     "webpack": "^5.91.0",
     "webpack-cli": "^5.1.4"
   },
