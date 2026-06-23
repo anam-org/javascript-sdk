@@ -46,6 +46,7 @@ export class StreamingClient {
   private signallingClient: SignallingClient;
   private engineApiRestClient: EngineApiRestClient;
   private iceServers: RTCIceServer[];
+  private iceTransportPolicy: RTCIceTransportPolicy | undefined;
   private rtcConfiguration: RTCConfiguration | undefined;
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private peerConnection: RTCPeerConnection | null = null;
@@ -121,6 +122,7 @@ export class StreamingClient {
     );
     // set ice servers
     this.iceServers = options.iceServers;
+    this.iceTransportPolicy = options.iceTransportPolicy;
     this.rtcConfiguration = options.rtcConfiguration;
     // initialize signalling client
     this.signallingClient = new SignallingClient(
@@ -489,6 +491,10 @@ export class StreamingClient {
       iceCandidatePoolSize: ICE_CANDIDATE_POOL_SIZE,
       // caller's full RTCConfiguration passthrough (e.g. iceTransportPolicy: 'relay')
       ...this.rtcConfiguration,
+      iceTransportPolicy:
+        this.rtcConfiguration?.iceTransportPolicy ??
+        this.iceTransportPolicy ??
+        undefined,
       // resolved iceServers always wins for its field (preserves backward compat)
       iceServers: this.iceServers,
     });
