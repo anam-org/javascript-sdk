@@ -29,6 +29,7 @@ import {
   EventCallbacks,
   InputAudioState,
   PersonaConfig,
+  SessionOptions,
   StartSessionOptions,
   StartSessionResponse,
   ToolCallHandler,
@@ -63,6 +64,7 @@ export default class AnamClient {
     sessionToken: string | undefined,
     personaConfig?: PersonaConfig,
     options?: AnamClientOptions,
+    tokenSessionOptions?: SessionOptions,
   ) {
     const configError: string | undefined = this.validateClientConfig(
       sessionToken,
@@ -108,6 +110,7 @@ export default class AnamClient {
       sessionToken,
       options?.apiKey,
       options?.api,
+      tokenSessionOptions,
     );
     this.messageHistoryClient = new MessageHistoryClient(
       this.publicEventEmitter,

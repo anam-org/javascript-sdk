@@ -44,14 +44,22 @@ To use the SDK you first need to create an instance of `AnamClient`. For local d
 ```typescript
 import { unsafe_createClientWithApiKey } from '@anam-ai/js-sdk';
 
-const anamClient = unsafe_createClientWithApiKey('your-api-key', {
-  name: 'Cara',
-  avatarId: '30fa96d0-26c4-4e55-94a0-517025942e18',
-  voiceId: '6bfbe25a-979d-40f3-a92b-5394170af54b',
-  brainType: 'ANAM_GPT_4O_MINI_V1',
-  systemPrompt:
-    "[STYLE] Reply in natural speech without formatting. Add pauses using '...' and very occasionally a disfluency. [PERSONALITY] You are Cara, a helpful assistant.",
-});
+const anamClient = unsafe_createClientWithApiKey(
+  'your-api-key',
+  {
+    name: 'Cara',
+    avatarId: '30fa96d0-26c4-4e55-94a0-517025942e18',
+    voiceId: '6bfbe25a-979d-40f3-a92b-5394170af54b',
+    brainType: 'ANAM_GPT_4O_MINI_V1',
+    systemPrompt:
+      "[STYLE] Reply in natural speech without formatting. Add pauses using '...' and very occasionally a disfluency. [PERSONALITY] You are Cara, a helpful assistant.",
+  },
+  undefined,
+  {
+    videoWidth: 1152,
+    videoHeight: 768,
+  },
+);
 ```
 
 **NOTE**: the method `unsafe_createClientWithApiKey` is unsafe for production use cases because it requires exposing your api key to the client. When deploying to production see [production usage](#usage-in-production) first.
@@ -91,6 +99,10 @@ const response = await fetch(`https://api.anam.ai/v1/auth/session-token`, {
       llmId: '<LLM ID HERE>',
       systemPrompt:
         "[STYLE] Reply in natural speech without formatting. Add pauses using '...' and very occasionally a disfluency. [PERSONALITY] You are Cara, a helpful assistant.",
+    },
+    sessionOptions: {
+      videoWidth: 1152,
+      videoHeight: 768,
     },
   }),
 });

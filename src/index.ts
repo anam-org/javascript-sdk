@@ -1,6 +1,7 @@
 import AnamClient from './AnamClient';
 import { PersonaConfig } from './types';
 import { AnamPublicClientOptions } from './types/AnamPublicClientOptions';
+import type { SessionOptions } from './types/coreApi/SessionOptions';
 import { ClientError, ErrorCode } from './lib/ClientError';
 
 /**
@@ -24,14 +25,21 @@ const createClient = (
  * @param apiKey - Your Anam API key.
  * @param personaConfig - The persona configuration to use.
  * @param options - Additional options.
+ * @param sessionOptions - Additional options to include when creating the session token.
  * @returns A new Anam client instance.
  */
 const unsafe_createClientWithApiKey = (
   apiKey: string,
   personaConfig: PersonaConfig,
   options?: AnamPublicClientOptions,
+  sessionOptions?: SessionOptions,
 ): AnamClient => {
-  return new AnamClient(undefined, personaConfig, { ...options, apiKey });
+  return new AnamClient(
+    undefined,
+    personaConfig,
+    { ...options, apiKey },
+    sessionOptions,
+  );
 };
 
 export { createClient, unsafe_createClientWithApiKey, ClientError, ErrorCode };
