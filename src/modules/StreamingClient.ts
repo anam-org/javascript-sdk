@@ -465,6 +465,7 @@ export class StreamingClient {
         );
         return;
       }
+      this.resetAttemptScopedMilestoneState();
       this.connectionMilestones?.record('connection_start_requested');
       // start the connection
       this.signallingClient.connect();
@@ -472,6 +473,13 @@ export class StreamingClient {
       console.error('StreamingClient - startConnection: error', error);
       this.handleWebrtcFailure(error);
     }
+  }
+
+  private resetAttemptScopedMilestoneState() {
+    this.firstLocalIceCandidateSent = false;
+    this.firstRemoteIceCandidateReceived = false;
+    this.firstRemoteIceCandidateApplied = false;
+    this.connectionEstablishedMilestoneRecorded = false;
   }
 
   public async stopConnection() {
