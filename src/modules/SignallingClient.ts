@@ -1,4 +1,5 @@
 import { InternalEventEmitter, PublicEventEmitter } from '.';
+import { ClientConnectionMilestoneRecorder } from '../lib/ConnectionMilestones';
 import {
   AnamEvent,
   InternalEvent,
@@ -27,6 +28,7 @@ export class SignallingClient {
   private socket: WebSocket | null = null;
   private heartBeatIntervalRef: ReturnType<typeof setInterval> | null = null;
   private apiGatewayConfig: ApiGatewayConfig | undefined;
+  private connectionMilestones: ClientConnectionMilestoneRecorder | undefined;
 
   constructor(
     sessionId: string,
@@ -34,10 +36,12 @@ export class SignallingClient {
     publicEventEmitter: PublicEventEmitter,
     internalEventEmitter: InternalEventEmitter,
     apiGatewayConfig?: ApiGatewayConfig,
+    connectionMilestones?: ClientConnectionMilestoneRecorder,
   ) {
     this.publicEventEmitter = publicEventEmitter;
     this.internalEventEmitter = internalEventEmitter;
     this.apiGatewayConfig = apiGatewayConfig;
+    this.connectionMilestones = connectionMilestones;
 
     if (!sessionId) {
       throw new Error('Signalling Client: sessionId is required');
@@ -105,6 +109,9 @@ export class SignallingClient {
   }
 
   public connect(): WebSocket {
+    this.connectionMilestones?.record('websocket_connecting', {
+      attemptNumber: this.wsConnectionAttempts + 1,
+    });
     this.socket = new WebSocket(this.url.href);
     this.socket.onopen = this.onOpen.bind(this);
     this.socket.onclose = this.onClose.bind(this);
@@ -192,6 +199,9 @@ export class SignallingClient {
       throw new Error('SignallingClient - onOpen: socket is null');
     }
     try {
+      this.connectionMilestones?.record('websocket_open', {
+        attemptNumber: this.wsConnectionAttempts + 1,
+      });
       this.wsConnectionAttempts = 0;
       this.flushSendingBuffer();
       this.socket.onmessage = this.onMessage.bind(this);
@@ -206,21 +216,35 @@ export class SignallingClient {
     }
   }
 
-  private async onClose() {
+  private async onClose(event?: CloseEvent) {
+    this.connectionMilestones?.record('websocket_closed', {
+      attemptNumber: this.wsConnectionAttempts + 1,
+      closeCode: event?.code,
+      wasClean: event?.wasClean,
+    });
     this.wsConnectionAttempts += 1;
     if (this.stopSignal) {
       return;
     }
     if (this.wsConnectionAttempts <= this.maxWsReconnectionAttempts) {
+      const retryDelayMs = 100 * this.wsConnectionAttempts;
+      this.connectionMilestones?.record('websocket_retry_scheduled', {
+        attemptNumber: this.wsConnectionAttempts + 1,
+        delayMs: retryDelayMs,
+      });
       this.socket = null;
       setTimeout(() => {
         this.connect();
-      }, 100 * this.wsConnectionAttempts);
+      }, retryDelayMs);
     } else {
       if (this.heartBeatIntervalRef) {
         clearInterval(this.heartBeatIntervalRef);
         this.heartBeatIntervalRef = null;
       }
+      this.connectionMilestones?.publishFailure({
+        failureStage: 'websocket',
+        closeCode: event?.code,
+      });
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
         ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
@@ -232,6 +256,9 @@ export class SignallingClient {
     if (this.stopSignal) {
       return;
     }
+    this.connectionMilestones?.record('websocket_error', {
+      eventType: event.type,
+    });
     console.error('SignallingClient - onError: ', event);
   }
 

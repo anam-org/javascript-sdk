@@ -3,6 +3,7 @@ import {
   createRTCStatsReport,
   sendClientMetric,
 } from '../lib/ClientMetrics';
+import { ClientConnectionMilestoneRecorder } from '../lib/ConnectionMilestones';
 import {
   EngineApiRestClient,
   InternalEventEmitter,
@@ -70,6 +71,11 @@ export class StreamingClient {
   private statsCollectionInterval: ReturnType<typeof setInterval> | null = null;
   private agentAudioInputStream: AgentAudioInputStream | null = null;
   private toolCallManager: ToolCallManager;
+  private connectionMilestones: ClientConnectionMilestoneRecorder | undefined;
+  private firstLocalIceCandidateSent = false;
+  private firstRemoteIceCandidateReceived = false;
+  private firstRemoteIceCandidateApplied = false;
+  private connectionEstablishedMilestoneRecorded = false;
 
   constructor(
     sessionId: string,
@@ -77,10 +83,12 @@ export class StreamingClient {
     publicEventEmitter: PublicEventEmitter,
     internalEventEmitter: InternalEventEmitter,
     toolCallManager: ToolCallManager,
+    connectionMilestones?: ClientConnectionMilestoneRecorder,
   ) {
     this.publicEventEmitter = publicEventEmitter;
     this.internalEventEmitter = internalEventEmitter;
     this.toolCallManager = toolCallManager;
+    this.connectionMilestones = connectionMilestones;
     this.apiGatewayConfig = options.apiGateway;
     // initialize input audio state
     const { inputAudio } = options;
@@ -131,6 +139,7 @@ export class StreamingClient {
       this.publicEventEmitter,
       this.internalEventEmitter,
       this.apiGatewayConfig,
+      this.connectionMilestones,
     );
     // initialize engine API client
     this.engineApiRestClient = new EngineApiRestClient(
@@ -212,6 +221,23 @@ export class StreamingClient {
     });
   }
 
+  private recordSessionSuccess(detectionMethod: string) {
+    if (this.successMetricFired) {
+      return;
+    }
+
+    this.successMetricFired = true;
+    this.connectionMilestones?.record('first_video_frame', {
+      detectionMethod,
+    });
+    this.connectionMilestones?.recordSessionSuccess({ detectionMethod });
+    sendClientMetric(
+      ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS,
+      '1',
+      { detectionMethod },
+    );
+  }
+
   private startSuccessMetricPolling() {
     if (this.successMetricPoller || this.successMetricFired) {
       return;
@@ -219,6 +245,13 @@ export class StreamingClient {
 
     const timeoutId = setTimeout(() => {
       if (this.successMetricPoller) {
+        this.connectionMilestones?.record('first_video_frame_timeout', {
+          timeoutMs: SUCCESS_METRIC_POLLING_TIMEOUT_MS,
+        });
+        this.connectionMilestones?.publishFailure({
+          failureStage: 'first_video_frame',
+          timeoutMs: SUCCESS_METRIC_POLLING_TIMEOUT_MS,
+        });
         console.warn(
           'No video frames received, there is a problem with the connection.',
         );
@@ -270,12 +303,7 @@ export class StreamingClient {
           }
         });
         if (videoDetected && !this.successMetricFired) {
-          this.successMetricFired = true;
-          sendClientMetric(
-            ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS,
-            '1',
-            detectionMethod ? { detectionMethod } : undefined,
-          );
+          this.recordSessionSuccess(detectionMethod ?? 'unknown');
           if (this.successMetricPoller) {
             clearInterval(this.successMetricPoller);
           }
@@ -437,6 +465,7 @@ export class StreamingClient {
         );
         return;
       }
+      this.connectionMilestones?.record('connection_start_requested');
       // start the connection
       this.signallingClient.connect();
     } catch (error) {
@@ -486,6 +515,7 @@ export class StreamingClient {
   }
 
   private async initPeerConnection() {
+    this.connectionMilestones?.record('peer_connection_creating');
     this.peerConnection = new RTCPeerConnection({
       // SDK default first (caller's rtcConfiguration may override it)
       iceCandidatePoolSize: ICE_CANDIDATE_POOL_SIZE,
@@ -497,6 +527,14 @@ export class StreamingClient {
         undefined,
       // resolved iceServers always wins for its field (preserves backward compat)
       iceServers: this.iceServers,
+    });
+    this.connectionMilestones?.record('peer_connection_created', {
+      iceCandidatePoolSize: ICE_CANDIDATE_POOL_SIZE,
+      iceServerCount: this.iceServers.length,
+      iceTransportPolicy:
+        this.rtcConfiguration?.iceTransportPolicy ??
+        this.iceTransportPolicy ??
+        'all',
     });
     // set event handlers
     this.peerConnection.onicecandidate = this.onIceCandidate.bind(this);
@@ -515,12 +553,18 @@ export class StreamingClient {
     // add transceivers
     this.peerConnection.addTransceiver('video', { direction: 'recvonly' });
     if (this.disableInputAudio) {
+      this.connectionMilestones?.record('microphone_permission_skipped', {
+        reason: 'input_audio_disabled',
+      });
       this.peerConnection.addTransceiver('audio', { direction: 'recvonly' });
     } else {
       this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
 
       // Handle audio setup after transceivers are configured
       if (this.inputAudioStream) {
+        this.connectionMilestones?.record('input_audio_stream_provided', {
+          audioTrackCount: this.inputAudioStream.getAudioTracks().length,
+        });
         // User provided an audio stream, set it up immediately
         await this.setupAudioTrack();
       } else {
@@ -541,24 +585,39 @@ export class StreamingClient {
       return;
     }
     switch (signalMessage.actionType) {
-      case SignalMessageAction.ANSWER:
+      case SignalMessageAction.ANSWER: {
+        this.connectionMilestones?.record('answer_received');
         const answer = signalMessage.payload as RTCSessionDescriptionInit;
         await this.peerConnection.setRemoteDescription(answer);
+        this.connectionMilestones?.record('remote_description_set');
         this.connectionReceivedAnswer = true;
         // flush the remote buffer
-        this.flushRemoteIceCandidateBuffer();
+        await this.flushRemoteIceCandidateBuffer();
         break;
-      case SignalMessageAction.ICE_CANDIDATE:
+      }
+      case SignalMessageAction.ICE_CANDIDATE: {
         const iceCandidateConfig = signalMessage.payload as RTCIceCandidateInit;
         const candidate = new RTCIceCandidate(iceCandidateConfig);
+        if (!this.firstRemoteIceCandidateReceived) {
+          this.firstRemoteIceCandidateReceived = true;
+          this.connectionMilestones?.record(
+            'first_remote_ice_candidate_received',
+            getIceCandidateMilestoneTags(candidate),
+          );
+        }
         if (this.connectionReceivedAnswer) {
           await this.peerConnection.addIceCandidate(candidate);
+          this.recordFirstRemoteIceCandidateApplied(candidate);
         } else {
           this.remoteIceCandidateBuffer.push(candidate);
         }
         break;
+      }
       case SignalMessageAction.END_SESSION:
         const reason = signalMessage.payload as string;
+        this.connectionMilestones?.publishFailure({
+          failureStage: 'server_closed_connection',
+        });
         this.publicEventEmitter.emit(
           AnamEvent.CONNECTION_CLOSED,
           ConnectionClosedCode.SERVER_CLOSED_CONNECTION,
@@ -608,11 +667,24 @@ export class StreamingClient {
     }
   }
 
-  private flushRemoteIceCandidateBuffer() {
-    this.remoteIceCandidateBuffer.forEach((candidate) => {
-      this.peerConnection?.addIceCandidate(candidate);
-    });
+  private async flushRemoteIceCandidateBuffer() {
+    const bufferedCandidates = [...this.remoteIceCandidateBuffer];
     this.remoteIceCandidateBuffer = [];
+    for (const candidate of bufferedCandidates) {
+      await this.peerConnection?.addIceCandidate(candidate);
+      this.recordFirstRemoteIceCandidateApplied(candidate);
+    }
+  }
+
+  private recordFirstRemoteIceCandidateApplied(candidate: RTCIceCandidate) {
+    if (this.firstRemoteIceCandidateApplied) {
+      return;
+    }
+    this.firstRemoteIceCandidateApplied = true;
+    this.connectionMilestones?.record(
+      'first_remote_ice_candidate_applied',
+      getIceCandidateMilestoneTags(candidate),
+    );
   }
 
   /**
@@ -622,22 +694,60 @@ export class StreamingClient {
    */
   private onIceCandidate(event: RTCPeerConnectionIceEvent) {
     if (event.candidate) {
+      if (!this.firstLocalIceCandidateSent) {
+        this.firstLocalIceCandidateSent = true;
+        this.connectionMilestones?.record(
+          'first_local_ice_candidate_sent',
+          getIceCandidateMilestoneTags(event.candidate),
+        );
+      }
       this.signallingClient.sendIceCandidate(event.candidate);
+    } else {
+      this.connectionMilestones?.record('ice_gathering_complete');
     }
   }
 
   private onIceConnectionStateChange() {
+    const iceConnectionState = this.peerConnection?.iceConnectionState;
+    if (iceConnectionState) {
+      this.connectionMilestones?.record('ice_connection_state_changed', {
+        iceConnectionState,
+      });
+    }
     if (
       this.peerConnection?.iceConnectionState === 'connected' ||
       this.peerConnection?.iceConnectionState === 'completed'
     ) {
+      if (!this.connectionEstablishedMilestoneRecorded) {
+        this.connectionEstablishedMilestoneRecorded = true;
+        this.connectionMilestones?.record('client_connection_established', {
+          iceConnectionState: this.peerConnection.iceConnectionState,
+        });
+      }
       this.publicEventEmitter.emit(AnamEvent.CONNECTION_ESTABLISHED);
       // Start collecting stats every 5 seconds
       this.startStatsCollection();
+    } else if (this.peerConnection?.iceConnectionState === 'failed') {
+      this.connectionMilestones?.publishFailure({
+        failureStage: 'ice_connection',
+        iceConnectionState: this.peerConnection.iceConnectionState,
+      });
     }
   }
 
   private onConnectionStateChange() {
+    const connectionState = this.peerConnection?.connectionState;
+    if (connectionState) {
+      this.connectionMilestones?.record('webrtc_connection_state_changed', {
+        connectionState,
+      });
+    }
+    if (this.peerConnection?.connectionState === 'failed') {
+      this.connectionMilestones?.publishFailure({
+        failureStage: 'webrtc_connection',
+        connectionState: this.peerConnection.connectionState,
+      });
+    }
     if (this.peerConnection?.connectionState === 'closed') {
       console.error(
         'StreamingClient - onConnectionStateChange: Connection closed',
@@ -649,6 +759,11 @@ export class StreamingClient {
   }
 
   private handleWebrtcFailure(err: any) {
+    this.connectionMilestones?.record('webrtc_failure', getErrorTags(err));
+    this.connectionMilestones?.publishFailure({
+      failureStage: 'webrtc',
+      ...getErrorTags(err),
+    });
     console.error({ message: 'StreamingClient - handleWebrtcFailure: ', err });
     if (err.name === 'NotAllowedError' && err.message === 'Permission denied') {
       this.publicEventEmitter.emit(
@@ -674,6 +789,7 @@ export class StreamingClient {
 
   private onTrackEventHandler(event: RTCTrackEvent) {
     if (event.track.kind === 'video') {
+      this.connectionMilestones?.record('video_track_received');
       // start polling stats to detect successful video data received
       this.startSuccessMetricPolling();
 
@@ -688,17 +804,11 @@ export class StreamingClient {
           // unregister the callback after the first frame
           this.videoElement?.cancelVideoFrameCallback(handle);
           this.publicEventEmitter.emit(AnamEvent.VIDEO_PLAY_STARTED);
-          if (!this.successMetricFired) {
-            this.successMetricFired = true;
-            sendClientMetric(
-              ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS,
-              '1',
-              { detectionMethod: 'videoElement' },
-            );
-          }
+          this.recordSessionSuccess('videoElement');
         });
       }
     } else if (event.track.kind === 'audio') {
+      this.connectionMilestones?.record('audio_track_received');
       this.audioStream = event.streams[0];
       this.publicEventEmitter.emit(
         AnamEvent.AUDIO_STREAM_STARTED,
@@ -741,10 +851,14 @@ export class StreamingClient {
     const dataChannel = this.peerConnection.createDataChannel('session', {
       ordered: true,
     });
+    this.connectionMilestones?.record('data_channel_created');
     dataChannel.onopen = () => {
       this.dataChannel = dataChannel ?? null;
+      this.connectionMilestones?.record('data_channel_open');
     };
-    dataChannel.onclose = () => {};
+    dataChannel.onclose = () => {
+      this.connectionMilestones?.record('data_channel_closed');
+    };
     // pass text message to the message history client
     dataChannel.onmessage = (event) => {
       try {
@@ -859,6 +973,7 @@ export class StreamingClient {
       permissionState: AudioPermissionState.PENDING,
     };
 
+    this.connectionMilestones?.record('microphone_permission_pending');
     this.publicEventEmitter.emit(AnamEvent.MIC_PERMISSION_PENDING);
 
     try {
@@ -882,6 +997,7 @@ export class StreamingClient {
         permissionState: AudioPermissionState.GRANTED,
       };
 
+      this.connectionMilestones?.record('microphone_permission_granted');
       this.publicEventEmitter.emit(AnamEvent.MIC_PERMISSION_GRANTED);
 
       // Now add the audio track to the existing connection
@@ -893,6 +1009,9 @@ export class StreamingClient {
         permissionState: AudioPermissionState.DENIED,
       };
 
+      this.connectionMilestones?.record('microphone_permission_denied', {
+        ...getErrorTags(error),
+      });
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.publicEventEmitter.emit(
@@ -948,6 +1067,9 @@ export class StreamingClient {
     }
 
     // pass the stream to the callback
+    this.connectionMilestones?.record('input_audio_stream_started', {
+      audioTrackCount: this.inputAudioStream.getAudioTracks().length,
+    });
     this.publicEventEmitter.emit(
       AnamEvent.INPUT_AUDIO_STREAM_STARTED,
       this.inputAudioStream,
@@ -966,14 +1088,24 @@ export class StreamingClient {
 
     // create offer and set local description
     try {
+      this.connectionMilestones?.record('offer_creation_started');
       const offer: RTCSessionDescriptionInit =
         await this.peerConnection.createOffer();
+      this.connectionMilestones?.record('offer_creation_completed');
       await this.peerConnection.setLocalDescription(offer);
+      this.connectionMilestones?.record('local_description_set');
     } catch (error) {
       console.error(
         'StreamingClient - initPeerConnectionAndSendOffer: error creating offer',
         error,
       );
+      this.connectionMilestones?.record('offer_creation_failed', {
+        ...getErrorTags(error),
+      });
+      this.connectionMilestones?.publishFailure({
+        failureStage: 'offer_creation',
+        ...getErrorTags(error),
+      });
     }
 
     if (!this.peerConnection.localDescription) {
@@ -982,6 +1114,7 @@ export class StreamingClient {
       );
     }
     await this.signallingClient.sendOffer(this.peerConnection.localDescription);
+    this.connectionMilestones?.record('offer_sent');
   }
 
   private async shutdown() {
@@ -1052,3 +1185,56 @@ export class StreamingClient {
     }
   }
 }
+
+const getIceCandidateMilestoneTags = (
+  candidate: RTCIceCandidate,
+): Record<string, string | number> => {
+  const safeCandidate = candidate as RTCIceCandidate & {
+    type?: string;
+    protocol?: string;
+    relayProtocol?: string;
+    tcpType?: string;
+    component?: string;
+  };
+
+  return removeEmptyTags({
+    candidateType: safeCandidate.type,
+    protocol: safeCandidate.protocol,
+    relayProtocol: safeCandidate.relayProtocol,
+    tcpType: safeCandidate.tcpType,
+    component: safeCandidate.component,
+  });
+};
+
+const getErrorTags = (error: unknown): Record<string, string | number> => {
+  if (error instanceof Error) {
+    return removeEmptyTags({ errorName: error.name });
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    const possibleError = error as { name?: unknown; code?: unknown };
+    return removeEmptyTags({
+      errorName:
+        typeof possibleError.name === 'string' ? possibleError.name : undefined,
+      errorCode:
+        typeof possibleError.code === 'string' ||
+        typeof possibleError.code === 'number'
+          ? possibleError.code
+          : undefined,
+    });
+  }
+
+  return {};
+};
+
+const removeEmptyTags = (
+  tags: Record<string, string | number | undefined>,
+): Record<string, string | number> => {
+  const sanitizedTags: Record<string, string | number> = {};
+  Object.entries(tags).forEach(([key, value]) => {
+    if (value !== undefined) {
+      sanitizedTags[key] = value;
+    }
+  });
+  return sanitizedTags;
+};

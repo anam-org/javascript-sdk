@@ -8,6 +8,7 @@ export enum ClientMetricMeasurement {
   CLIENT_METRIC_MEASUREMENT_ERROR = 'client_error',
   CLIENT_METRIC_MEASUREMENT_CONNECTION_CLOSED = 'client_connection_closed',
   CLIENT_METRIC_MEASUREMENT_CONNECTION_ESTABLISHED = 'client_connection_established',
+  CLIENT_METRIC_MEASUREMENT_CONNECTION_MILESTONES = 'client_connection_milestones',
   CLIENT_METRIC_MEASUREMENT_SESSION_ATTEMPT = 'client_session_attempt',
   CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS = 'client_session_success',
 }
