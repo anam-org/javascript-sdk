@@ -109,3 +109,56 @@ const anamClient = createClient('your-session-token');
 Regardless of whether you initialise the client using an API key or session token the client exposes the same set of available methods for streaming.
 
 [See here](#starting-a-session-in-production-environments) for an example sequence diagram of starting a session in production environments.
+
+## Director Notes (Cara 4)
+
+On Cara 4 avatars you can add **Director Notes** to guide the avatar's performance style and speech-driven motion. Provide either a built-in `presetStyle` **or** a free-form `customStylePrompt` — the two are mutually exclusive (enforced by the `DirectorNotes` type) — plus optional CFG-style strength values where `1.0` is the default. Director Notes are forwarded unchanged to session-token creation and are only applied on Cara 4 avatars; on older models the server ignores them and the session proceeds without them.
+
+```typescript
+import { unsafe_createClientWithApiKey } from '@anam-ai/js-sdk';
+
+const anamClient = unsafe_createClientWithApiKey('your-api-key', {
+  name: 'Cara',
+  // Use a Cara 4 avatar — Director Notes are ignored on older models.
+  avatarId: '30fa96d0-26c4-4e55-94a0-517025942e18',
+  voiceId: '6bfbe25a-979d-40f3-a92b-5394170af54b',
+  llmId: '<LLM ID HERE>',
+  systemPrompt:
+    '[STYLE] Reply in natural speech without formatting. [PERSONALITY] You are Cara, a helpful assistant.',
+  directorNotes: {
+    presetStyle: 'warm',
+    styleStrength: 1.2,
+    speechMotionStrength: 1.0,
+  },
+});
+```
+
+To use a free-form style instead of a preset, provide `customStylePrompt`:
+
+```typescript
+directorNotes: {
+  customStylePrompt:
+    'Warm smile, composed, slightly amused, looking directly at camera',
+  styleStrength: 1.2,
+}
+```
+
+### Changing the style mid-session
+
+On Cara 4 you can change the style **without restarting** the session via `updateDirectorNotes`, for example to react to the conversation in real time. The engine applies `presetStyle` (pass `null` to reset to the session-start style) and the strength values immediately. `customStylePrompt` cannot be changed mid-session — start a new session to change it.
+
+```typescript
+// while the session is streaming:
+
+// switch to a different preset style
+anamClient.updateDirectorNotes({ presetStyle: 'happy' });
+
+// adjust how strongly the style / speech-driven motion are followed
+anamClient.updateDirectorNotes({
+  styleStrength: 1.5,
+  speechMotionStrength: 1.2,
+});
+
+// reset to the style the session started with
+anamClient.updateDirectorNotes({ presetStyle: null });
+```
