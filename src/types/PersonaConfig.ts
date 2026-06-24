@@ -16,11 +16,11 @@ export type DirectorNotesStylePreset =
 export type DirectorNotes =
   | {
       presetStyle: DirectorNotesStylePreset;
-      customStyle?: never;
+      customStylePrompt?: never;
       expressivity?: number;
     }
   | {
-      customStyle: string;
+      customStylePrompt: string;
       presetStyle?: never;
       expressivity?: number;
     };
