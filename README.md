@@ -114,13 +114,12 @@ const anamClient = createClient('your-session-token');
 
 ### Director notes and inline cues
 
-Use `personaConfig.directorNotes` to set the avatar's baseline presentation style for a session. Pick one preset style or provide a custom style. `speechAdherence` and `styleAdherence` are optional overrides; omit them to use the preset/custom defaults.
+Use `personaConfig.directorNotes` to set the avatar's baseline presentation style for a session. Pick one preset style or provide a custom style. `expressivity` is an optional normalized value from `0` to `1`; omit it to use the preset/custom defaults.
 
 ```typescript
 directorNotes: {
   presetStyle: 'supportive',
-  speechAdherence: 1.35,
-  styleAdherence: 1.3,
+  expressivity: 0.35,
 }
 ```
 

@@ -17,14 +17,12 @@ export type DirectorNotes =
   | {
       presetStyle: DirectorNotesStylePreset;
       customStyle?: never;
-      speechAdherence?: number;
-      styleAdherence?: number;
+      expressivity?: number;
     }
   | {
       customStyle: string;
       presetStyle?: never;
-      speechAdherence?: number;
-      styleAdherence?: number;
+      expressivity?: number;
     };
 
 export interface CustomPersonaConfig {
