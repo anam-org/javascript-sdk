@@ -2,6 +2,7 @@ export enum SignalMessageAction {
   OFFER = 'offer',
   ANSWER = 'answer',
   ICE_CANDIDATE = 'icecandidate',
+  ICE_RESTART_REQUEST = 'icerestartrequest',
   END_SESSION = 'endsession',
   HEARTBEAT = 'heartbeat',
   WARNING = 'warning',
