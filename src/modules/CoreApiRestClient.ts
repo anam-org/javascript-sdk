@@ -13,10 +13,10 @@ import {
   PersonaConfig,
   StartSessionResponse,
   ApiGatewayConfig,
+  SessionOptions,
 } from '../types';
 import { RetryOptions } from '../types/coreApi/ApiOptions';
 import { StartSessionOptions } from '../types/coreApi/StartSessionOptions';
-import { isCustomPersonaConfig } from '../types/PersonaConfig';
 
 interface ResolvedRetryOptions {
   maxAttempts: number;
@@ -32,8 +32,17 @@ export class CoreApiRestClient {
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private retryOptions: ResolvedRetryOptions;
   private requestTimeoutMs: number;
+  // Session options applied only when this client mints its own token (the
+  // unsafe API-key path). Named distinctly from `StartSessionOptions` to avoid
+  // confusing the two payloads.
+  private tokenSessionOptions: SessionOptions | undefined;
 
-  constructor(sessionToken?: string, apiKey?: string, options?: ApiOptions) {
+  constructor(
+    sessionToken?: string,
+    apiKey?: string,
+    options?: ApiOptions,
+    tokenSessionOptions?: SessionOptions,
+  ) {
     if (!sessionToken && !apiKey) {
       throw new Error('Either sessionToken or apiKey must be provided');
     }
@@ -50,6 +59,7 @@ export class CoreApiRestClient {
         DEFAULT_START_SESSION_REQUEST_TIMEOUT_MS,
       ),
     );
+    this.tokenSessionOptions = tokenSessionOptions;
   }
 
   /**
@@ -90,7 +100,10 @@ export class CoreApiRestClient {
           400,
         );
       }
-      this.sessionToken = await this.unsafe_getSessionToken(personaConfig);
+      this.sessionToken = await this.unsafe_getSessionToken(
+        personaConfig,
+        this.tokenSessionOptions,
+      );
     }
 
     // Check if brainType is being used and log deprecation warning
@@ -248,6 +261,7 @@ export class CoreApiRestClient {
 
   public async unsafe_getSessionToken(
     personaConfig: PersonaConfig,
+    sessionOptions?: SessionOptions,
   ): Promise<string> {
     console.warn(
       'Using an insecure method. This method should not be used in production.',
@@ -263,11 +277,23 @@ export class CoreApiRestClient {
       );
     }
 
-    let body: { clientLabel: string; personaConfig?: PersonaConfig } = {
+    assertValidSessionOptionsShape(sessionOptions);
+
+    // Always forward the caller's personaConfig: the server resolves the avatar
+    // model from it (e.g. to validate sessionOptions dimensions and to mint the
+    // right token). Gating this on llmId/brainType previously dropped valid
+    // configs that reference a persona by id or use the default LLM, which the
+    // server then mis-classified as a model-less "legacy" session.
+    const body: {
+      clientLabel: string;
+      personaConfig: PersonaConfig;
+      sessionOptions?: SessionOptions;
+    } = {
       clientLabel: 'js-sdk-api-key',
+      personaConfig,
     };
-    if (isCustomPersonaConfig(personaConfig)) {
-      body = { ...body, personaConfig };
+    if (sessionOptions) {
+      body.sessionOptions = sessionOptions;
     }
     try {
       const targetPath = `${this.apiVersion}/auth/session-token`;
@@ -290,6 +316,40 @@ export class CoreApiRestClient {
 
   private getApiUrl(): string {
     return `${this.baseUrl}${this.apiVersion}`;
+  }
+}
+
+/**
+ * Fail fast on an obviously-malformed session-options shape before the network
+ * round-trip. This is ONLY a shape check (pair-completeness + positive integers)
+ * — the server remains the source of truth for which dimension pairs each avatar
+ * model actually supports, and rejects unsupported pairs.
+ */
+function assertValidSessionOptionsShape(sessionOptions?: SessionOptions): void {
+  if (!sessionOptions) {
+    return;
+  }
+
+  const { videoWidth, videoHeight } = sessionOptions;
+  if ((videoWidth === undefined) !== (videoHeight === undefined)) {
+    throw new ClientError(
+      'videoWidth and videoHeight must be provided together',
+      ErrorCode.CLIENT_ERROR_CODE_VALIDATION_ERROR,
+      400,
+    );
+  }
+
+  for (const [name, value] of [
+    ['videoWidth', videoWidth],
+    ['videoHeight', videoHeight],
+  ] as const) {
+    if (value !== undefined && (!Number.isInteger(value) || value <= 0)) {
+      throw new ClientError(
+        `${name} must be a positive integer`,
+        ErrorCode.CLIENT_ERROR_CODE_VALIDATION_ERROR,
+        400,
+      );
+    }
   }
 }
 
