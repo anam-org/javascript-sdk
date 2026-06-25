@@ -92,6 +92,24 @@ export class ClientConnectionMilestoneRecorder {
     this.sessionSuccessful = true;
     this.record('client_session_success', tags);
     this.publishIfNeeded();
+    // Once the success/publish decision has been made the recorder is done.
+    // Stop accumulating and release the buffer for the rest of the
+    // (potentially long-lived) session. Without this, a fast unsampled success
+    // — the default path, since connectionMilestoneSampleRatio defaults to 0 —
+    // never sets `published`, so the long-lived ICE/websocket event handlers
+    // keep appending to `milestones` for the entire call.
+    this.finalize();
+  }
+
+  /**
+   * Make the recorder inert and release its buffer. `published` gates
+   * record()/publish()/publishFailure(), so flipping it here stops all further
+   * recording and publishing. publish() (if it ran) already serialized the
+   * milestones synchronously, so clearing the buffer afterwards is safe.
+   */
+  private finalize() {
+    this.published = true;
+    this.milestones.length = 0;
   }
 
   public publishFailure(tags?: ConnectionMilestoneTags) {

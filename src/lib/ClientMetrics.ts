@@ -68,14 +68,24 @@ export const sendClientMetric = async (
       ...tags,
     };
 
-    // Add session and organization IDs if available
-    if (anamMetricsContext.sessionId) {
+    // Fill session/organization/attempt IDs from the global context, but only
+    // when the caller did not already supply them. Callers that pass their own
+    // context (e.g. the connection-milestones recorder, which pins each metric
+    // to the attempt it belongs to) are authoritative; the global singleton is
+    // mutated by every new attempt and must not overwrite a caller's snapshot.
+    if (anamMetricsContext.sessionId && metricTags.sessionId === undefined) {
       metricTags.sessionId = anamMetricsContext.sessionId;
     }
-    if (anamMetricsContext.organizationId) {
+    if (
+      anamMetricsContext.organizationId &&
+      metricTags.organizationId === undefined
+    ) {
       metricTags.organizationId = anamMetricsContext.organizationId;
     }
-    if (anamMetricsContext.attemptCorrelationId) {
+    if (
+      anamMetricsContext.attemptCorrelationId &&
+      metricTags.attemptCorrelationId === undefined
+    ) {
       metricTags.attemptCorrelationId = anamMetricsContext.attemptCorrelationId;
     }
 

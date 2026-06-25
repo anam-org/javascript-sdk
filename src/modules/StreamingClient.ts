@@ -614,8 +614,7 @@ export class StreamingClient {
           );
         }
         if (this.connectionReceivedAnswer) {
-          await this.peerConnection.addIceCandidate(candidate);
-          this.recordFirstRemoteIceCandidateApplied(candidate);
+          await this.addRemoteIceCandidate(candidate);
         } else {
           this.remoteIceCandidateBuffer.push(candidate);
         }
@@ -679,8 +678,30 @@ export class StreamingClient {
     const bufferedCandidates = [...this.remoteIceCandidateBuffer];
     this.remoteIceCandidateBuffer = [];
     for (const candidate of bufferedCandidates) {
-      await this.peerConnection?.addIceCandidate(candidate);
+      await this.addRemoteIceCandidate(candidate);
+    }
+  }
+
+  /**
+   * Add a single remote ICE candidate to the peer connection.
+   * Each candidate is added independently: a rejection on one candidate is
+   * logged and swallowed so it cannot abort the flush loop (dropping the
+   * remaining buffered candidates) or surface as an unhandled rejection from
+   * the ANSWER handler. The "first applied" milestone is only recorded after a
+   * genuine, successful add.
+   */
+  private async addRemoteIceCandidate(candidate: RTCIceCandidate) {
+    if (!this.peerConnection) {
+      return;
+    }
+    try {
+      await this.peerConnection.addIceCandidate(candidate);
       this.recordFirstRemoteIceCandidateApplied(candidate);
+    } catch (error) {
+      console.warn(
+        'StreamingClient - addRemoteIceCandidate: failed to add remote ICE candidate',
+        error,
+      );
     }
   }
 
