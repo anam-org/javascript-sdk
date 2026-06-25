@@ -38,6 +38,7 @@
     "format": "prettier --write \"{src,test}/**/*.ts\"",
     "lint": "eslint \"{src,test}/**/*.ts\" --fix",
     "test": "echo \"Error: no test specified\" && exit 1",
+    "test:connection-milestones": "npm run build:main && node test/connectionMilestonesHarness.js",
     "watch": "nodemon -e ts --watch src --exec \"npm run build\"",
     "prepare": "husky"
   },

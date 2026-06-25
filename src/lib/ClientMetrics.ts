@@ -8,6 +8,7 @@ export enum ClientMetricMeasurement {
   CLIENT_METRIC_MEASUREMENT_ERROR = 'client_error',
   CLIENT_METRIC_MEASUREMENT_CONNECTION_CLOSED = 'client_connection_closed',
   CLIENT_METRIC_MEASUREMENT_CONNECTION_ESTABLISHED = 'client_connection_established',
+  CLIENT_METRIC_MEASUREMENT_CONNECTION_MILESTONES = 'client_connection_milestones',
   CLIENT_METRIC_MEASUREMENT_SESSION_ATTEMPT = 'client_session_attempt',
   CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS = 'client_session_success',
 }
@@ -67,14 +68,24 @@ export const sendClientMetric = async (
       ...tags,
     };
 
-    // Add session and organization IDs if available
-    if (anamMetricsContext.sessionId) {
+    // Fill session/organization/attempt IDs from the global context, but only
+    // when the caller did not already supply them. Callers that pass their own
+    // context (e.g. the connection-milestones recorder, which pins each metric
+    // to the attempt it belongs to) are authoritative; the global singleton is
+    // mutated by every new attempt and must not overwrite a caller's snapshot.
+    if (anamMetricsContext.sessionId && metricTags.sessionId === undefined) {
       metricTags.sessionId = anamMetricsContext.sessionId;
     }
-    if (anamMetricsContext.organizationId) {
+    if (
+      anamMetricsContext.organizationId &&
+      metricTags.organizationId === undefined
+    ) {
       metricTags.organizationId = anamMetricsContext.organizationId;
     }
-    if (anamMetricsContext.attemptCorrelationId) {
+    if (
+      anamMetricsContext.attemptCorrelationId &&
+      metricTags.attemptCorrelationId === undefined
+    ) {
       metricTags.attemptCorrelationId = anamMetricsContext.attemptCorrelationId;
     }
 
