@@ -8,10 +8,13 @@ export enum ClientMetricMeasurement {
   CLIENT_METRIC_MEASUREMENT_ERROR = 'client_error',
   CLIENT_METRIC_MEASUREMENT_CONNECTION_CLOSED = 'client_connection_closed',
   CLIENT_METRIC_MEASUREMENT_CONNECTION_ESTABLISHED = 'client_connection_established',
+  CLIENT_METRIC_MEASUREMENT_CONNECTION_MILESTONE = 'client_connection_milestone',
   CLIENT_METRIC_MEASUREMENT_CONNECTION_MILESTONES = 'client_connection_milestones',
   CLIENT_METRIC_MEASUREMENT_SESSION_ATTEMPT = 'client_session_attempt',
   CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS = 'client_session_success',
 }
+
+const CLIENT_METRICS_MAX_BATCH_SIZE = 50;
 
 let anamCurrentBaseUrl = DEFAULT_ANAM_METRICS_BASE_URL;
 let anamCurrentApiVersion = DEFAULT_ANAM_API_VERSION;
@@ -52,43 +55,27 @@ export const setMetricsContext = (context: Partial<AnamMetricsContext>) => {
   anamMetricsContext = { ...anamMetricsContext, ...context };
 };
 
+export interface ClientMetricPayload {
+  name: string;
+  value: string | number;
+  tags?: Record<string, string | number>;
+}
+
 export const sendClientMetric = async (
   name: string,
-  value: string,
+  value: string | number,
   tags?: Record<string, string | number>,
 ) => {
+  await sendClientMetrics([{ name, value, tags }]);
+};
+
+export const sendClientMetrics = async (metrics: ClientMetricPayload[]) => {
   // Skip sending metrics if disabled
-  if (metricsDisabled) {
+  if (metricsDisabled || metrics.length === 0) {
     return;
   }
 
   try {
-    const metricTags: Record<string, string | number> = {
-      ...CLIENT_METADATA,
-      ...tags,
-    };
-
-    // Fill session/organization/attempt IDs from the global context, but only
-    // when the caller did not already supply them. Callers that pass their own
-    // context (e.g. the connection-milestones recorder, which pins each metric
-    // to the attempt it belongs to) are authoritative; the global singleton is
-    // mutated by every new attempt and must not overwrite a caller's snapshot.
-    if (anamMetricsContext.sessionId && metricTags.sessionId === undefined) {
-      metricTags.sessionId = anamMetricsContext.sessionId;
-    }
-    if (
-      anamMetricsContext.organizationId &&
-      metricTags.organizationId === undefined
-    ) {
-      metricTags.organizationId = anamMetricsContext.organizationId;
-    }
-    if (
-      anamMetricsContext.attemptCorrelationId &&
-      metricTags.attemptCorrelationId === undefined
-    ) {
-      metricTags.attemptCorrelationId = anamMetricsContext.attemptCorrelationId;
-    }
-
     // Determine URL and headers based on API Gateway configuration
     const targetPath = `${anamCurrentApiVersion}/metrics/client`;
     let url: string;
@@ -105,18 +92,68 @@ export const sendClientMetric = async (
       url = `${anamCurrentBaseUrl}${targetPath}`;
     }
 
-    await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        name,
-        value,
-        tags: metricTags,
-      }),
-    });
+    const normalizedMetrics = metrics.map((metric) => ({
+      ...metric,
+      tags: buildMetricTags(metric.tags),
+    }));
+
+    for (
+      let batchStart = 0;
+      batchStart < normalizedMetrics.length;
+      batchStart += CLIENT_METRICS_MAX_BATCH_SIZE
+    ) {
+      const batch = normalizedMetrics.slice(
+        batchStart,
+        batchStart + CLIENT_METRICS_MAX_BATCH_SIZE,
+      );
+      const body =
+        batch.length === 1
+          ? batch[0]
+          : {
+              metrics: batch,
+            };
+
+      await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+    }
   } catch (error) {
-    console.error('Failed to send error metric:', error);
+    console.error('Failed to send client metric:', error);
   }
+};
+
+const buildMetricTags = (
+  tags?: Record<string, string | number>,
+): Record<string, string | number> => {
+  const metricTags: Record<string, string | number> = {
+    ...CLIENT_METADATA,
+    ...tags,
+  };
+
+  // Fill session/organization/attempt IDs from the global context, but only
+  // when the caller did not already supply them. Callers that pass their own
+  // context (e.g. the connection-milestones recorder, which pins each metric
+  // to the attempt it belongs to) are authoritative; the global singleton is
+  // mutated by every new attempt and must not overwrite a caller's snapshot.
+  if (anamMetricsContext.sessionId && metricTags.sessionId === undefined) {
+    metricTags.sessionId = anamMetricsContext.sessionId;
+  }
+  if (
+    anamMetricsContext.organizationId &&
+    metricTags.organizationId === undefined
+  ) {
+    metricTags.organizationId = anamMetricsContext.organizationId;
+  }
+  if (
+    anamMetricsContext.attemptCorrelationId &&
+    metricTags.attemptCorrelationId === undefined
+  ) {
+    metricTags.attemptCorrelationId = anamMetricsContext.attemptCorrelationId;
+  }
+
+  return metricTags;
 };
 
 export interface RTCStatsJsonReport {
