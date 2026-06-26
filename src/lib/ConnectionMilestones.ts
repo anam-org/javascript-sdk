@@ -1,7 +1,8 @@
 import {
   AnamMetricsContext,
+  ClientMetricPayload,
   ClientMetricMeasurement,
-  sendClientMetric,
+  sendClientMetrics,
 } from './ClientMetrics';
 import { ConnectionMilestoneMetricsOptions } from '../types/ConnectionMilestoneMetricsOptions';
 
@@ -104,8 +105,8 @@ export class ClientConnectionMilestoneRecorder {
   /**
    * Make the recorder inert and release its buffer. `published` gates
    * record()/publish()/publishFailure(), so flipping it here stops all further
-   * recording and publishing. publish() (if it ran) already serialized the
-   * milestones synchronously, so clearing the buffer afterwards is safe.
+   * recording and publishing. publish() (if it ran) already built the metric
+   * payloads synchronously, so clearing the buffer afterwards is safe.
    */
   private finalize() {
     this.published = true;
@@ -145,8 +146,7 @@ export class ClientConnectionMilestoneRecorder {
     }
 
     this.published = true;
-    const serializedMilestones = JSON.stringify(this.milestones);
-    const metricTags = sanitizeMetricTags({
+    const summaryTags = sanitizeMetricTags({
       ...tags,
       ...this.context,
       publishReason: reason,
@@ -155,14 +155,28 @@ export class ClientConnectionMilestoneRecorder {
       connectionMilestoneSampleRatio: this.sampleRatio,
       slowConnectionThresholdMs: this.slowConnectionThresholdMs,
       wasSampled: this.sampled ? 1 : 0,
-      milestones: serializedMilestones,
     });
 
-    void sendClientMetric(
-      ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_CONNECTION_MILESTONES,
-      '1',
-      metricTags,
-    );
+    const metrics: ClientMetricPayload[] = [
+      {
+        name: ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_CONNECTION_MILESTONES,
+        value: '1',
+        tags: summaryTags,
+      },
+      ...this.milestones.map((milestone, index) => ({
+        name: ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_CONNECTION_MILESTONE,
+        value: milestone.elapsedMs,
+        tags: sanitizeMetricTags({
+          ...this.context,
+          publishReason: reason,
+          milestone: milestone.name,
+          sequence: index,
+          ...milestone.tags,
+        }),
+      })),
+    ];
+
+    void sendClientMetrics(metrics);
   }
 
   private elapsedMs(): number {
