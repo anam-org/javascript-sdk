@@ -49,6 +49,9 @@ const anamClient = unsafe_createClientWithApiKey('your-api-key', {
   avatarId: '30fa96d0-26c4-4e55-94a0-517025942e18',
   voiceId: '6bfbe25a-979d-40f3-a92b-5394170af54b',
   brainType: 'ANAM_GPT_4O_MINI_V1',
+  directorNotes: {
+    presetStyle: 'warm',
+  },
   systemPrompt:
     "[STYLE] Reply in natural speech without formatting. Add pauses using '...' and very occasionally a disfluency. [PERSONALITY] You are Cara, a helpful assistant.",
 });
@@ -89,6 +92,9 @@ const response = await fetch(`https://api.anam.ai/v1/auth/session-token`, {
       avatarId: '30fa96d0-26c4-4e55-94a0-517025942e18',
       voiceId: '6bfbe25a-979d-40f3-a92b-5394170af54b',
       llmId: '<LLM ID HERE>',
+      directorNotes: {
+        presetStyle: 'warm',
+      },
       systemPrompt:
         "[STYLE] Reply in natural speech without formatting. Add pauses using '...' and very occasionally a disfluency. [PERSONALITY] You are Cara, a helpful assistant.",
     },
@@ -104,6 +110,25 @@ Once you have a session token you can use the `createClient` method of the Anam 
 import { createClient } from '@anam-ai/js-sdk';
 
 const anamClient = createClient('your-session-token');
+```
+
+### Director notes and inline cues
+
+Use `personaConfig.directorNotes` to set the avatar's baseline presentation style for a session. Pick one preset style or provide a custom style. `expressivity` is an optional normalized value from `0` to `1`; omit it to use the preset/custom defaults.
+
+```typescript
+directorNotes: {
+  presetStyle: 'supportive',
+  expressivity: 0.35,
+}
+```
+
+You can also include basic emotion cue tags in `talk()` or `createTalkMessageStream()` text. Recognised cue tags are removed from spoken text and apply until the next cue tag or the end of the current turn. The `[laughter]` cue triggers Cartesia laughter nonverbalism and uses playful avatar direction.
+
+```typescript
+await anamClient.talk(
+  '[happy] Great to see you. [laughter] That surprised me. [angry] Enough.',
+);
 ```
 
 Regardless of whether you initialise the client using an API key or session token the client exposes the same set of available methods for streaming.

@@ -5,7 +5,11 @@ export { SignalMessageAction } from './signalling'; // need to export this expli
 export type * from './streaming';
 export { DataChannelMessage } from './streaming';
 export type * from './coreApi';
-export type { PersonaConfig } from './PersonaConfig';
+export type {
+  DirectorNotes,
+  DirectorNotesStylePreset,
+  PersonaConfig,
+} from './PersonaConfig';
 export type { ApiGatewayConfig } from './ApiGatewayConfig';
 export type { InputAudioState } from './InputAudioState';
 export { AudioPermissionState } from './InputAudioState';

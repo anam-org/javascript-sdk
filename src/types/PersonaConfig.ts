@@ -1,5 +1,30 @@
 export type PersonaConfig = CustomPersonaConfig;
 
+export type DirectorNotesStylePreset =
+  | 'neutral'
+  | 'warm'
+  | 'supportive'
+  | 'curious'
+  | 'serious'
+  | 'playful'
+  | 'distressed'
+  | 'disinterested'
+  | 'confident'
+  | 'enthusiastic'
+  | 'angry';
+
+export type DirectorNotes =
+  | {
+      presetStyle: DirectorNotesStylePreset;
+      customStylePrompt?: never;
+      expressivity?: number;
+    }
+  | {
+      customStylePrompt: string;
+      presetStyle?: never;
+      expressivity?: number;
+    };
+
 export interface CustomPersonaConfig {
   personaId: string;
   name: string;
@@ -9,6 +34,7 @@ export interface CustomPersonaConfig {
   systemPrompt?: string;
   maxSessionLengthSeconds?: number;
   languageCode?: string;
+  directorNotes?: DirectorNotes;
 }
 
 export function isCustomPersonaConfig(
