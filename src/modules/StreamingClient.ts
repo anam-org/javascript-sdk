@@ -40,6 +40,10 @@ import { ToolCallManager } from './ToolCallManager';
 const SUCCESS_METRIC_POLLING_TIMEOUT_MS = 15000; // After this time we will stop polling for the first frame and consider the session a failure.
 const STATS_COLLECTION_INTERVAL_MS = 5000;
 const ICE_CANDIDATE_POOL_SIZE = 2; // Optimisation to speed up connection time
+const MAX_ICE_RESTART_ATTEMPTS = 3;
+const ICE_DISCONNECTED_GRACE_MS = 2000;
+const ICE_RESTART_WATCHDOG_MS = 3000;
+const ENSURE_WS_OPEN_TIMEOUT_MS = 5000;
 
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
@@ -51,6 +55,16 @@ export class StreamingClient {
   private rtcConfiguration: RTCConfiguration | undefined;
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private peerConnection: RTCPeerConnection | null = null;
+  private connectionEstablishedEmitted = false;
+  private iceRestartInProgress = false;
+  private iceRestartAttempts = 0;
+  private iceRestartStopped = false; // set on shutdown; halts all restart activity
+  private iceDisconnectedGraceTimer: ReturnType<typeof setTimeout> | null =
+    null;
+  private iceRestartWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingWsOpenListener: (() => void) | null = null;
+  private pendingWsOpenTimeout: ReturnType<typeof setTimeout> | null = null;
+  private pendingWsOpenReject: ((reason?: unknown) => void) | null = null;
   private connectionReceivedAnswer = false;
   private remoteIceCandidateBuffer: RTCIceCandidate[] = [];
   private inputAudioStream: MediaStream | null = null;
@@ -737,30 +751,225 @@ export class StreamingClient {
   }
 
   private onIceConnectionStateChange() {
-    const iceConnectionState = this.peerConnection?.iceConnectionState;
-    if (iceConnectionState) {
+    const state = this.peerConnection?.iceConnectionState;
+    if (state) {
       this.connectionMilestones?.record('ice_connection_state_changed', {
-        iceConnectionState,
+        iceConnectionState: state,
       });
     }
-    if (
-      this.peerConnection?.iceConnectionState === 'connected' ||
-      this.peerConnection?.iceConnectionState === 'completed'
-    ) {
-      if (!this.connectionEstablishedMilestoneRecorded) {
-        this.connectionEstablishedMilestoneRecorded = true;
-        this.connectionMilestones?.record('client_connection_established', {
-          iceConnectionState: this.peerConnection.iceConnectionState,
+    switch (state) {
+      case 'connected':
+      case 'completed':
+        this.clearIceDisconnectedGraceTimer();
+        this.clearIceRestartWatchdog();
+        this.iceRestartInProgress = false;
+        this.iceRestartAttempts = 0;
+        if (!this.connectionEstablishedMilestoneRecorded) {
+          this.connectionEstablishedMilestoneRecorded = true;
+          this.connectionMilestones?.record('client_connection_established', {
+            iceConnectionState: state,
+          });
+        }
+        if (!this.connectionEstablishedEmitted) {
+          this.connectionEstablishedEmitted = true;
+          this.publicEventEmitter.emit(AnamEvent.CONNECTION_ESTABLISHED);
+        }
+        this.startStatsCollection(); // idempotent (guards on statsCollectionInterval)
+        break;
+      case 'disconnected':
+        this.scheduleIceRestartAfterGrace();
+        break;
+      case 'failed':
+        this.clearIceDisconnectedGraceTimer();
+        this.connectionMilestones?.publishFailure({
+          failureStage: 'ice_connection',
+          iceConnectionState: state,
         });
+        void this.restartIce();
+        break;
+    }
+  }
+
+  private clearIceDisconnectedGraceTimer() {
+    if (this.iceDisconnectedGraceTimer) {
+      clearTimeout(this.iceDisconnectedGraceTimer);
+      this.iceDisconnectedGraceTimer = null;
+    }
+  }
+
+  private clearIceRestartWatchdog() {
+    if (this.iceRestartWatchdogTimer) {
+      clearTimeout(this.iceRestartWatchdogTimer);
+      this.iceRestartWatchdogTimer = null;
+    }
+  }
+
+  // Clears the pending ensureSignallingConnected wait (timeout + listener).
+  private clearPendingWsOpenWait() {
+    if (this.pendingWsOpenTimeout) {
+      clearTimeout(this.pendingWsOpenTimeout);
+      this.pendingWsOpenTimeout = null;
+    }
+    if (this.pendingWsOpenListener) {
+      this.internalEventEmitter.removeListener(
+        InternalEvent.WEB_SOCKET_OPEN,
+        this.pendingWsOpenListener,
+      );
+      this.pendingWsOpenListener = null;
+    }
+    this.pendingWsOpenReject = null;
+  }
+
+  // Stops all restart activity: timers, pending WS wait, and the in-progress gate.
+  private cancelIceRestart() {
+    this.clearIceDisconnectedGraceTimer();
+    this.clearIceRestartWatchdog();
+    const reject = this.pendingWsOpenReject;
+    this.clearPendingWsOpenWait();
+    if (reject) reject(new Error('ice restart cancelled'));
+    this.iceRestartInProgress = false;
+  }
+
+  private scheduleIceRestartAfterGrace() {
+    if (
+      this.iceRestartStopped ||
+      this.iceRestartInProgress ||
+      this.iceDisconnectedGraceTimer
+    ) {
+      return;
+    }
+    this.iceDisconnectedGraceTimer = setTimeout(() => {
+      this.iceDisconnectedGraceTimer = null;
+      if (this.iceRestartStopped) return;
+      const state = this.peerConnection?.iceConnectionState;
+      if (state === 'disconnected' || state === 'failed') {
+        void this.restartIce();
       }
-      this.publicEventEmitter.emit(AnamEvent.CONNECTION_ESTABLISHED);
-      // Start collecting stats every 5 seconds
-      this.startStatsCollection();
-    } else if (this.peerConnection?.iceConnectionState === 'failed') {
-      this.connectionMilestones?.publishFailure({
-        failureStage: 'ice_connection',
-        iceConnectionState: this.peerConnection.iceConnectionState,
-      });
+    }, ICE_DISCONNECTED_GRACE_MS);
+  }
+
+  /**
+   * Resolve once the signalling WebSocket is open (it auto-reconnects on close),
+   * or reject if it is terminally closed / times out. Restart offers must never
+   * be sent on a dead socket. Timeout + listener are stored so shutdown can clear
+   * them (see clearPendingWsOpenWait).
+   */
+  private ensureSignallingConnected(): Promise<void> {
+    if (this.signallingClient.isConnected()) {
+      return Promise.resolve();
+    }
+    if (this.signallingClient.isPermanentlyClosed()) {
+      return Promise.reject(new Error('signalling permanently closed'));
+    }
+    return new Promise<void>((resolve, reject) => {
+      this.pendingWsOpenReject = reject;
+      this.pendingWsOpenTimeout = setTimeout(() => {
+        this.clearPendingWsOpenWait();
+        reject(new Error('timed out waiting for signalling WebSocket'));
+      }, ENSURE_WS_OPEN_TIMEOUT_MS);
+      const onOpen = () => {
+        this.clearPendingWsOpenWait();
+        resolve();
+      };
+      this.pendingWsOpenListener = onOpen;
+      this.internalEventEmitter.addListener(
+        InternalEvent.WEB_SOCKET_OPEN,
+        onOpen,
+      );
+    });
+  }
+
+  /**
+   * Automatic ICE restart. Mints a new offer with fresh ICE credentials and
+   * sends it over the existing channel. Bounded retries via a watchdog; on
+   * exhaustion or terminal signalling, falls back to the WebRTC-failure path.
+   */
+  private async restartIce(): Promise<void> {
+    if (
+      !this.peerConnection ||
+      this.iceRestartInProgress ||
+      this.iceRestartStopped
+    ) {
+      return;
+    }
+    if (this.signallingClient.isPermanentlyClosed()) {
+      // Session is already ending via the signalling layer; stop spinning.
+      this.cancelIceRestart();
+      return;
+    }
+    if (this.iceRestartAttempts >= MAX_ICE_RESTART_ATTEMPTS) {
+      console.error('StreamingClient - restartIce: exhausted attempts');
+      this.cancelIceRestart();
+      this.handleWebrtcFailure(
+        'The connection to our servers was lost. Please try again.',
+      );
+      return;
+    }
+
+    // Set the in-progress gate BEFORE any await so a concurrent trigger
+    // (watchdog retry + ICE 'failed' event) cannot start a second restart.
+    this.iceRestartInProgress = true;
+    this.iceRestartAttempts += 1;
+    try {
+      // Avoid offer glare: only start a fresh offer from a stable signalling state.
+      if (this.peerConnection.signalingState !== 'stable') {
+        await this.peerConnection.setLocalDescription({ type: 'rollback' });
+      }
+      // On the first attempt of a restart episode, force a fresh signalling
+      // socket. A network switch can leave the old one half-open (readyState
+      // still OPEN, no close event), so the offer would be sent into a dead
+      // socket and never reach the server. Retries (attempt > 1) reuse the
+      // now-live socket so an in-flight answer isn't dropped.
+      if (this.iceRestartAttempts === 1) {
+        this.signallingClient.reconnectForIceRestart();
+      }
+      await this.ensureSignallingConnected();
+      if (this.iceRestartStopped) return;
+      // ICE may have recovered on its own while we waited for signalling.
+      const currentIceState = this.peerConnection.iceConnectionState;
+      if (currentIceState === 'connected' || currentIceState === 'completed') {
+        this.iceRestartInProgress = false;
+        return;
+      }
+
+      this.connectionReceivedAnswer = false;
+      this.remoteIceCandidateBuffer = [];
+
+      const offer = await this.peerConnection.createOffer({ iceRestart: true });
+      await this.peerConnection.setLocalDescription(offer);
+      if (!this.peerConnection.localDescription) {
+        throw new Error('null local description after ICE restart offer');
+      }
+      await this.signallingClient.sendOffer(
+        this.peerConnection.localDescription,
+      );
+
+      this.clearIceRestartWatchdog();
+      this.iceRestartWatchdogTimer = setTimeout(() => {
+        this.iceRestartWatchdogTimer = null;
+        this.iceRestartInProgress = false;
+        if (this.iceRestartStopped) return;
+        const state = this.peerConnection?.iceConnectionState;
+        if (state === 'connected' || state === 'completed') {
+          return;
+        }
+        void this.restartIce();
+      }, ICE_RESTART_WATCHDOG_MS);
+    } catch (err) {
+      console.error('StreamingClient - restartIce: error', err);
+      this.iceRestartInProgress = false;
+      if (
+        this.iceRestartStopped ||
+        this.signallingClient.isPermanentlyClosed()
+      ) {
+        this.cancelIceRestart();
+        return; // signalling layer already emitted CONNECTION_CLOSED
+      }
+      this.clearIceRestartWatchdog();
+      this.iceRestartWatchdogTimer = setTimeout(() => {
+        this.iceRestartWatchdogTimer = null;
+        void this.restartIce();
+      }, ICE_RESTART_WATCHDOG_MS);
     }
   }
 
@@ -1147,6 +1356,8 @@ export class StreamingClient {
   }
 
   private async shutdown() {
+    this.iceRestartStopped = true;
+    this.cancelIceRestart();
     if (this.showPeerConnectionStatsReport) {
       const stats = await this.peerConnection?.getStats();
       if (stats) {

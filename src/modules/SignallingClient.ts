@@ -26,6 +26,7 @@ export class SignallingClient {
   private sendingBuffer: SignalMessage[] = [];
   private wsConnectionAttempts = 0;
   private socket: WebSocket | null = null;
+  private permanentlyClosed = false;
   private heartBeatIntervalRef: ReturnType<typeof setInterval> | null = null;
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private connectionMilestones: ClientConnectionMilestoneRecorder | undefined;
@@ -117,6 +118,47 @@ export class SignallingClient {
     this.socket.onclose = this.onClose.bind(this);
     this.socket.onerror = this.onError.bind(this);
     return this.socket;
+  }
+
+  /**
+   * Force a fresh signalling socket for an ICE restart. A network switch can
+   * leave the existing socket half-open (readyState stays OPEN with no 'close'
+   * event), so a restart offer sent on it is silently dropped. Detach the stale
+   * socket's handlers so its eventual close does not drive the reconnect
+   * backoff, drop it, and open a new connection — whose close/error events fire
+   * normally, re-enabling the auto-reconnect loop until the new network path is
+   * reachable.
+   */
+  public reconnectForIceRestart(): void {
+    if (this.stopSignal || this.permanentlyClosed) {
+      return;
+    }
+    if (this.socket) {
+      this.socket.onopen = null;
+      this.socket.onclose = null;
+      this.socket.onerror = null;
+      this.socket.onmessage = null;
+      try {
+        this.socket.close();
+      } catch {
+        // A half-open socket may throw on close; the reconnect proceeds regardless.
+      }
+      this.socket = null;
+    }
+    if (this.heartBeatIntervalRef) {
+      clearInterval(this.heartBeatIntervalRef);
+      this.heartBeatIntervalRef = null;
+    }
+    this.wsConnectionAttempts = 0;
+    this.connect();
+  }
+
+  public isConnected(): boolean {
+    return this.socket?.readyState === WebSocket.OPEN;
+  }
+
+  public isPermanentlyClosed(): boolean {
+    return this.permanentlyClosed || this.stopSignal;
   }
 
   public async sendOffer(localDescription: RTCSessionDescription) {
@@ -213,6 +255,7 @@ export class SignallingClient {
         AnamEvent.CONNECTION_CLOSED,
         ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
       );
+      this.permanentlyClosed = true;
     }
   }
 
@@ -249,6 +292,7 @@ export class SignallingClient {
         AnamEvent.CONNECTION_CLOSED,
         ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
       );
+      this.permanentlyClosed = true;
     }
   }
 
