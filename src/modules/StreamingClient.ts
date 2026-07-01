@@ -633,6 +633,7 @@ export class StreamingClient {
         }
         this.connectionMilestones?.record('remote_description_set');
         this.connectionReceivedAnswer = true;
+        this.onAnswerAccepted();
         // flush the remote buffer
         await this.flushRemoteIceCandidateBuffer();
         break;
@@ -822,6 +823,26 @@ export class StreamingClient {
     if (this.iceRestartWatchdogTimer) {
       clearTimeout(this.iceRestartWatchdogTimer);
       this.iceRestartWatchdogTimer = null;
+    }
+  }
+
+  private onAnswerAccepted() {
+    const wasAwaitingRestartAnswer =
+      this.iceRestartInProgress ||
+      this.iceRestartAwaitedAnswer ||
+      this.iceRestartWatchdogTimer !== null;
+
+    this.clearIceRestartWatchdog();
+    this.iceRestartAwaitedAnswer = false;
+
+    if (!wasAwaitingRestartAnswer) {
+      return;
+    }
+
+    this.iceRestartInProgress = false;
+    const state = this.peerConnection?.iceConnectionState;
+    if (state === 'disconnected' || state === 'failed') {
+      this.scheduleIceRestartAfterGrace();
     }
   }
 
