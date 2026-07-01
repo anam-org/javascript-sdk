@@ -629,7 +629,12 @@ export class StreamingClient {
             'StreamingClient - setRemoteDescription(answer) failed',
             err,
           );
-          break; // let the ICE restart watchdog retry
+          if (!this.isAwaitingRestartAnswer()) {
+            // Initial-connection answer: no restart watchdog will retry, so
+            // surface the failure instead of hanging the connection.
+            this.handleWebrtcFailure(err);
+          }
+          break; // restart answers: let the ICE restart watchdog retry
         }
         this.connectionMilestones?.record('remote_description_set');
         this.connectionReceivedAnswer = true;
@@ -790,6 +795,7 @@ export class StreamingClient {
         this.clearIceRestartWatchdog();
         this.iceRestartInProgress = false;
         this.iceRestartAttempts = 0;
+        this.signallingClient.endIceRestartReconnect();
         if (!this.connectionEstablishedMilestoneRecorded) {
           this.connectionEstablishedMilestoneRecorded = true;
           this.connectionMilestones?.record('client_connection_established', {
@@ -826,11 +832,19 @@ export class StreamingClient {
     }
   }
 
-  private onAnswerAccepted() {
-    const wasAwaitingRestartAnswer =
+  // True while a restart offer is outstanding (in-progress gate, awaited-answer
+  // grace cycle, or armed watchdog) — i.e. an incoming answer belongs to an ICE
+  // restart rather than the initial connection.
+  private isAwaitingRestartAnswer(): boolean {
+    return (
       this.iceRestartInProgress ||
       this.iceRestartAwaitedAnswer ||
-      this.iceRestartWatchdogTimer !== null;
+      this.iceRestartWatchdogTimer !== null
+    );
+  }
+
+  private onAnswerAccepted() {
+    const wasAwaitingRestartAnswer = this.isAwaitingRestartAnswer();
 
     this.clearIceRestartWatchdog();
     this.iceRestartAwaitedAnswer = false;
@@ -871,6 +885,7 @@ export class StreamingClient {
     if (reject) reject(new Error('ice restart cancelled'));
     this.iceRestartCandidateBuffer = null;
     this.iceRestartInProgress = false;
+    this.signallingClient.endIceRestartReconnect();
   }
 
   // Send any candidates buffered while the re-offer was minted+sent, then stop

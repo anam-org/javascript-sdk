@@ -169,6 +169,15 @@ export class SignallingClient {
     this.connect();
   }
 
+  /**
+   * Ends the ICE-restart reconnect episode: subsequent closes use the default
+   * retry budget again. Called by StreamingClient when the restart succeeds,
+   * is cancelled, or exhausts its attempts.
+   */
+  public endIceRestartReconnect(): void {
+    this.iceRestartReconnectInProgress = false;
+  }
+
   public isConnected(): boolean {
     return this.socket?.readyState === WebSocket.OPEN;
   }
@@ -263,7 +272,9 @@ export class SignallingClient {
         attemptNumber: this.wsConnectionAttempts + 1,
       });
       this.wsConnectionAttempts = 0;
-      this.iceRestartReconnectInProgress = false;
+      // Keep iceRestartReconnectInProgress (the extended retry budget) until
+      // StreamingClient ends the episode: a socket that opens briefly and drops
+      // again mid-restart must not fall back to the short default budget.
       this.flushSendingBuffer();
       socket.onmessage = this.onMessage.bind(this);
       this.startSendingHeartBeats();
