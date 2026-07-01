@@ -67,6 +67,12 @@ export class StreamingClient {
   private pendingWsOpenReject: ((reason?: unknown) => void) | null = null;
   private connectionReceivedAnswer = false;
   private remoteIceCandidateBuffer: RTCIceCandidate[] = [];
+
+  // While a re-offer is being minted and sent, local candidates are buffered here
+  // so they reach the server AFTER the restart offer (which carries the new ICE
+  // credentials); otherwise the engine adds them against the old generation and
+  // drops them. null = not buffering (normal path).
+  private iceRestartCandidateBuffer: RTCIceCandidate[] | null = null;
   private inputAudioStream: MediaStream | null = null;
   private dataChannel: RTCDataChannel | null = null;
   private videoElement: HTMLVideoElement | null = null;
@@ -744,6 +750,11 @@ export class StreamingClient {
           getIceCandidateMilestoneTags(event.candidate),
         );
       }
+      if (this.iceRestartCandidateBuffer) {
+        // Hold until the re-offer is sent (see restartIce).
+        this.iceRestartCandidateBuffer.push(event.candidate);
+        return;
+      }
       this.signallingClient.sendIceCandidate(event.candidate);
     } else {
       this.connectionMilestones?.record('ice_gathering_complete');
@@ -827,7 +838,19 @@ export class StreamingClient {
     const reject = this.pendingWsOpenReject;
     this.clearPendingWsOpenWait();
     if (reject) reject(new Error('ice restart cancelled'));
+    this.iceRestartCandidateBuffer = null;
     this.iceRestartInProgress = false;
+  }
+
+  // Send any candidates buffered while the re-offer was minted+sent, then stop
+  // buffering (see restartIce/onIceCandidate).
+  private flushIceRestartCandidateBuffer() {
+    const buffered = this.iceRestartCandidateBuffer;
+    this.iceRestartCandidateBuffer = null;
+    if (!buffered) return;
+    for (const candidate of buffered) {
+      this.signallingClient.sendIceCandidate(candidate);
+    }
   }
 
   private scheduleIceRestartAfterGrace() {
@@ -936,6 +959,13 @@ export class StreamingClient {
       this.remoteIceCandidateBuffer = [];
 
       const offer = await this.peerConnection.createOffer({ iceRestart: true });
+      // Buffer local candidates that gather from setLocalDescription until the
+      // re-offer is sent. The engine queues remote candidates only while it has
+      // no remote description; during a restart it still holds the OLD ICE
+      // credentials, so a candidate arriving before the re-offer is applied would
+      // be added against the old generation and dropped. WS messages are handled
+      // in order, so sending the offer first pins the new credentials server-side.
+      this.iceRestartCandidateBuffer = [];
       await this.peerConnection.setLocalDescription(offer);
       if (!this.peerConnection.localDescription) {
         throw new Error('null local description after ICE restart offer');
@@ -943,6 +973,7 @@ export class StreamingClient {
       await this.signallingClient.sendOffer(
         this.peerConnection.localDescription,
       );
+      this.flushIceRestartCandidateBuffer();
 
       this.clearIceRestartWatchdog();
       this.iceRestartWatchdogTimer = setTimeout(() => {
@@ -956,6 +987,9 @@ export class StreamingClient {
         void this.restartIce();
       }, ICE_RESTART_WATCHDOG_MS);
     } catch (err) {
+      // The offer never made it out; drop candidates buffered for it (a retry
+      // mints a fresh offer and gathers again).
+      this.iceRestartCandidateBuffer = null;
       console.error('StreamingClient - restartIce: error', err);
       this.iceRestartInProgress = false;
       if (
