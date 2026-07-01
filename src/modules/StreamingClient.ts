@@ -629,9 +629,15 @@ export class StreamingClient {
             'StreamingClient - setRemoteDescription(answer) failed',
             err,
           );
-          if (!this.isAwaitingRestartAnswer()) {
+          if (
+            !this.connectionEstablishedEmitted &&
+            !this.isAwaitingRestartAnswer()
+          ) {
             // Initial-connection answer: no restart watchdog will retry, so
-            // surface the failure instead of hanging the connection.
+            // surface the failure instead of hanging the connection. Once the
+            // session has been established, any answer is a restart answer
+            // (even if ICE recovered on its own and cleared the restart flags
+            // before it arrived) — ICE-failure handling owns recovery then.
             this.handleWebrtcFailure(err);
           }
           break; // restart answers: let the ICE restart watchdog retry
@@ -1002,6 +1008,9 @@ export class StreamingClient {
       const currentIceState = this.peerConnection.iceConnectionState;
       if (currentIceState === 'connected' || currentIceState === 'completed') {
         this.iceRestartInProgress = false;
+        // If ICE reconnected before reconnectForIceRestart() set the flag, the
+        // connected handler couldn't have cleared it — end the episode here too.
+        this.signallingClient.endIceRestartReconnect();
         return;
       }
 
