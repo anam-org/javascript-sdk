@@ -58,6 +58,7 @@ export class StreamingClient {
   private connectionEstablishedEmitted = false;
   private iceRestartInProgress = false;
   private iceRestartAttempts = 0;
+  private iceRestartAwaitedAnswer = false;
   private iceRestartStopped = false; // set on shutdown; halts all restart activity
   private iceDisconnectedGraceTimer: ReturnType<typeof setTimeout> | null =
     null;
@@ -616,7 +617,20 @@ export class StreamingClient {
       case SignalMessageAction.ANSWER: {
         this.connectionMilestones?.record('answer_received');
         const answer = signalMessage.payload as RTCSessionDescriptionInit;
-        await this.peerConnection.setRemoteDescription(answer);
+        if (this.peerConnection.signalingState !== 'have-local-offer') {
+          // Late answer to a superseded / rolled-back restart offer — ignore it so
+          // it cannot be applied in a stable state or against a different offer.
+          break;
+        }
+        try {
+          await this.peerConnection.setRemoteDescription(answer);
+        } catch (err) {
+          console.error(
+            'StreamingClient - setRemoteDescription(answer) failed',
+            err,
+          );
+          break; // let the ICE restart watchdog retry
+        }
         this.connectionMilestones?.record('remote_description_set');
         this.connectionReceivedAnswer = true;
         // flush the remote buffer
@@ -792,10 +806,6 @@ export class StreamingClient {
         break;
       case 'failed':
         this.clearIceDisconnectedGraceTimer();
-        this.connectionMilestones?.publishFailure({
-          failureStage: 'ice_connection',
-          iceConnectionState: state,
-        });
         void this.restartIce();
         break;
     }
@@ -922,6 +932,10 @@ export class StreamingClient {
     }
     if (this.iceRestartAttempts >= MAX_ICE_RESTART_ATTEMPTS) {
       console.error('StreamingClient - restartIce: exhausted attempts');
+      this.connectionMilestones?.publishFailure({
+        failureStage: 'ice_connection',
+        iceConnectionState: this.peerConnection?.iceConnectionState,
+      });
       this.cancelIceRestart();
       this.handleWebrtcFailure(
         'The connection to our servers was lost. Please try again.',
@@ -975,17 +989,12 @@ export class StreamingClient {
       );
       this.flushIceRestartCandidateBuffer();
 
+      this.iceRestartAwaitedAnswer = false;
       this.clearIceRestartWatchdog();
-      this.iceRestartWatchdogTimer = setTimeout(() => {
-        this.iceRestartWatchdogTimer = null;
-        this.iceRestartInProgress = false;
-        if (this.iceRestartStopped) return;
-        const state = this.peerConnection?.iceConnectionState;
-        if (state === 'connected' || state === 'completed') {
-          return;
-        }
-        void this.restartIce();
-      }, ICE_RESTART_WATCHDOG_MS);
+      this.iceRestartWatchdogTimer = setTimeout(
+        () => this.onIceRestartWatchdog(),
+        ICE_RESTART_WATCHDOG_MS,
+      );
     } catch (err) {
       // The offer never made it out; drop candidates buffered for it (a retry
       // mints a fresh offer and gathers again).
@@ -1007,6 +1016,33 @@ export class StreamingClient {
     }
   }
 
+  // Watchdog for an outstanding restart offer. Only rolls back and re-offers
+  // once the current offer is resolved, so a second offer is never minted while
+  // the first offer's answer is still in flight (the ANSWER handler could
+  // otherwise apply it against the wrong offer).
+  private onIceRestartWatchdog() {
+    this.iceRestartWatchdogTimer = null;
+    this.iceRestartInProgress = false;
+    if (this.iceRestartStopped) return;
+    const state = this.peerConnection?.iceConnectionState;
+    if (state === 'connected' || state === 'completed') return;
+    if (!this.connectionReceivedAnswer && !this.iceRestartAwaitedAnswer) {
+      // Offer still unanswered: give the in-flight answer one more cycle before
+      // rolling it back and re-offering.
+      // ponytail: single grace cycle. An answer lost then arriving >2 cycles
+      // late could still glare with the next offer, but that self-heals via
+      // ICE-fail -> retry. Add generation tagging only if it shows up for real.
+      this.iceRestartAwaitedAnswer = true;
+      this.iceRestartInProgress = true;
+      this.iceRestartWatchdogTimer = setTimeout(
+        () => this.onIceRestartWatchdog(),
+        ICE_RESTART_WATCHDOG_MS,
+      );
+      return;
+    }
+    void this.restartIce();
+  }
+
   private onConnectionStateChange() {
     const connectionState = this.peerConnection?.connectionState;
     if (connectionState) {
@@ -1014,11 +1050,22 @@ export class StreamingClient {
         connectionState,
       });
     }
-    if (this.peerConnection?.connectionState === 'failed') {
-      this.connectionMilestones?.publishFailure({
-        failureStage: 'webrtc_connection',
-        connectionState: this.peerConnection.connectionState,
-      });
+    if (connectionState === 'failed') {
+      const iceState = this.peerConnection?.iceConnectionState;
+      const recovering =
+        !this.iceRestartStopped &&
+        (iceState === 'disconnected' || iceState === 'failed');
+      // A recoverable ICE failure also flips the aggregate state to 'failed'.
+      // The recorder is first-call-wins, so don't finalize failure telemetry
+      // while the ICE restart is still recovering; the terminal publish comes
+      // from restartIce (exhausted) or the 'closed' branch below. A genuine
+      // non-ICE failure (e.g. DTLS with ICE still connected) still publishes.
+      if (!recovering) {
+        this.connectionMilestones?.publishFailure({
+          failureStage: 'webrtc_connection',
+          connectionState,
+        });
+      }
     }
     if (this.peerConnection?.connectionState === 'closed') {
       console.error(

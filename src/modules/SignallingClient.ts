@@ -28,6 +28,7 @@ export class SignallingClient {
   private socket: WebSocket | null = null;
   private permanentlyClosed = false;
   private heartBeatIntervalRef: ReturnType<typeof setInterval> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private connectionMilestones: ClientConnectionMilestoneRecorder | undefined;
 
@@ -110,6 +111,7 @@ export class SignallingClient {
   }
 
   public connect(): WebSocket {
+    this.clearReconnectTimer();
     this.connectionMilestones?.record('websocket_connecting', {
       attemptNumber: this.wsConnectionAttempts + 1,
     });
@@ -226,6 +228,7 @@ export class SignallingClient {
   }
 
   private closeSocket() {
+    this.clearReconnectTimer();
     if (this.socket) {
       this.socket.close();
       this.socket = null;
@@ -259,6 +262,13 @@ export class SignallingClient {
     }
   }
 
+  private clearReconnectTimer() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
   private async onClose(event?: CloseEvent) {
     this.connectionMilestones?.record('websocket_closed', {
       attemptNumber: this.wsConnectionAttempts + 1,
@@ -276,7 +286,11 @@ export class SignallingClient {
         delayMs: retryDelayMs,
       });
       this.socket = null;
-      setTimeout(() => {
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+      }
+      this.reconnectTimer = setTimeout(() => {
+        this.reconnectTimer = null;
         this.connect();
       }, retryDelayMs);
     } else {
