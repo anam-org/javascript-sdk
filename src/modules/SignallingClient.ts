@@ -144,7 +144,7 @@ export class SignallingClient {
    * close before StreamingClient's websocket-open wait can time out and retry.
    */
   public reconnectForIceRestart(): void {
-    if (this.stopSignal || this.permanentlyClosed) {
+    if (this.isPermanentlyClosed()) {
       return;
     }
     this.clearReconnectTimer();
@@ -155,8 +155,12 @@ export class SignallingClient {
       this.socket.onmessage = null;
       try {
         this.socket.close();
-      } catch {
+      } catch (err) {
         // A half-open socket may throw on close; the reconnect proceeds regardless.
+        console.warn(
+          'SignallingClient - reconnectForIceRestart: error closing stale socket',
+          err,
+        );
       }
       this.socket = null;
     }
