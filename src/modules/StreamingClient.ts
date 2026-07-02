@@ -921,6 +921,10 @@ export class StreamingClient {
     if (reject) reject(new Error('ice restart cancelled'));
     this.iceRestartCandidateBuffer = null;
     this.iceRestartInProgress = false;
+    // End the metric episode: a late END_SESSION after shutdown must not
+    // count the hang-up as an aborted restart.
+    this.iceRestartEpisodeStartMs = null;
+    this.iceRestartEpisodeTrigger = null;
     this.signallingClient.endIceRestartReconnect();
   }
 
