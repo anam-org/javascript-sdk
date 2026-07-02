@@ -633,12 +633,21 @@ export default class AnamClient {
    * avatars or engines that don't support dynamic updates.
    *
    * @param directorNotes - Partial update; send only the fields that change.
-   * @throws Error if not currently streaming
+   * @throws Error if not currently streaming, or if the update is empty
    */
   public updateDirectorNotes(directorNotes: RuntimeDirectorNotes): void {
     if (!this._isStreaming) {
       throw new Error(
         'Failed to update director notes: not currently streaming',
+      );
+    }
+
+    if (
+      directorNotes.presetStyle === undefined &&
+      directorNotes.expressivity === undefined
+    ) {
+      throw new Error(
+        'Failed to update director notes: provide presetStyle and/or expressivity (pass null to clear a field)',
       );
     }
 

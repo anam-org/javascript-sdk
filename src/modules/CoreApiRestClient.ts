@@ -266,7 +266,11 @@ export class CoreApiRestClient {
     let body: { clientLabel: string; personaConfig?: PersonaConfig } = {
       clientLabel: 'js-sdk-api-key',
     };
-    if (isCustomPersonaConfig(personaConfig)) {
+    // Include the config when it carries a brain (llmId/brainType) — the
+    // legacy custom-config signal — or Director Notes, which are also valid
+    // on brainless configs (avatar-only / audio-passthrough sessions).
+    const hasDirectorNotes = personaConfig.directorNotes !== undefined;
+    if (isCustomPersonaConfig(personaConfig) || hasDirectorNotes) {
       body = { ...body, personaConfig };
     }
     try {
