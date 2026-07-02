@@ -59,6 +59,9 @@ export class StreamingClient {
   private iceRestartInProgress = false;
   private iceRestartAttempts = 0;
   private iceRestartAwaitedAnswer = false;
+  // Restart-episode telemetry (see sendIceRestartMetric). null = no episode.
+  private iceRestartEpisodeStartMs: number | null = null;
+  private iceRestartEpisodeTrigger: string | null = null;
   private iceRestartStopped = false; // set on shutdown; halts all restart activity
   private iceDisconnectedGraceTimer: ReturnType<typeof setTimeout> | null =
     null;
@@ -668,6 +671,9 @@ export class StreamingClient {
       }
       case SignalMessageAction.END_SESSION:
         const reason = signalMessage.payload as string;
+        // Server ended the session mid-restart: count the episode as aborted
+        // (unlike a user hang-up, which deliberately emits nothing).
+        this.sendIceRestartMetric('aborted');
         this.connectionMilestones?.publishFailure({
           failureStage: 'server_closed_connection',
         });
@@ -800,6 +806,7 @@ export class StreamingClient {
         this.clearIceDisconnectedGraceTimer();
         this.clearIceRestartWatchdog();
         this.iceRestartInProgress = false;
+        this.sendIceRestartMetric('recovered'); // before the attempts reset below
         this.iceRestartAttempts = 0;
         this.signallingClient.endIceRestartReconnect();
         if (!this.connectionEstablishedMilestoneRecorded) {
@@ -836,6 +843,34 @@ export class StreamingClient {
       clearTimeout(this.iceRestartWatchdogTimer);
       this.iceRestartWatchdogTimer = null;
     }
+  }
+
+  // One metric per restart episode, sent at episode end; complements the
+  // engine's server-side ICE recovery metrics. No-op when no episode is
+  // active, so normal initial connections emit nothing. Deliberately not sent
+  // on user shutdown mid-episode (a hang-up is not a restart outcome).
+  // ponytail: episode-level only — add per-attempt metrics if debugging ever
+  // needs that granularity.
+  private sendIceRestartMetric(outcome: 'recovered' | 'exhausted' | 'aborted') {
+    if (this.iceRestartEpisodeStartMs === null) {
+      return;
+    }
+    const durationMs = Math.round(
+      performance.now() - this.iceRestartEpisodeStartMs,
+    );
+    const trigger = this.iceRestartEpisodeTrigger ?? 'unknown';
+    this.iceRestartEpisodeStartMs = null;
+    this.iceRestartEpisodeTrigger = null;
+    sendClientMetric(
+      ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_ICE_RESTART,
+      '1',
+      {
+        outcome,
+        attempts: this.iceRestartAttempts,
+        durationMs,
+        trigger,
+      },
+    );
   }
 
   // True while a restart offer is outstanding (in-progress gate, awaited-answer
@@ -969,6 +1004,7 @@ export class StreamingClient {
     }
     if (this.signallingClient.isPermanentlyClosed()) {
       // Session is already ending via the signalling layer; stop spinning.
+      this.sendIceRestartMetric('aborted');
       this.cancelIceRestart();
       return;
     }
@@ -978,6 +1014,7 @@ export class StreamingClient {
         failureStage: 'ice_connection',
         iceConnectionState: this.peerConnection?.iceConnectionState,
       });
+      this.sendIceRestartMetric('exhausted');
       this.cancelIceRestart();
       this.handleWebrtcFailure(
         'The connection to our servers was lost. Please try again.',
@@ -985,6 +1022,11 @@ export class StreamingClient {
       return;
     }
 
+    if (this.iceRestartAttempts === 0) {
+      // New restart episode: stamp start + trigger for the episode metric.
+      this.iceRestartEpisodeStartMs = performance.now();
+      this.iceRestartEpisodeTrigger = this.peerConnection.iceConnectionState;
+    }
     // Set the in-progress gate BEFORE any await so a concurrent trigger
     // (watchdog retry + ICE 'failed' event) cannot start a second restart.
     this.iceRestartInProgress = true;
@@ -1008,6 +1050,10 @@ export class StreamingClient {
       const currentIceState = this.peerConnection.iceConnectionState;
       if (currentIceState === 'connected' || currentIceState === 'completed') {
         this.iceRestartInProgress = false;
+        // The connected handler normally already closed the episode; this is a
+        // no-op then. It only fires if this branch wins the race against the
+        // iceconnectionstatechange dispatch.
+        this.sendIceRestartMetric('recovered');
         // If ICE reconnected before reconnectForIceRestart() set the flag, the
         // connected handler couldn't have cleared it — end the episode here too.
         this.signallingClient.endIceRestartReconnect();
@@ -1046,10 +1092,12 @@ export class StreamingClient {
       this.iceRestartCandidateBuffer = null;
       console.error('StreamingClient - restartIce: error', err);
       this.iceRestartInProgress = false;
-      if (
-        this.iceRestartStopped ||
-        this.signallingClient.isPermanentlyClosed()
-      ) {
+      if (this.iceRestartStopped) {
+        this.cancelIceRestart();
+        return;
+      }
+      if (this.signallingClient.isPermanentlyClosed()) {
+        this.sendIceRestartMetric('aborted');
         this.cancelIceRestart();
         return; // signalling layer already emitted CONNECTION_CLOSED
       }

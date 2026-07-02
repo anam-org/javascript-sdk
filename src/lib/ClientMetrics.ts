@@ -12,6 +12,7 @@ export enum ClientMetricMeasurement {
   CLIENT_METRIC_MEASUREMENT_CONNECTION_MILESTONES = 'client_connection_milestones',
   CLIENT_METRIC_MEASUREMENT_SESSION_ATTEMPT = 'client_session_attempt',
   CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS = 'client_session_success',
+  CLIENT_METRIC_MEASUREMENT_ICE_RESTART = 'client_ice_restart',
 }
 
 const CLIENT_METRICS_MAX_BATCH_SIZE = 50;
@@ -79,7 +80,7 @@ export const sendClientMetrics = async (metrics: ClientMetricPayload[]) => {
     // Determine URL and headers based on API Gateway configuration
     const targetPath = `${anamCurrentApiVersion}/metrics/client`;
     let url: string;
-    let headers: Record<string, string> = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
