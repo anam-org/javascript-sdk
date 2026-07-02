@@ -856,13 +856,14 @@ export class StreamingClient {
     const trigger = this.iceRestartEpisodeTrigger ?? 'unknown';
     this.iceRestartEpisodeStartMs = null;
     this.iceRestartEpisodeTrigger = null;
+    // durationMs is the value, not a tag: near-unique tag values explode
+    // InfluxDB series cardinality. Episode count = count of points.
     sendClientMetric(
       ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_ICE_RESTART,
-      '1',
+      durationMs,
       {
         outcome,
         attempts: this.iceRestartAttempts,
-        durationMs,
         trigger,
       },
     );
