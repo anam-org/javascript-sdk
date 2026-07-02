@@ -671,8 +671,7 @@ export class StreamingClient {
       }
       case SignalMessageAction.END_SESSION:
         const reason = signalMessage.payload as string;
-        // Server ended the session mid-restart: count the episode as aborted
-        // (unlike a user hang-up, which deliberately emits nothing).
+        // Server-ended session mid-restart counts as aborted; user hang-up doesn't.
         this.sendIceRestartMetric('aborted');
         this.connectionMilestones?.publishFailure({
           failureStage: 'server_closed_connection',
@@ -845,12 +844,8 @@ export class StreamingClient {
     }
   }
 
-  // One metric per restart episode, sent at episode end; complements the
-  // engine's server-side ICE recovery metrics. No-op when no episode is
-  // active, so normal initial connections emit nothing. Deliberately not sent
-  // on user shutdown mid-episode (a hang-up is not a restart outcome).
-  // ponytail: episode-level only — add per-attempt metrics if debugging ever
-  // needs that granularity.
+  // One metric per restart episode, sent at episode end. No-op when no
+  // episode is active; deliberately silent on user shutdown mid-episode.
   private sendIceRestartMetric(outcome: 'recovered' | 'exhausted' | 'aborted') {
     if (this.iceRestartEpisodeStartMs === null) {
       return;
@@ -1023,7 +1018,6 @@ export class StreamingClient {
     }
 
     if (this.iceRestartAttempts === 0) {
-      // New restart episode: stamp start + trigger for the episode metric.
       this.iceRestartEpisodeStartMs = performance.now();
       this.iceRestartEpisodeTrigger = this.peerConnection.iceConnectionState;
     }
@@ -1050,12 +1044,8 @@ export class StreamingClient {
       const currentIceState = this.peerConnection.iceConnectionState;
       if (currentIceState === 'connected' || currentIceState === 'completed') {
         this.iceRestartInProgress = false;
-        // The connected handler normally already closed the episode; this is a
-        // no-op then. It only fires if this branch wins the race against the
-        // iceconnectionstatechange dispatch.
+        // No-ops if the connected handler already closed the episode.
         this.sendIceRestartMetric('recovered');
-        // If ICE reconnected before reconnectForIceRestart() set the flag, the
-        // connected handler couldn't have cleared it — end the episode here too.
         this.signallingClient.endIceRestartReconnect();
         return;
       }
@@ -1122,9 +1112,6 @@ export class StreamingClient {
     if (!this.connectionReceivedAnswer && !this.iceRestartAwaitedAnswer) {
       // Offer still unanswered: give the in-flight answer one more cycle before
       // rolling it back and re-offering.
-      // ponytail: single grace cycle. An answer lost then arriving >2 cycles
-      // late could still glare with the next offer, but that self-heals via
-      // ICE-fail -> retry. Add generation tagging only if it shows up for real.
       this.iceRestartAwaitedAnswer = true;
       this.iceRestartInProgress = true;
       this.iceRestartWatchdogTimer = setTimeout(
