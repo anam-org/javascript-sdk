@@ -1,3 +1,5 @@
+import { DirectorNotes } from './DirectorNotes';
+
 export type PersonaConfig = CustomPersonaConfig;
 
 export interface CustomPersonaConfig {
@@ -9,6 +11,12 @@ export interface CustomPersonaConfig {
   systemPrompt?: string;
   maxSessionLengthSeconds?: number;
   languageCode?: string;
+  /**
+   * Director Notes for the session — a baseline performance style for the
+   * avatar and how expressively it is played. Cara 4 avatars only; forwarded
+   * unchanged to session-token creation. See {@link DirectorNotes}.
+   */
+  directorNotes?: DirectorNotes;
 }
 
 export function isCustomPersonaConfig(

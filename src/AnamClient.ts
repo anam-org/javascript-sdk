@@ -30,6 +30,7 @@ import {
   EventCallbacks,
   InputAudioState,
   PersonaConfig,
+  RuntimeDirectorNotes,
   StartSessionOptions,
   StartSessionResponse,
   ToolCallHandler,
@@ -616,6 +617,34 @@ export default class AnamClient {
       message_type: 'context',
       session_id: sessionId,
       content,
+    });
+
+    this.sendDataMessage(body);
+  }
+
+  /**
+   * Update Director Notes on the active streaming session, applied without
+   * restarting (Cara 4 avatars only).
+   *
+   * Forwarded over the data channel; the engine applies `presetStyle` and
+   * `expressivity` immediately — pass `null` to clear a field so the engine
+   * falls back to its default. `customStylePrompt` cannot be changed
+   * mid-session — start a new session to change it. No-op on non-Cara-4
+   * avatars or engines that don't support dynamic updates.
+   *
+   * @param directorNotes - Partial update; send only the fields that change.
+   * @throws Error if not currently streaming
+   */
+  public updateDirectorNotes(directorNotes: RuntimeDirectorNotes): void {
+    if (!this._isStreaming) {
+      throw new Error(
+        'Failed to update director notes: not currently streaming',
+      );
+    }
+
+    const body = JSON.stringify({
+      message_type: 'persona_config',
+      data: { directorNotes },
     });
 
     this.sendDataMessage(body);
