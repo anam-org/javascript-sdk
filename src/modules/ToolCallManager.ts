@@ -38,6 +38,7 @@ export class ToolCallManager {
   private pendingCalls: Record<string, PendingToolCall> = Object.create(null);
   private failedCalls: Record<string, ToolCallFailedPayload> =
     Object.create(null);
+  private completedCalls: Record<string, true> = Object.create(null);
   private activeSessionId: string | null = null;
 
   constructor(
@@ -52,12 +53,14 @@ export class ToolCallManager {
     this.activeSessionId = sessionId;
     this.clearPendingCalls();
     this.clearFailedCalls();
+    this.clearCompletedCalls();
   }
 
   clearSessionState(): void {
     this.activeSessionId = null;
     this.clearPendingCalls();
     this.clearFailedCalls();
+    this.clearCompletedCalls();
   }
 
   clearPendingCalls(): void {
@@ -66,6 +69,10 @@ export class ToolCallManager {
 
   clearFailedCalls(): void {
     this.failedCalls = Object.create(null);
+  }
+
+  clearCompletedCalls(): void {
+    this.completedCalls = Object.create(null);
   }
 
   registerHandler(toolName: string, handler: ToolCallHandler): () => void {
@@ -159,6 +166,14 @@ export class ToolCallManager {
       return;
     }
 
+    if (tool_call_id in this.completedCalls) {
+      // Already processed: for client tools we synthesize completion locally after the
+      // handler runs, and the engine may also send a completed event for the same call
+      // (e.g. ElevenLabs agent tool forwarding). First outcome wins.
+      return;
+    }
+    this.completedCalls[tool_call_id] = true;
+
     const payload =
       this.webRTCToolCallCompletedEventToToolCallCompletedPayload(
         toolCallEvent,
@@ -198,6 +213,16 @@ export class ToolCallManager {
     const { tool_name, tool_call_id, timestamp } = toolCallEvent;
 
     if (this.activeSessionId !== toolCallEvent.session_id) {
+      return;
+    }
+
+    if (
+      tool_call_id in this.failedCalls ||
+      tool_call_id in this.completedCalls
+    ) {
+      // Already processed: for client tools we synthesize failure locally when the
+      // handler throws, and the engine may also send a failed event for the same call
+      // (e.g. ElevenLabs agent tool forwarding). First outcome wins.
       return;
     }
 
