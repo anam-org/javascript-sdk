@@ -59,6 +59,7 @@ export const setMetricsContext = (context: Partial<AnamMetricsContext>) => {
 export interface ClientMetricPayload {
   name: string;
   value: string | number;
+  clientTimestamp?: string;
   tags?: Record<string, string | number>;
 }
 
@@ -95,6 +96,7 @@ export const sendClientMetrics = async (metrics: ClientMetricPayload[]) => {
 
     const normalizedMetrics = metrics.map((metric) => ({
       ...metric,
+      clientTimestamp: metric.clientTimestamp ?? new Date().toISOString(),
       tags: buildMetricTags(metric.tags),
     }));
 

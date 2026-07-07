@@ -19,6 +19,7 @@ type ConnectionMilestoneTags = Record<
 interface ClientConnectionMilestone {
   name: string;
   elapsedMs: number;
+  clientTimestamp: string;
   tags?: Record<string, ConnectionMilestoneTagValue>;
 }
 
@@ -78,6 +79,7 @@ export class ClientConnectionMilestoneRecorder {
     const milestone: ClientConnectionMilestone = {
       name,
       elapsedMs: this.elapsedMs(),
+      clientTimestamp: new Date().toISOString(),
     };
     if (Object.keys(sanitizedTags).length > 0) {
       milestone.tags = sanitizedTags;
@@ -166,6 +168,7 @@ export class ClientConnectionMilestoneRecorder {
       ...this.milestones.map((milestone, index) => ({
         name: ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_CONNECTION_MILESTONE,
         value: milestone.elapsedMs,
+        clientTimestamp: milestone.clientTimestamp,
         tags: sanitizeMetricTags({
           ...this.context,
           publishReason: reason,
