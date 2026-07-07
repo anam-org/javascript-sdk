@@ -31,6 +31,19 @@ const assertNoSerializedMilestoneTag = (request) => {
     );
   });
 };
+const assertClientTimestamps = (request) => {
+  getMetrics(request).forEach((metric) => {
+    assert.equal(
+      typeof metric.clientTimestamp,
+      'string',
+      `${metric.name} should include clientTimestamp`,
+    );
+    assert.ok(
+      !Number.isNaN(Date.parse(metric.clientTimestamp)),
+      `${metric.name} should include an ISO clientTimestamp`,
+    );
+  });
+};
 
 const createRecorder = ({
   sampleRatio = 0,
@@ -72,6 +85,7 @@ async function runHarness() {
   assert.equal(requests.length, 1, 'sampled success should publish once');
   assert.equal(getMetrics(requests[0]).length, 3);
   assertNoSerializedMilestoneTag(requests[0]);
+  assertClientTimestamps(requests[0]);
   const sampledSummary = getSummaryMetric(requests[0]);
   const sampledDetails = getDetailMetrics(requests[0]);
   assert.equal(sampledSummary.tags.publishReason, 'sampled');
@@ -102,6 +116,7 @@ async function runHarness() {
   recorder.recordSessionSuccess({ detectionMethod: 'harness' });
   assert.equal(requests.length, 1, 'slow success should publish once');
   assertNoSerializedMilestoneTag(requests[0]);
+  assertClientTimestamps(requests[0]);
   const slowSummary = getSummaryMetric(requests[0]);
   const slowDetails = getDetailMetrics(requests[0]);
   assert.equal(slowSummary.tags.publishReason, 'slow');
@@ -119,6 +134,7 @@ async function runHarness() {
   recorder.publishFailure({ failureStage: 'harness' });
   assert.equal(requests.length, 1, 'failed attempt should publish once');
   assertNoSerializedMilestoneTag(requests[0]);
+  assertClientTimestamps(requests[0]);
   const failureSummary = getSummaryMetric(requests[0]);
   const failureDetails = getDetailMetrics(requests[0]);
   assert.equal(failureSummary.tags.publishReason, 'failed');
