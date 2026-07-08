@@ -1359,7 +1359,7 @@ export class StreamingClient {
             const cueAppliedEvent =
               message.data as WebRtcDirectorNoteCueAppliedEvent;
             this.publicEventEmitter.emit(AnamEvent.DIRECTOR_NOTE_CUE_APPLIED, {
-              cueTag: cueAppliedEvent?.director_note_tag ?? 'unknown',
+              cueTag: cueAppliedEvent?.cue_tag ?? 'unknown',
               correlationId:
                 cueAppliedEvent?.user_action_correlation_id ?? 'unknown',
             });
