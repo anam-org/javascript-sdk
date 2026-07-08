@@ -35,6 +35,7 @@ export class MessageHistoryClient {
       role: event.role as MessageRole,
       endOfSpeech: event.end_of_speech,
       interrupted: event.interrupted,
+      ...(event.cue_tag ? { cueTag: event.cue_tag } : {}),
     };
   }
 

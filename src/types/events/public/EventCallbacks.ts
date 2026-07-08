@@ -4,6 +4,7 @@ import {
   MessageStreamEvent,
   AnamEvent,
   ClientToolEvent,
+  DirectorNoteCueAppliedEvent,
   ReasoningMessage,
   ReasoningStreamEvent,
   ToolCallFailedPayload,
@@ -50,4 +51,7 @@ export type EventCallbacks = {
   ) => void;
   [AnamEvent.USER_SPEECH_STARTED]: (correlationId: string) => void;
   [AnamEvent.USER_SPEECH_ENDED]: (correlationId: string) => void;
+  [AnamEvent.DIRECTOR_NOTE_CUE_APPLIED]: (
+    cueAppliedEvent: DirectorNoteCueAppliedEvent,
+  ) => void;
 };

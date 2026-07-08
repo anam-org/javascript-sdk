@@ -23,6 +23,7 @@ import {
   SignalMessageAction,
   StreamingClientOptions,
   WebRtcClientToolEvent,
+  WebRtcDirectorNoteCueAppliedEvent,
   WebRtcTextMessageEvent,
   WebRtcReasoningTextMessageEvent,
 } from '../types';
@@ -1353,6 +1354,15 @@ export class StreamingClient {
               AnamEvent.USER_SPEECH_ENDED,
               message.data?.user_action_correlation_id ?? 'unknown',
             );
+            break;
+          case DataChannelMessage.DIRECTOR_NOTE_CUE_APPLIED:
+            const cueAppliedEvent =
+              message.data as WebRtcDirectorNoteCueAppliedEvent;
+            this.publicEventEmitter.emit(AnamEvent.DIRECTOR_NOTE_CUE_APPLIED, {
+              cueTag: cueAppliedEvent?.director_note_tag ?? 'unknown',
+              correlationId:
+                cueAppliedEvent?.user_action_correlation_id ?? 'unknown',
+            });
             break;
           // Unknown message types are silently ignored to maintain forward compatibility
           default:

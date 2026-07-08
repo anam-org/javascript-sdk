@@ -7,4 +7,5 @@ export enum DataChannelMessage {
   REASONING_TEXT = 'reasoningText',
   USER_SPEECH_STARTED = 'userSpeechStarted',
   USER_SPEECH_ENDED = 'userSpeechEnded',
+  DIRECTOR_NOTE_CUE_APPLIED = 'directorNoteCueApplied',
 }
