@@ -17,3 +17,4 @@ export { InternalEvent } from './events'; // need to export this explicitly to a
 export { ConnectionClosedCode } from './events'; // need to export this explicitly to avoid enum import issues
 export { AgentAudioInputStream } from './AgentAudioInputStream';
 export type * from './toolCalling';
+export type * from './directorNotes';
