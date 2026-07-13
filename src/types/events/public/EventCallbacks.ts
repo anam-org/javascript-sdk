@@ -5,6 +5,7 @@ import {
   AnamEvent,
   ClientToolEvent,
   DirectorNoteCueAppliedEvent,
+  PersonaConfigUpdateAppliedEvent,
   ReasoningMessage,
   ReasoningStreamEvent,
   ToolCallFailedPayload,
@@ -53,5 +54,8 @@ export type EventCallbacks = {
   [AnamEvent.USER_SPEECH_ENDED]: (correlationId: string) => void;
   [AnamEvent.DIRECTOR_NOTE_CUE_APPLIED]: (
     cueAppliedEvent: DirectorNoteCueAppliedEvent,
+  ) => void;
+  [AnamEvent.PERSONA_CONFIG_UPDATE_APPLIED]: (
+    updateAppliedEvent: PersonaConfigUpdateAppliedEvent,
   ) => void;
 };

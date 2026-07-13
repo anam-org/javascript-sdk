@@ -24,6 +24,7 @@ import {
   StreamingClientOptions,
   WebRtcClientToolEvent,
   WebRtcDirectorNoteCueAppliedEvent,
+  WebRtcPersonaConfigUpdateAppliedEvent,
   WebRtcTextMessageEvent,
   WebRtcReasoningTextMessageEvent,
 } from '../types';
@@ -1363,6 +1364,16 @@ export class StreamingClient {
               correlationId:
                 cueAppliedEvent?.user_action_correlation_id ?? 'unknown',
             });
+            break;
+          case DataChannelMessage.PERSONA_CONFIG_UPDATE_APPLIED:
+            const updateAppliedEvent =
+              message.data as WebRtcPersonaConfigUpdateAppliedEvent;
+            this.publicEventEmitter.emit(
+              AnamEvent.PERSONA_CONFIG_UPDATE_APPLIED,
+              {
+                changedFields: updateAppliedEvent?.changed_fields ?? {},
+              },
+            );
             break;
           // Unknown message types are silently ignored to maintain forward compatibility
           default:
