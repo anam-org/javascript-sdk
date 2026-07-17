@@ -14,10 +14,12 @@ import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamP
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 5;
 const DEFAULT_WS_RECONNECTION_ATTEMPTS = 5;
+const WEBSOCKET_STABLE_RECONNECTION_RESET_MS = 5000;
 // Long enough to cover StreamingClient's full restart envelope:
 // 3 attempts * (5s websocket-open wait + 3s restart watchdog) = 24s.
 // With 100ms linear backoff this keeps signalling non-terminal for ~30s.
 const ICE_RESTART_WS_RECONNECTION_ATTEMPTS = 24;
+const API_GATEWAY_BACKEND_CLOSE_REASON_PREFIX = 'Backend WebSocket';
 
 export class SignallingClient {
   private publicEventEmitter: PublicEventEmitter;
@@ -34,6 +36,7 @@ export class SignallingClient {
   private iceRestartReconnectInProgress = false;
   private heartBeatIntervalRef: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private stableConnectionTimer: ReturnType<typeof setTimeout> | null = null;
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private connectionMilestones: ClientConnectionMilestoneRecorder | undefined;
 
@@ -117,6 +120,7 @@ export class SignallingClient {
 
   public connect(): WebSocket {
     this.clearReconnectTimer();
+    this.clearStableConnectionTimer();
     this.connectionMilestones?.record('websocket_connecting', {
       attemptNumber: this.wsConnectionAttempts + 1,
     });
@@ -164,10 +168,7 @@ export class SignallingClient {
       }
       this.socket = null;
     }
-    if (this.heartBeatIntervalRef) {
-      clearInterval(this.heartBeatIntervalRef);
-      this.heartBeatIntervalRef = null;
-    }
+    this.clearHeartbeatInterval();
     this.wsConnectionAttempts = 0;
     this.iceRestartReconnectInProgress = true;
     this.connect();
@@ -256,15 +257,13 @@ export class SignallingClient {
 
   private closeSocket() {
     this.clearReconnectTimer();
+    this.clearStableConnectionTimer();
     this.iceRestartReconnectInProgress = false;
     if (this.socket) {
       this.socket.close();
       this.socket = null;
     }
-    if (this.heartBeatIntervalRef) {
-      clearInterval(this.heartBeatIntervalRef);
-      this.heartBeatIntervalRef = null;
-    }
+    this.clearHeartbeatInterval();
   }
 
   private async onOpen(socket: WebSocket): Promise<void> {
@@ -275,10 +274,10 @@ export class SignallingClient {
       this.connectionMilestones?.record('websocket_open', {
         attemptNumber: this.wsConnectionAttempts + 1,
       });
-      this.wsConnectionAttempts = 0;
       // Keep iceRestartReconnectInProgress (the extended retry budget) until
       // StreamingClient ends the episode: a socket that opens briefly and drops
       // again mid-restart must not fall back to the short default budget.
+      this.scheduleStableConnectionReset(socket);
       this.flushSendingBuffer();
       socket.onmessage = this.onMessage.bind(this);
       this.startSendingHeartBeats();
@@ -300,21 +299,51 @@ export class SignallingClient {
     }
   }
 
+  private clearStableConnectionTimer() {
+    if (this.stableConnectionTimer) {
+      clearTimeout(this.stableConnectionTimer);
+      this.stableConnectionTimer = null;
+    }
+  }
+
+  private clearHeartbeatInterval() {
+    if (this.heartBeatIntervalRef) {
+      clearInterval(this.heartBeatIntervalRef);
+      this.heartBeatIntervalRef = null;
+    }
+  }
+
+  private scheduleStableConnectionReset(socket: WebSocket) {
+    this.clearStableConnectionTimer();
+    this.stableConnectionTimer = setTimeout(() => {
+      this.stableConnectionTimer = null;
+      if (this.socket === socket && socket.readyState === WebSocket.OPEN) {
+        this.wsConnectionAttempts = 0;
+      }
+    }, WEBSOCKET_STABLE_RECONNECTION_RESET_MS);
+  }
+
   private async onClose(socket: WebSocket, event?: CloseEvent) {
     if (this.socket !== socket) {
       return;
     }
+    this.clearStableConnectionTimer();
+    this.clearHeartbeatInterval();
     this.connectionMilestones?.record('websocket_closed', {
       attemptNumber: this.wsConnectionAttempts + 1,
       closeCode: event?.code,
+      closeReason: event?.reason,
       wasClean: event?.wasClean,
     });
     this.wsConnectionAttempts += 1;
     if (this.stopSignal) {
       return;
     }
-    const maxReconnectionAttempts = this.getMaxReconnectionAttempts();
-    if (this.wsConnectionAttempts <= maxReconnectionAttempts) {
+    const maxReconnectionAttempts = this.getMaxReconnectionAttempts(event);
+    if (
+      this.shouldRetryCloseEvent(event) &&
+      this.wsConnectionAttempts <= maxReconnectionAttempts
+    ) {
       const retryDelayMs = 100 * this.wsConnectionAttempts;
       this.connectionMilestones?.record('websocket_retry_scheduled', {
         attemptNumber: this.wsConnectionAttempts + 1,
@@ -328,13 +357,11 @@ export class SignallingClient {
       }, retryDelayMs);
     } else {
       this.clearReconnectTimer();
-      if (this.heartBeatIntervalRef) {
-        clearInterval(this.heartBeatIntervalRef);
-        this.heartBeatIntervalRef = null;
-      }
+      this.clearHeartbeatInterval();
       this.connectionMilestones?.publishFailure({
         failureStage: 'websocket',
         closeCode: event?.code,
+        closeReason: event?.reason,
       });
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
@@ -345,14 +372,32 @@ export class SignallingClient {
     }
   }
 
-  private getMaxReconnectionAttempts(): number {
-    if (!this.iceRestartReconnectInProgress) {
+  private getMaxReconnectionAttempts(event?: CloseEvent): number {
+    if (
+      !this.iceRestartReconnectInProgress ||
+      this.isApiGatewayBackendClose(event)
+    ) {
       return this.maxWsReconnectionAttempts;
     }
 
     return Math.max(
       this.maxWsReconnectionAttempts,
       ICE_RESTART_WS_RECONNECTION_ATTEMPTS,
+    );
+  }
+
+  private shouldRetryCloseEvent(event?: CloseEvent): boolean {
+    // Dev Cloudflare workers use 1008 for backend 401/403. That is a policy
+    // failure rather than a transient network close, so retrying just hammers
+    // the edge with requests that cannot succeed.
+    return !(this.isApiGatewayBackendClose(event) && event?.code === 1008);
+  }
+
+  private isApiGatewayBackendClose(event?: CloseEvent): boolean {
+    return (
+      this.apiGatewayConfig?.enabled === true &&
+      typeof event?.reason === 'string' &&
+      event.reason.startsWith(API_GATEWAY_BACKEND_CLOSE_REASON_PREFIX)
     );
   }
 
