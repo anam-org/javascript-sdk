@@ -4,6 +4,7 @@ export type { InputAudioOptions } from './InputAudioOptions';
 export type { StreamingClientOptions } from './StreamingClientOptions';
 export type { WebRtcClientToolEvent } from './WebRtcClientToolEvent';
 export type { WebRtcDirectorNoteCueAppliedEvent } from './WebRtcDirectorNoteCueAppliedEvent';
+export type { WebRtcPersonaConfigUpdateAppliedEvent } from './WebRtcPersonaConfigUpdateAppliedEvent';
 export { WebRtcReasoningTextMessageEvent } from './WebRtcReasoningTextMessageEvent';
 export type { WebRtcTextMessageEvent } from './WebRtcTextMessageEvent';
 export type {
