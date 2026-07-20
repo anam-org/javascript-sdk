@@ -6,7 +6,7 @@ export interface MessageStreamEvent {
   role: MessageRole;
   endOfSpeech: boolean;
   interrupted: boolean;
-  // Zero-based index of this chunk within the turn.
+  // Zero-based index of this chunk within the turn. Optional here for backwards compatibility.
   contentIndex?: number;
   // Turn correlation id, matching the id used when driving talk streams.
   correlationId?: string;
