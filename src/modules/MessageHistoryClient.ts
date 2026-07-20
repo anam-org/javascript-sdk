@@ -29,12 +29,16 @@ export class MessageHistoryClient {
   private webRtcTextMessageEventToMessageStreamEvent(
     event: WebRtcTextMessageEvent,
   ): MessageStreamEvent {
+    const correlationId =
+      event.user_action_correlation_id ?? event.correlationId;
     return {
       id: `${event.role}::${event.message_id}`, // id is the same for persona and user for a single question response, so we need to differentiate them
       content: event.content,
       role: event.role as MessageRole,
       endOfSpeech: event.end_of_speech,
       interrupted: event.interrupted,
+      contentIndex: event.content_index,
+      ...(correlationId ? { correlationId } : {}),
       ...(event.cue_tag ? { cueTag: event.cue_tag } : {}),
     };
   }
