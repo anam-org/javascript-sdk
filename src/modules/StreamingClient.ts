@@ -40,6 +40,8 @@ import {
 } from '../types/streaming/WebRtcToolCallEvent';
 import { ToolCallManager } from './ToolCallManager';
 import { TransparentBackgroundRenderer } from './TransparentBackgroundRenderer';
+import { prepareOfferForTransparentBackgroundTransport } from './PackedAlphaTransport';
+import { TransparentBackgroundTransport } from '../types/TransparentBackgroundTransport';
 
 const SUCCESS_METRIC_POLLING_TIMEOUT_MS = 15000; // After this time we will stop polling for the first frame and consider the session a failure.
 const STATS_COLLECTION_INTERVAL_MS = 5000;
@@ -90,6 +92,9 @@ export class StreamingClient {
   private readonly transparentBackgroundKeyOptions:
     | TransparentBackgroundOptions
     | undefined;
+  private readonly transparentBackgroundTransport:
+    | TransparentBackgroundTransport
+    | undefined;
   private videoStream: MediaStream | null = null;
   private audioStream: MediaStream | null = null;
   private inputAudioState: InputAudioState = {
@@ -128,6 +133,8 @@ export class StreamingClient {
       options.transparentBackground?.enabled === true;
     this.transparentBackgroundKeyOptions =
       options.transparentBackground?.keyOptions;
+    this.transparentBackgroundTransport =
+      options.transparentBackground?.transport;
     // initialize input audio state
     const { inputAudio } = options;
     this.inputAudioState = inputAudio.inputAudioState;
@@ -502,6 +509,7 @@ export class StreamingClient {
         this.transparentBackgroundRenderer = new TransparentBackgroundRenderer(
           this.videoElement,
           this.transparentBackgroundKeyOptions,
+          this.transparentBackgroundTransport,
         );
       }
     }
@@ -1088,7 +1096,10 @@ export class StreamingClient {
       this.connectionReceivedAnswer = false;
       this.remoteIceCandidateBuffer = [];
 
-      const offer = await this.peerConnection.createOffer({ iceRestart: true });
+      const offer = prepareOfferForTransparentBackgroundTransport(
+        await this.peerConnection.createOffer({ iceRestart: true }),
+        this.transparentBackgroundTransport,
+      );
       // Buffer local candidates that gather from setLocalDescription until the
       // re-offer is sent. The engine queues remote candidates only while it has
       // no remote description; during a restart it still holds the OLD ICE
@@ -1549,7 +1560,10 @@ export class StreamingClient {
     try {
       this.connectionMilestones?.record('offer_creation_started');
       const offer: RTCSessionDescriptionInit =
-        await this.peerConnection.createOffer();
+        prepareOfferForTransparentBackgroundTransport(
+          await this.peerConnection.createOffer(),
+          this.transparentBackgroundTransport,
+        );
       this.connectionMilestones?.record('offer_creation_completed');
       await this.peerConnection.setLocalDescription(offer);
       this.connectionMilestones?.record('local_description_set');

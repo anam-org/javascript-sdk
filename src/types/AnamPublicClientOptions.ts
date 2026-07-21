@@ -27,16 +27,16 @@ export interface AnamPublicClientOptions {
    */
   rtcConfiguration?: RTCConfiguration;
   /**
-   * Request the avatar's generated green-screen rendition and render it as a
-   * transparent WebGL canvas over the video element supplied to
-   * `streamToVideoElement`.
+   * Request the avatar's transparent rendition and render it as a transparent
+   * WebGL canvas over the video element supplied to `streamToVideoElement`.
    *
    * The underlying MediaStream remains an ordinary opaque WebRTC video. Calls
-   * to `stream()` therefore return the green-screen source; transparent pixels
-   * exist only in the SDK-managed canvas renderer.
+   * to `stream()` therefore return an opaque packed colour/matte video (or the
+   * legacy green-screen fallback); transparent pixels exist only in the
+   * SDK-managed canvas renderer.
    * @default false
    */
   transparentBackground?: boolean;
-  /** Optional client-side key tuning for `transparentBackground`. */
+  /** Optional tuning for the legacy green-screen compatibility keyer. */
   transparentBackgroundOptions?: TransparentBackgroundOptions;
 }

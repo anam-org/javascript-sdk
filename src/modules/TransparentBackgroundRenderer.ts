@@ -3,6 +3,10 @@ import {
   sendClientMetric,
 } from '../lib/ClientMetrics';
 import { TransparentBackgroundOptions } from '../types/TransparentBackgroundOptions';
+import {
+  PACKED_ALPHA_TRANSPORT,
+  TransparentBackgroundTransport,
+} from '../types/TransparentBackgroundTransport';
 
 // Calibrated on the held-out person-matting set after the engine's JPEG q90
 // and H.264 Main/I420 path. A broad transition retains fractional-alpha hair;
@@ -10,6 +14,11 @@ import { TransparentBackgroundOptions } from '../types/TransparentBackgroundOpti
 const DEFAULT_SIMILARITY = 0.005;
 const DEFAULT_SMOOTHNESS = 0.56;
 const DEFAULT_SPILL = 1.0;
+// H.264/JPEG ringing leaves a very small non-zero alpha tail in otherwise
+// uniform background pixels. Keeping it produces a faint grey/coloured veil
+// over the page. The five-person transport holdout put the live p99.9 tail at
+// ~0.012; 0.02 clears it while changing edge error by only 0.2%.
+const BACKGROUND_ALPHA_FLOOR = 0.02;
 const SPILL_GUARD_START_ALPHA = 0.9;
 const SPILL_GUARD_END_ALPHA = 0.995;
 const TELEMETRY_FRAME_INTERVAL = 250;
@@ -55,6 +64,7 @@ void main() {
     u_similarity + max(u_smoothness, 0.0001),
     chromaDistance
   );
+  alpha *= step(${BACKGROUND_ALPHA_FLOOR.toFixed(3)}, alpha);
 
   vec3 premultiplied = clamp(
     rgb - (1.0 - alpha) * vec3(0.0, 1.0, 0.0),
@@ -79,6 +89,36 @@ void main() {
 }
 `;
 
+// packed-alpha-v1 carries already-premultiplied colour in the top half of the
+// video and a grayscale alpha plane in the bottom half. Sampling the planes
+// directly avoids another estimate, despill pass, or alpha cutoff in-browser.
+/** @internal */
+export const PACKED_ALPHA_FRAGMENT_SHADER_SOURCE = `
+precision mediump float;
+
+uniform sampler2D u_frame;
+varying vec2 v_texCoord;
+
+void main() {
+  vec2 colourCoord = vec2(
+    v_texCoord.x,
+    0.5 + v_texCoord.y * 0.5
+  );
+  vec2 alphaCoord = vec2(
+    v_texCoord.x,
+    v_texCoord.y * 0.5
+  );
+  vec3 premultiplied = texture2D(u_frame, colourCoord).rgb;
+  vec3 alphaRgb = texture2D(u_frame, alphaCoord).rgb;
+  float alpha = dot(alphaRgb, vec3(0.2126, 0.7152, 0.0722));
+
+  // Compression can make an individual premultiplied colour channel exceed
+  // alpha by a code value. Clamp only that invalid premultiplied state; do not
+  // estimate, despill, or threshold the transported matte.
+  gl_FragColor = vec4(min(premultiplied, vec3(alpha)), alpha);
+}
+`;
+
 type OptionalVideoFrameCallbacks = {
   requestVideoFrameCallback?: (
     callback: (now: DOMHighResTimeStamp) => void,
@@ -93,13 +133,27 @@ interface ResolvedKeyOptions {
 }
 
 interface GlResources {
-  program: WebGLProgram;
   positionBuffer: WebGLBuffer;
   texture: WebGLTexture;
-  positionLocation: number;
+  legacyProgram: WebGLProgram;
+  legacyPositionLocation: number;
   similarityLocation: WebGLUniformLocation;
   smoothnessLocation: WebGLUniformLocation;
   spillLocation: WebGLUniformLocation;
+  packedAlphaProgram: WebGLProgram;
+  packedAlphaPositionLocation: number;
+}
+
+export type TransparentFrameMode =
+  | 'green-key-v1'
+  | 'packed-alpha-v1'
+  | 'unsupported';
+
+export interface TransparentFrameGeometry {
+  mode: TransparentFrameMode;
+  canvasWidth: number;
+  canvasHeight: number;
+  reason?: string;
 }
 
 export interface TransparentRendererDiagnostics {
@@ -113,7 +167,9 @@ export class TransparentBackgroundRenderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly parent: HTMLElement;
   private readonly keyOptions: ResolvedKeyOptions;
+  private readonly transport: TransparentBackgroundTransport | undefined;
   private readonly gl: WebGLRenderingContext;
+  private readonly maxTextureSize: number;
   private resources: GlResources;
   private resizeObserver: ResizeObserver | null = null;
   private videoFrameCallbackHandle: number | null = null;
@@ -128,8 +184,13 @@ export class TransparentBackgroundRenderer {
   private readonly originalVideoOpacity: string;
   private readonly originalParentPosition: string;
   private changedParentPosition = false;
+  private lastGeometrySignature: string | null = null;
 
-  constructor(video: HTMLVideoElement, options?: TransparentBackgroundOptions) {
+  constructor(
+    video: HTMLVideoElement,
+    options?: TransparentBackgroundOptions,
+    transport?: TransparentBackgroundTransport,
+  ) {
     if (!video.parentElement) {
       this.report('initialization_failed', 1, { reason: 'missing_parent' });
       throw new Error(
@@ -140,6 +201,7 @@ export class TransparentBackgroundRenderer {
     this.video = video;
     this.parent = video.parentElement;
     this.keyOptions = resolveKeyOptions(options);
+    this.transport = transport;
     this.originalVideoOpacity = video.style.opacity;
     this.originalParentPosition = this.parent.style.position;
 
@@ -168,6 +230,7 @@ export class TransparentBackgroundRenderer {
       );
     }
     this.gl = gl;
+    this.maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
     this.resources = this.createGlResources();
 
     this.onContextLost = this.onContextLost.bind(this);
@@ -182,6 +245,8 @@ export class TransparentBackgroundRenderer {
     this.installOverlay();
     this.report('initialized', 1, {
       renderer: 'webgl1',
+      requestedTransport: this.transport ?? 'green-key-v1',
+      maxTextureSize: this.maxTextureSize,
       scheduling: getFrameCallbackApi(this.video).requestVideoFrameCallback
         ? 'rvfc'
         : 'raf',
@@ -234,6 +299,7 @@ export class TransparentBackgroundRenderer {
       'webglcontextrestored',
       this.onContextRestored,
     );
+    this.deleteGlResources(this.resources);
     this.canvas.remove();
     this.video.style.opacity = this.originalVideoOpacity;
     if (
@@ -291,8 +357,9 @@ export class TransparentBackgroundRenderer {
     const computedVideoStyle = window.getComputedStyle(this.video);
 
     // Keep the canvas's replaced-element box exactly on the video box. Its
-    // intrinsic bitmap remains videoWidth x videoHeight, so the browser can
-    // apply the same object-fit/object-position algorithm to both elements.
+    // intrinsic bitmap is the reconstructed output plane (half the source
+    // height for packed alpha), so browser object-fit/object-position applies
+    // to the visible avatar rather than the vertically-stacked transport.
     // Replaced content is clipped to its own content box, which prevents
     // `cover` pixels escaping when the parent has visible overflow. Delegating
     // positioning to CSS also preserves the full <position> grammar (lengths,
@@ -347,30 +414,39 @@ export class TransparentBackgroundRenderer {
     const startedAt = performance.now();
     const gl = this.gl;
     try {
+      const geometry = resolveTransparentFrameGeometry(
+        this.video.videoWidth,
+        this.video.videoHeight,
+        this.transport,
+        this.maxTextureSize,
+      );
+      this.applyFrameGeometry(geometry);
+      if (geometry.mode === 'unsupported') return;
+
       if (
-        this.canvas.width !== this.video.videoWidth ||
-        this.canvas.height !== this.video.videoHeight
+        this.canvas.width !== geometry.canvasWidth ||
+        this.canvas.height !== geometry.canvasHeight
       ) {
         // Deliberately use source pixels, not devicePixelRatio. A DPR-scaled
         // backing canvas would add work without adding information.
-        this.canvas.width = this.video.videoWidth;
-        this.canvas.height = this.video.videoHeight;
+        this.canvas.width = geometry.canvasWidth;
+        this.canvas.height = geometry.canvasHeight;
       }
 
       gl.viewport(0, 0, this.canvas.width, this.canvas.height);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.useProgram(this.resources.program);
+      const packedAlpha = geometry.mode === PACKED_ALPHA_TRANSPORT;
+      const program = packedAlpha
+        ? this.resources.packedAlphaProgram
+        : this.resources.legacyProgram;
+      const positionLocation = packedAlpha
+        ? this.resources.packedAlphaPositionLocation
+        : this.resources.legacyPositionLocation;
+      gl.useProgram(program);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.resources.positionBuffer);
-      gl.enableVertexAttribArray(this.resources.positionLocation);
-      gl.vertexAttribPointer(
-        this.resources.positionLocation,
-        2,
-        gl.FLOAT,
-        false,
-        0,
-        0,
-      );
+      gl.enableVertexAttribArray(positionLocation);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this.resources.texture);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
@@ -382,15 +458,17 @@ export class TransparentBackgroundRenderer {
         gl.UNSIGNED_BYTE,
         this.video,
       );
-      gl.uniform1f(
-        this.resources.similarityLocation,
-        this.keyOptions.similarity,
-      );
-      gl.uniform1f(
-        this.resources.smoothnessLocation,
-        this.keyOptions.smoothness,
-      );
-      gl.uniform1f(this.resources.spillLocation, this.keyOptions.spill);
+      if (!packedAlpha) {
+        gl.uniform1f(
+          this.resources.similarityLocation,
+          this.keyOptions.similarity,
+        );
+        gl.uniform1f(
+          this.resources.smoothnessLocation,
+          this.keyOptions.smoothness,
+        );
+        gl.uniform1f(this.resources.spillLocation, this.keyOptions.spill);
+      }
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     } catch (error) {
       if (!this.renderErrorReported) {
@@ -424,70 +502,142 @@ export class TransparentBackgroundRenderer {
     }
   }
 
+  private applyFrameGeometry(geometry: TransparentFrameGeometry): void {
+    const signature = `${geometry.mode}:${this.video.videoWidth}x${this.video.videoHeight}`;
+    if (signature === this.lastGeometrySignature) return;
+    this.lastGeometrySignature = signature;
+
+    if (geometry.mode === 'unsupported') {
+      // Never hide the only usable pixels when a server or intermediary
+      // delivers an unexpected geometry. If a later frame returns to a valid
+      // geometry, the renderer automatically takes over again.
+      this.canvas.style.opacity = '0';
+      this.video.style.opacity = this.originalVideoOpacity;
+      console.warn(
+        `Transparent background received unsupported video geometry ${this.video.videoWidth}x${this.video.videoHeight}; showing the source video unchanged.`,
+      );
+      this.report('unsupported_geometry', 1, {
+        width: this.video.videoWidth,
+        height: this.video.videoHeight,
+        reason: geometry.reason ?? 'unknown',
+      });
+      return;
+    }
+
+    this.canvas.style.opacity = '';
+    this.video.style.opacity = '0';
+    if (
+      this.transport === PACKED_ALPHA_TRANSPORT &&
+      geometry.mode === 'green-key-v1'
+    ) {
+      console.warn(
+        'Packed transparent-background transport returned a legacy green-screen frame; using the compatibility keyer.',
+      );
+      this.report('transport_fallback', 1, {
+        deliveredTransport: 'green-key-v1',
+        width: this.video.videoWidth,
+        height: this.video.videoHeight,
+      });
+    } else {
+      this.report('transport_selected', 1, {
+        deliveredTransport: geometry.mode,
+        width: this.video.videoWidth,
+        height: this.video.videoHeight,
+      });
+    }
+  }
+
   private createGlResources(): GlResources {
     const gl = this.gl;
-    const vertexShader = compileShader(
-      gl,
-      gl.VERTEX_SHADER,
-      VERTEX_SHADER_SOURCE,
-    );
-    const fragmentShader = compileShader(
-      gl,
-      gl.FRAGMENT_SHADER,
-      FRAGMENT_SHADER_SOURCE,
-    );
-    const program = gl.createProgram();
-    if (!program) throw new Error('Unable to create WebGL program.');
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-    gl.deleteShader(vertexShader);
-    gl.deleteShader(fragmentShader);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      const message = gl.getProgramInfoLog(program) ?? 'unknown link error';
-      gl.deleteProgram(program);
-      throw new Error(`Unable to link transparent renderer: ${message}`);
-    }
+    let legacyProgram: WebGLProgram | null = null;
+    let packedAlphaProgram: WebGLProgram | null = null;
+    let positionBuffer: WebGLBuffer | null = null;
+    let texture: WebGLTexture | null = null;
 
-    const positionBuffer = gl.createBuffer();
-    const texture = gl.createTexture();
-    if (!positionBuffer || !texture) {
-      throw new Error('Unable to allocate transparent renderer resources.');
-    }
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-      gl.STATIC_DRAW,
-    );
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    try {
+      legacyProgram = createProgram(
+        gl,
+        VERTEX_SHADER_SOURCE,
+        FRAGMENT_SHADER_SOURCE,
+      );
+      packedAlphaProgram = createProgram(
+        gl,
+        VERTEX_SHADER_SOURCE,
+        PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
+      );
 
-    const positionLocation = gl.getAttribLocation(program, 'a_position');
-    const similarityLocation = gl.getUniformLocation(program, 'u_similarity');
-    const smoothnessLocation = gl.getUniformLocation(program, 'u_smoothness');
-    const spillLocation = gl.getUniformLocation(program, 'u_spill');
-    if (
-      positionLocation < 0 ||
-      !similarityLocation ||
-      !smoothnessLocation ||
-      !spillLocation
-    ) {
-      throw new Error('Unable to resolve transparent renderer shader inputs.');
-    }
+      positionBuffer = gl.createBuffer();
+      texture = gl.createTexture();
+      if (!positionBuffer || !texture) {
+        throw new Error('Unable to allocate transparent renderer resources.');
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+        gl.STATIC_DRAW,
+      );
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-    return {
-      program,
-      positionBuffer,
-      texture,
-      positionLocation,
-      similarityLocation,
-      smoothnessLocation,
-      spillLocation,
-    };
+      const legacyPositionLocation = gl.getAttribLocation(
+        legacyProgram,
+        'a_position',
+      );
+      const packedAlphaPositionLocation = gl.getAttribLocation(
+        packedAlphaProgram,
+        'a_position',
+      );
+      const similarityLocation = gl.getUniformLocation(
+        legacyProgram,
+        'u_similarity',
+      );
+      const smoothnessLocation = gl.getUniformLocation(
+        legacyProgram,
+        'u_smoothness',
+      );
+      const spillLocation = gl.getUniformLocation(legacyProgram, 'u_spill');
+      if (
+        legacyPositionLocation < 0 ||
+        packedAlphaPositionLocation < 0 ||
+        !similarityLocation ||
+        !smoothnessLocation ||
+        !spillLocation
+      ) {
+        throw new Error(
+          'Unable to resolve transparent renderer shader inputs.',
+        );
+      }
+
+      return {
+        positionBuffer,
+        texture,
+        legacyProgram,
+        legacyPositionLocation,
+        similarityLocation,
+        smoothnessLocation,
+        spillLocation,
+        packedAlphaProgram,
+        packedAlphaPositionLocation,
+      };
+    } catch (error) {
+      if (positionBuffer) gl.deleteBuffer(positionBuffer);
+      if (texture) gl.deleteTexture(texture);
+      if (legacyProgram) gl.deleteProgram(legacyProgram);
+      if (packedAlphaProgram) gl.deleteProgram(packedAlphaProgram);
+      throw error;
+    }
+  }
+
+  private deleteGlResources(resources: GlResources): void {
+    const gl = this.gl;
+    gl.deleteBuffer(resources.positionBuffer);
+    gl.deleteTexture(resources.texture);
+    gl.deleteProgram(resources.legacyProgram);
+    gl.deleteProgram(resources.packedAlphaProgram);
   }
 
   private onContextLost(event: Event): void {
@@ -524,6 +674,32 @@ export class TransparentBackgroundRenderer {
   }
 }
 
+function createProgram(
+  gl: WebGLRenderingContext,
+  vertexSource: string,
+  fragmentSource: string,
+): WebGLProgram {
+  const vertexShader = compileShader(gl, gl.VERTEX_SHADER, vertexSource);
+  let fragmentShader: WebGLShader | null = null;
+  try {
+    fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+    const program = gl.createProgram();
+    if (!program) throw new Error('Unable to create WebGL program.');
+    gl.attachShader(program, vertexShader);
+    gl.attachShader(program, fragmentShader);
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      const message = gl.getProgramInfoLog(program) ?? 'unknown link error';
+      gl.deleteProgram(program);
+      throw new Error(`Unable to link transparent renderer: ${message}`);
+    }
+    return program;
+  } finally {
+    gl.deleteShader(vertexShader);
+    if (fragmentShader) gl.deleteShader(fragmentShader);
+  }
+}
+
 function compileShader(
   gl: WebGLRenderingContext,
   type: number,
@@ -539,6 +715,73 @@ function compileShader(
     throw new Error(`Unable to compile transparent renderer: ${message}`);
   }
   return shader;
+}
+
+/**
+ * Resolve the decoded frame layout before uploading it to WebGL. Packed
+ * frames are 3:4 because two 3:2 planes are stacked vertically; legacy Cara 4
+ * frames are 3:2. Ratio-based matching also permits a decoder to deliver a
+ * proportionally downscaled frame without silently sampling the wrong plane.
+ *
+ * @internal
+ */
+export function resolveTransparentFrameGeometry(
+  width: number,
+  height: number,
+  transport: TransparentBackgroundTransport | undefined,
+  maxTextureSize = 2048,
+): TransparentFrameGeometry {
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return {
+      mode: 'unsupported',
+      canvasWidth: 0,
+      canvasHeight: 0,
+      reason: 'invalid_dimensions',
+    };
+  }
+  if (width > maxTextureSize || height > maxTextureSize) {
+    return {
+      mode: 'unsupported',
+      canvasWidth: width,
+      canvasHeight: height,
+      reason: 'exceeds_webgl_texture_limit',
+    };
+  }
+
+  if (transport !== PACKED_ALPHA_TRANSPORT) {
+    return {
+      mode: 'green-key-v1',
+      canvasWidth: width,
+      canvasHeight: height,
+    };
+  }
+
+  if (height % 2 === 0 && height * 3 === width * 4) {
+    return {
+      mode: PACKED_ALPHA_TRANSPORT,
+      canvasWidth: width,
+      canvasHeight: height / 2,
+    };
+  }
+  if (width * 2 === height * 3) {
+    return {
+      mode: 'green-key-v1',
+      canvasWidth: width,
+      canvasHeight: height,
+    };
+  }
+
+  return {
+    mode: 'unsupported',
+    canvasWidth: width,
+    canvasHeight: height,
+    reason: 'unexpected_packed_alpha_aspect_ratio',
+  };
 }
 
 /** @internal */
@@ -563,7 +806,8 @@ export function reconstructPremultipliedForeground(
   alphaValue: number,
   spillValue = DEFAULT_SPILL,
 ): [number, number, number] {
-  const alpha = clampUnit(alphaValue);
+  const unclippedAlpha = clampUnit(alphaValue);
+  const alpha = unclippedAlpha < BACKGROUND_ALPHA_FLOOR ? 0 : unclippedAlpha;
   const spill = clampUnit(spillValue);
   const premultiplied: [number, number, number] = [
     Math.min(alpha, Math.max(0, rgb[0])),

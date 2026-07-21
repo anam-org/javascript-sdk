@@ -66,9 +66,11 @@ This will start a new session using the pre-configured persona id and start stre
 
 ### Transparent avatar background
 
-Set `transparentBackground` when creating the client. The SDK requests the
-avatar's green-screen rendition and renders it through a source-resolution
-WebGL canvas over your video element.
+Set `transparentBackground` when creating the client. The SDK requests a
+packed colour/matte rendition and reconstructs it through a source-resolution
+WebGL canvas over your video element. Browsers that explicitly report no
+support for the packed H.264 stream, and servers that return the original
+1152x768 frame, automatically use the legacy green-screen keyer.
 
 ```typescript
 const anamClient = createClient('your-session-token', {
@@ -79,12 +81,14 @@ await anamClient.streamToVideoElement('video-element-id');
 ```
 
 The supplied video must be attached to the DOM and should use `autoplay` and
-`playsinline` as usual. The underlying WebRTC `MediaStream` is still an opaque
-green-screen video; transparency exists in the SDK-managed canvas only. As a
-result, `stream()` returns the raw green source, and video-only browser features
-such as native controls and picture-in-picture do not automatically capture the
-transparent canvas. Use `getTransparentBackgroundCanvas()` if you need the
-managed canvas element for layout or capture behavior.
+`playsinline` as usual. The underlying WebRTC `MediaStream` is still ordinary
+opaque video: it contains vertically packed colour and alpha planes, or a
+green-screen frame on the compatibility path. Transparency exists in the
+SDK-managed canvas only. As a result, `stream()` returns that raw transport,
+and video-only browser features such as native controls and picture-in-picture
+do not automatically capture the transparent canvas. Use
+`getTransparentBackgroundCanvas()` if you need the managed canvas element for
+layout or capture behavior.
 
 To stop a session use the `stopStreaming` method.
 

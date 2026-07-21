@@ -1,6 +1,7 @@
 const assert = require('assert');
 const {
   FRAGMENT_SHADER_SOURCE,
+  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
   reconstructPremultipliedForeground,
   resolveKeyOptions,
 } = require('../dist/main/modules/TransparentBackgroundRenderer');
@@ -30,6 +31,12 @@ closeTo(
   reconstructPremultipliedForeground([0, 1, 0], 0),
   [0, 0, 0],
   'fully transparent exact green must reconstruct to transparent black',
+);
+
+closeTo(
+  reconstructPremultipliedForeground([0.01, 0.99, 0.01], 0.019),
+  [0, 0, 0],
+  'sub-threshold codec noise must become fully transparent',
 );
 
 const blonde = [0.8, 0.7, 0.55];
@@ -64,10 +71,7 @@ const nearOpaqueGreenCarrier = [
   guardEndAlpha * nearOpaqueGreen[2],
 ];
 closeTo(
-  reconstructPremultipliedForeground(
-    nearOpaqueGreenCarrier,
-    guardEndAlpha,
-  ),
+  reconstructPremultipliedForeground(nearOpaqueGreenCarrier, guardEndAlpha),
   nearOpaqueGreen.map((channel) => channel * guardEndAlpha),
   'green-spill clamp must be fully faded out by alpha 0.995',
 );
@@ -115,10 +119,41 @@ assert.match(
   /gl_FragColor = vec4\(premultiplied, alpha\)/,
   'shader must submit already-premultiplied RGB',
 );
+assert.match(
+  FRAGMENT_SHADER_SOURCE,
+  /alpha \*= step\(0\.020, alpha\)/,
+  'shader must clear the measured codec-noise alpha tail',
+);
 assert.doesNotMatch(
   FRAGMENT_SHADER_SOURCE,
   /gl_FragColor = vec4\(rgb \* alpha, alpha\)/,
   'shader must not multiply the green carrier by alpha',
+);
+
+assert.match(
+  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
+  /0\.5 \+ v_texCoord\.y \* 0\.5/,
+  'packed renderer must sample colour from the top half',
+);
+assert.match(
+  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
+  /v_texCoord\.y \* 0\.5/,
+  'packed renderer must sample alpha from the bottom half',
+);
+assert.match(
+  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
+  /gl_FragColor = vec4\(min\(premultiplied, vec3\(alpha\)\), alpha\)/,
+  'packed renderer must submit the transported premultiplied colour and alpha',
+);
+assert.doesNotMatch(
+  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
+  /u_similarity|u_smoothness|u_spill|chroma\(/,
+  'packed renderer must not run the legacy key or despill operations',
+);
+assert.doesNotMatch(
+  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
+  /alpha\s*\*=\s*step|smoothstep\(/,
+  'packed renderer must not threshold or reshape transported alpha',
 );
 
 console.log('transparent background reconstruction harness passed');

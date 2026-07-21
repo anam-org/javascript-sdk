@@ -3,6 +3,7 @@ import { EngineApiRestClientOptions } from '../engineApi/EngineApiRestClientOpti
 import { InputAudioOptions } from './InputAudioOptions';
 import { ApiGatewayConfig } from '../ApiGatewayConfig';
 import { TransparentBackgroundOptions } from '../TransparentBackgroundOptions';
+import { TransparentBackgroundTransport } from '../TransparentBackgroundTransport';
 
 export interface StreamingClientOptions {
   engine: EngineApiRestClientOptions;
@@ -15,6 +16,7 @@ export interface StreamingClientOptions {
   transparentBackground?: {
     enabled: boolean;
     keyOptions?: TransparentBackgroundOptions;
+    transport?: TransparentBackgroundTransport;
   };
   metrics?: {
     showPeerConnectionStatsReport?: boolean;

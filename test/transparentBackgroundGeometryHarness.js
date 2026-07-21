@@ -1,12 +1,16 @@
 const assert = require('assert');
 const { setClientMetricsDisabled } = require('../dist/main/lib/ClientMetrics');
 const {
+  resolveTransparentFrameGeometry,
   TransparentBackgroundRenderer,
 } = require('../dist/main/modules/TransparentBackgroundRenderer');
+const {
+  PACKED_ALPHA_TRANSPORT,
+} = require('../dist/main/types/TransparentBackgroundTransport');
 
 setClientMetricsDisabled(true);
 
-const createWebGlStub = () => ({
+const createWebGlStub = (deletedResources) => ({
   VERTEX_SHADER: 1,
   FRAGMENT_SHADER: 2,
   COMPILE_STATUS: 3,
@@ -20,6 +24,7 @@ const createWebGlStub = () => ({
   TEXTURE_WRAP_S: 11,
   TEXTURE_WRAP_T: 12,
   CLAMP_TO_EDGE: 13,
+  MAX_TEXTURE_SIZE: 14,
   createShader: () => ({}),
   shaderSource: () => {},
   compileShader: () => {},
@@ -31,18 +36,22 @@ const createWebGlStub = () => ({
   linkProgram: () => {},
   getProgramParameter: () => true,
   getProgramInfoLog: () => '',
-  deleteProgram: () => {},
+  deleteProgram: (program) => deletedResources.programs.push(program),
   createBuffer: () => ({}),
   createTexture: () => ({}),
+  deleteBuffer: (buffer) => deletedResources.buffers.push(buffer),
+  deleteTexture: (texture) => deletedResources.textures.push(texture),
   bindBuffer: () => {},
   bufferData: () => {},
   bindTexture: () => {},
   texParameteri: () => {},
   getAttribLocation: () => 0,
   getUniformLocation: () => ({}),
+  getParameter: () => 2048,
 });
 
 const createRendererHarness = ({ objectFit, objectPosition }) => {
+  const deletedResources = { programs: [], buffers: [], textures: [] };
   const parent = {
     style: { position: '' },
   };
@@ -51,7 +60,7 @@ const createRendererHarness = ({ objectFit, objectPosition }) => {
     dataset: {},
     id: '',
     setAttribute: () => {},
-    getContext: () => createWebGlStub(),
+    getContext: () => createWebGlStub(deletedResources),
     addEventListener: () => {},
     removeEventListener: () => {},
     remove: () => {},
@@ -100,7 +109,7 @@ const createRendererHarness = ({ objectFit, objectPosition }) => {
   };
 
   const renderer = new TransparentBackgroundRenderer(video);
-  return { canvas, renderer };
+  return { canvas, deletedResources, renderer };
 };
 
 const cover = createRendererHarness({
@@ -127,6 +136,55 @@ assert.deepEqual(
   'cover must stay inside the video element box even when the parent overflow is visible',
 );
 cover.renderer.destroy();
+cover.renderer.destroy();
+assert.deepEqual(
+  {
+    programs: cover.deletedResources.programs.length,
+    buffers: cover.deletedResources.buffers.length,
+    textures: cover.deletedResources.textures.length,
+  },
+  { programs: 2, buffers: 1, textures: 1 },
+  'destroy must release each shader program, buffer, and texture exactly once',
+);
+
+assert.deepEqual(
+  resolveTransparentFrameGeometry(1152, 1536, PACKED_ALPHA_TRANSPORT, 2048),
+  {
+    mode: 'packed-alpha-v1',
+    canvasWidth: 1152,
+    canvasHeight: 768,
+  },
+  'packed Cara 4 frames must expose a 1152x768 canvas',
+);
+assert.deepEqual(
+  resolveTransparentFrameGeometry(576, 768, PACKED_ALPHA_TRANSPORT, 2048),
+  {
+    mode: 'packed-alpha-v1',
+    canvasWidth: 576,
+    canvasHeight: 384,
+  },
+  'proportionally downscaled packed frames must preserve the two-plane layout',
+);
+assert.deepEqual(
+  resolveTransparentFrameGeometry(1152, 768, PACKED_ALPHA_TRANSPORT, 2048),
+  {
+    mode: 'green-key-v1',
+    canvasWidth: 1152,
+    canvasHeight: 768,
+  },
+  'a standard Cara 4 frame must select the legacy keyer compatibility path',
+);
+assert.equal(
+  resolveTransparentFrameGeometry(1280, 720, PACKED_ALPHA_TRANSPORT, 2048).mode,
+  'unsupported',
+  'unexpected packed transport geometry must not be sampled as two planes',
+);
+assert.equal(
+  resolveTransparentFrameGeometry(1152, 1536, PACKED_ALPHA_TRANSPORT, 1024)
+    .reason,
+  'exceeds_webgl_texture_limit',
+  'the runtime WebGL texture limit must be enforced',
+);
 
 for (const objectPosition of [
   '10px 20px',

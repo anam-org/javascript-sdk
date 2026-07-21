@@ -1,4 +1,5 @@
 import { VoiceDetectionOptions } from '../VoiceDetectionOptions';
+import { TransparentBackgroundTransport } from '../TransparentBackgroundTransport';
 
 export interface StartSessionOptions {
   voiceDetection?: VoiceDetectionOptions;
@@ -8,4 +9,9 @@ export interface StartSessionOptions {
    * canvas when streaming to a video element.
    */
   transparentBackground?: boolean;
+  /**
+   * Selects the internal wire representation used for transparent video.
+   * @internal
+   */
+  transparentBackgroundTransport?: TransparentBackgroundTransport;
 }
