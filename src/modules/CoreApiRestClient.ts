@@ -266,11 +266,7 @@ export class CoreApiRestClient {
     let body: { clientLabel: string; personaConfig?: PersonaConfig } = {
       clientLabel: 'js-sdk-api-key',
     };
-    // Include the config when it carries a brain (llmId/brainType) — the
-    // legacy custom-config signal — or Director Notes, which are also valid
-    // on brainless configs (avatar-only / audio-passthrough sessions).
-    const hasDirectorNotes = personaConfig.directorNotes !== undefined;
-    if (isCustomPersonaConfig(personaConfig) || hasDirectorNotes) {
+    if (isCustomPersonaConfig(personaConfig)) {
       body = { ...body, personaConfig };
     }
     try {
@@ -286,9 +282,39 @@ export class CoreApiRestClient {
         body: JSON.stringify(body),
       });
       const data = await response.json();
+      if (!response.ok) {
+        const isAuthenticationError =
+          response.status === 401 || response.status === 403;
+        throw new ClientError(
+          'Failed to get session token',
+          isAuthenticationError
+            ? ErrorCode.CLIENT_ERROR_CODE_AUTHENTICATION_ERROR
+            : response.status >= 400 && response.status < 500
+              ? ErrorCode.CLIENT_ERROR_CODE_VALIDATION_ERROR
+              : ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
+          response.status,
+          { cause: data.message ?? data.error },
+        );
+      }
+      if (typeof data.sessionToken !== 'string' || !data.sessionToken) {
+        throw new ClientError(
+          'Failed to get session token',
+          ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
+          response.status,
+          { cause: 'Response did not include a session token' },
+        );
+      }
       return data.sessionToken;
-    } catch (e) {
-      throw new Error('Failed to get session token');
+    } catch (error) {
+      if (error instanceof ClientError) {
+        throw error;
+      }
+      throw new ClientError(
+        'Failed to get session token',
+        ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
+        500,
+        { cause: error instanceof Error ? error.message : String(error) },
+      );
     }
   }
 

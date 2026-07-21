@@ -12,6 +12,7 @@ export enum ClientMetricMeasurement {
   CLIENT_METRIC_MEASUREMENT_CONNECTION_MILESTONES = 'client_connection_milestones',
   CLIENT_METRIC_MEASUREMENT_SESSION_ATTEMPT = 'client_session_attempt',
   CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS = 'client_session_success',
+  CLIENT_METRIC_MEASUREMENT_ICE_RESTART = 'client_ice_restart',
 }
 
 const CLIENT_METRICS_MAX_BATCH_SIZE = 50;
@@ -58,6 +59,7 @@ export const setMetricsContext = (context: Partial<AnamMetricsContext>) => {
 export interface ClientMetricPayload {
   name: string;
   value: string | number;
+  clientTimestamp?: string;
   tags?: Record<string, string | number>;
 }
 
@@ -79,7 +81,7 @@ export const sendClientMetrics = async (metrics: ClientMetricPayload[]) => {
     // Determine URL and headers based on API Gateway configuration
     const targetPath = `${anamCurrentApiVersion}/metrics/client`;
     let url: string;
-    let headers: Record<string, string> = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
@@ -94,6 +96,7 @@ export const sendClientMetrics = async (metrics: ClientMetricPayload[]) => {
 
     const normalizedMetrics = metrics.map((metric) => ({
       ...metric,
+      clientTimestamp: metric.clientTimestamp ?? new Date().toISOString(),
       tags: buildMetricTags(metric.tags),
     }));
 

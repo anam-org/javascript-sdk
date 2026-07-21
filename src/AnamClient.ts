@@ -178,6 +178,15 @@ export default class AnamClient {
       }
     }
 
+    const directorNotesExpressivity =
+      personaConfig?.directorNotes?.expressivity;
+    if (
+      directorNotesExpressivity !== undefined &&
+      !isValidDirectorNotesExpressivity(directorNotesExpressivity)
+    ) {
+      return 'Director Notes expressivity must be a finite number between 0 and 1';
+    }
+
     // Validate voice detection configuration
     if (options?.voiceDetection) {
       if (options.disableInputAudio) {
@@ -633,7 +642,8 @@ export default class AnamClient {
    * avatars or engines that don't support dynamic updates.
    *
    * @param directorNotes - Partial update; send only the fields that change.
-   * @throws Error if not currently streaming, or if the update is empty
+   * @throws Error if not currently streaming, if the data channel is not open,
+   * or if the update is empty or invalid
    */
   public updateDirectorNotes(directorNotes: RuntimeDirectorNotes): void {
     if (!this._isStreaming) {
@@ -651,12 +661,26 @@ export default class AnamClient {
       );
     }
 
+    if (
+      directorNotes.expressivity !== undefined &&
+      directorNotes.expressivity !== null &&
+      !isValidDirectorNotesExpressivity(directorNotes.expressivity)
+    ) {
+      throw new Error(
+        'Failed to update director notes: expressivity must be a finite number between 0 and 1',
+      );
+    }
+
     const body = JSON.stringify({
       message_type: 'persona_config',
       data: { directorNotes },
     });
 
-    this.sendDataMessage(body);
+    if (!this.streamingClient?.sendDataMessage(body)) {
+      throw new Error(
+        'Failed to update director notes: data channel is not open',
+      );
+    }
   }
 
   public async stopStreaming(): Promise<void> {
@@ -828,3 +852,9 @@ const getErrorMilestoneTags = (
   }
   return {};
 };
+
+const isValidDirectorNotesExpressivity = (value: unknown): value is number =>
+  typeof value === 'number' &&
+  Number.isFinite(value) &&
+  value >= 0 &&
+  value <= 1;

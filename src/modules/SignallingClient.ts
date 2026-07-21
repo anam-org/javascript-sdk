@@ -14,6 +14,12 @@ import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamP
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 5;
 const DEFAULT_WS_RECONNECTION_ATTEMPTS = 5;
+const WEBSOCKET_STABLE_RECONNECTION_RESET_MS = 5000;
+// Long enough to cover StreamingClient's full restart envelope:
+// 3 attempts * (5s websocket-open wait + 3s restart watchdog) = 24s.
+// With 100ms linear backoff this keeps signalling non-terminal for ~30s.
+const ICE_RESTART_WS_RECONNECTION_ATTEMPTS = 24;
+const API_GATEWAY_BACKEND_CLOSE_REASON_PREFIX = 'Backend WebSocket';
 
 export class SignallingClient {
   private publicEventEmitter: PublicEventEmitter;
@@ -26,7 +32,11 @@ export class SignallingClient {
   private sendingBuffer: SignalMessage[] = [];
   private wsConnectionAttempts = 0;
   private socket: WebSocket | null = null;
+  private permanentlyClosed = false;
+  private iceRestartReconnectInProgress = false;
   private heartBeatIntervalRef: ReturnType<typeof setInterval> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private stableConnectionTimer: ReturnType<typeof setTimeout> | null = null;
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private connectionMilestones: ClientConnectionMilestoneRecorder | undefined;
 
@@ -109,14 +119,76 @@ export class SignallingClient {
   }
 
   public connect(): WebSocket {
+    this.clearReconnectTimer();
+    this.clearStableConnectionTimer();
     this.connectionMilestones?.record('websocket_connecting', {
       attemptNumber: this.wsConnectionAttempts + 1,
     });
-    this.socket = new WebSocket(this.url.href);
-    this.socket.onopen = this.onOpen.bind(this);
-    this.socket.onclose = this.onClose.bind(this);
-    this.socket.onerror = this.onError.bind(this);
-    return this.socket;
+    const socket = new WebSocket(this.url.href);
+    this.socket = socket;
+    socket.onopen = () => {
+      void this.onOpen(socket);
+    };
+    socket.onclose = (event) => {
+      void this.onClose(socket, event);
+    };
+    socket.onerror = (event) => {
+      this.onError(socket, event);
+    };
+    return socket;
+  }
+
+  /**
+   * Force a fresh signalling socket for an ICE restart. A network switch can
+   * leave the existing socket half-open (readyState stays OPEN with no 'close'
+   * event), so a restart offer sent on it is silently dropped. Detach the stale
+   * socket's handlers so its eventual close does not drive the reconnect backoff,
+   * drop it, and open a new connection. While the new network path is still dead,
+   * use an ICE-restart-specific retry budget so signalling does not terminally
+   * close before StreamingClient's websocket-open wait can time out and retry.
+   */
+  public reconnectForIceRestart(): void {
+    if (this.isPermanentlyClosed()) {
+      return;
+    }
+    this.clearReconnectTimer();
+    if (this.socket) {
+      this.socket.onopen = null;
+      this.socket.onclose = null;
+      this.socket.onerror = null;
+      this.socket.onmessage = null;
+      try {
+        this.socket.close();
+      } catch (err) {
+        // A half-open socket may throw on close; the reconnect proceeds regardless.
+        console.warn(
+          'SignallingClient - reconnectForIceRestart: error closing stale socket',
+          err,
+        );
+      }
+      this.socket = null;
+    }
+    this.clearHeartbeatInterval();
+    this.wsConnectionAttempts = 0;
+    this.iceRestartReconnectInProgress = true;
+    this.connect();
+  }
+
+  /**
+   * Ends the ICE-restart reconnect episode: subsequent closes use the default
+   * retry budget again. Called by StreamingClient when the restart succeeds,
+   * is cancelled, or exhausts its attempts.
+   */
+  public endIceRestartReconnect(): void {
+    this.iceRestartReconnectInProgress = false;
+  }
+
+  public isConnected(): boolean {
+    return this.socket?.readyState === WebSocket.OPEN;
+  }
+
+  public isPermanentlyClosed(): boolean {
+    return this.permanentlyClosed || this.stopSignal;
   }
 
   public async sendOffer(localDescription: RTCSessionDescription) {
@@ -184,27 +256,30 @@ export class SignallingClient {
   }
 
   private closeSocket() {
+    this.clearReconnectTimer();
+    this.clearStableConnectionTimer();
+    this.iceRestartReconnectInProgress = false;
     if (this.socket) {
       this.socket.close();
       this.socket = null;
     }
-    if (this.heartBeatIntervalRef) {
-      clearInterval(this.heartBeatIntervalRef);
-      this.heartBeatIntervalRef = null;
-    }
+    this.clearHeartbeatInterval();
   }
 
-  private async onOpen(): Promise<void> {
-    if (!this.socket) {
-      throw new Error('SignallingClient - onOpen: socket is null');
+  private async onOpen(socket: WebSocket): Promise<void> {
+    if (this.socket !== socket) {
+      return;
     }
     try {
       this.connectionMilestones?.record('websocket_open', {
         attemptNumber: this.wsConnectionAttempts + 1,
       });
-      this.wsConnectionAttempts = 0;
+      // Keep iceRestartReconnectInProgress (the extended retry budget) until
+      // StreamingClient ends the episode: a socket that opens briefly and drops
+      // again mid-restart must not fall back to the short default budget.
+      this.scheduleStableConnectionReset(socket);
       this.flushSendingBuffer();
-      this.socket.onmessage = this.onMessage.bind(this);
+      socket.onmessage = this.onMessage.bind(this);
       this.startSendingHeartBeats();
       this.internalEventEmitter.emit(InternalEvent.WEB_SOCKET_OPEN);
     } catch (e) {
@@ -213,47 +288,121 @@ export class SignallingClient {
         AnamEvent.CONNECTION_CLOSED,
         ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
       );
+      this.permanentlyClosed = true;
     }
   }
 
-  private async onClose(event?: CloseEvent) {
+  private clearReconnectTimer() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  private clearStableConnectionTimer() {
+    if (this.stableConnectionTimer) {
+      clearTimeout(this.stableConnectionTimer);
+      this.stableConnectionTimer = null;
+    }
+  }
+
+  private clearHeartbeatInterval() {
+    if (this.heartBeatIntervalRef) {
+      clearInterval(this.heartBeatIntervalRef);
+      this.heartBeatIntervalRef = null;
+    }
+  }
+
+  private scheduleStableConnectionReset(socket: WebSocket) {
+    this.clearStableConnectionTimer();
+    this.stableConnectionTimer = setTimeout(() => {
+      this.stableConnectionTimer = null;
+      if (this.socket === socket && socket.readyState === WebSocket.OPEN) {
+        this.wsConnectionAttempts = 0;
+      }
+    }, WEBSOCKET_STABLE_RECONNECTION_RESET_MS);
+  }
+
+  private async onClose(socket: WebSocket, event?: CloseEvent) {
+    if (this.socket !== socket) {
+      return;
+    }
+    this.clearStableConnectionTimer();
+    this.clearHeartbeatInterval();
     this.connectionMilestones?.record('websocket_closed', {
       attemptNumber: this.wsConnectionAttempts + 1,
       closeCode: event?.code,
+      closeReason: event?.reason,
       wasClean: event?.wasClean,
     });
     this.wsConnectionAttempts += 1;
     if (this.stopSignal) {
       return;
     }
-    if (this.wsConnectionAttempts <= this.maxWsReconnectionAttempts) {
+    const maxReconnectionAttempts = this.getMaxReconnectionAttempts(event);
+    if (
+      this.shouldRetryCloseEvent(event) &&
+      this.wsConnectionAttempts <= maxReconnectionAttempts
+    ) {
       const retryDelayMs = 100 * this.wsConnectionAttempts;
       this.connectionMilestones?.record('websocket_retry_scheduled', {
         attemptNumber: this.wsConnectionAttempts + 1,
         delayMs: retryDelayMs,
       });
       this.socket = null;
-      setTimeout(() => {
+      this.clearReconnectTimer();
+      this.reconnectTimer = setTimeout(() => {
+        this.reconnectTimer = null;
         this.connect();
       }, retryDelayMs);
     } else {
-      if (this.heartBeatIntervalRef) {
-        clearInterval(this.heartBeatIntervalRef);
-        this.heartBeatIntervalRef = null;
-      }
+      this.clearReconnectTimer();
+      this.clearHeartbeatInterval();
       this.connectionMilestones?.publishFailure({
         failureStage: 'websocket',
         closeCode: event?.code,
+        closeReason: event?.reason,
       });
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
         ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
       );
+      this.iceRestartReconnectInProgress = false;
+      this.permanentlyClosed = true;
     }
   }
 
-  private onError(event: Event) {
-    if (this.stopSignal) {
+  private getMaxReconnectionAttempts(event?: CloseEvent): number {
+    if (
+      !this.iceRestartReconnectInProgress ||
+      this.isApiGatewayBackendClose(event)
+    ) {
+      return this.maxWsReconnectionAttempts;
+    }
+
+    return Math.max(
+      this.maxWsReconnectionAttempts,
+      ICE_RESTART_WS_RECONNECTION_ATTEMPTS,
+    );
+  }
+
+  private shouldRetryCloseEvent(event?: CloseEvent): boolean {
+    // Dev Cloudflare workers use 1008 for backend 401/403. That is a policy
+    // failure rather than a transient network close, so retrying just hammers
+    // the edge with requests that cannot succeed.
+    return !(this.isApiGatewayBackendClose(event) && event?.code === 1008);
+  }
+
+  private isApiGatewayBackendClose(event?: CloseEvent): boolean {
+    return (
+      this.apiGatewayConfig?.enabled === true &&
+      typeof event?.reason === 'string' &&
+      event.reason.startsWith(API_GATEWAY_BACKEND_CLOSE_REASON_PREFIX)
+    );
+  }
+
+  private onError(socket: WebSocket, event: Event) {
+    if (this.stopSignal || this.socket !== socket) {
       return;
     }
     this.connectionMilestones?.record('websocket_error', {

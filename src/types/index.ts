@@ -5,12 +5,10 @@ export { SignalMessageAction } from './signalling'; // need to export this expli
 export type * from './streaming';
 export { DataChannelMessage } from './streaming';
 export type * from './coreApi';
-export type { PersonaConfig } from './PersonaConfig';
 export type {
-  DirectorNotes,
-  PresetStyle,
-  RuntimeDirectorNotes,
-} from './DirectorNotes';
+  PersonaConfig,
+  PersonaConfigUpdateAppliedEvent,
+} from './PersonaConfig';
 export type { ApiGatewayConfig } from './ApiGatewayConfig';
 export type { InputAudioState } from './InputAudioState';
 export { AudioPermissionState } from './InputAudioState';
@@ -22,3 +20,4 @@ export { InternalEvent } from './events'; // need to export this explicitly to a
 export { ConnectionClosedCode } from './events'; // need to export this explicitly to avoid enum import issues
 export { AgentAudioInputStream } from './AgentAudioInputStream';
 export type * from './toolCalling';
+export type * from './directorNotes';

@@ -45,6 +45,7 @@ To use the SDK you first need to create an instance of `AnamClient`. For local d
 import { unsafe_createClientWithApiKey } from '@anam-ai/js-sdk';
 
 const anamClient = unsafe_createClientWithApiKey('your-api-key', {
+  personaId: '<PERSONA ID HERE>',
   name: 'Cara',
   avatarId: '30fa96d0-26c4-4e55-94a0-517025942e18',
   voiceId: '6bfbe25a-979d-40f3-a92b-5394170af54b',
@@ -118,6 +119,7 @@ On Cara 4 avatars you can add **Director Notes** to guide the avatar's performan
 import { unsafe_createClientWithApiKey } from '@anam-ai/js-sdk';
 
 const anamClient = unsafe_createClientWithApiKey('your-api-key', {
+  personaId: '<PERSONA ID HERE>',
   name: 'Cara',
   // Use a Cara 4 avatar — Director Notes are ignored on older models.
   avatarId: '30fa96d0-26c4-4e55-94a0-517025942e18',
@@ -152,7 +154,7 @@ directorNotes: {
 
 ### Changing Director Notes mid-session
 
-On Cara 4 you can change the performance **without restarting** the session via `updateDirectorNotes`, for example to react to the conversation in real time. The engine applies `presetStyle` and `expressivity` immediately; pass `null` to clear a field so the engine falls back to its default. `customStylePrompt` cannot be changed mid-session — start a new session to change it.
+On Cara 4 you can change the performance **without restarting** the session via `updateDirectorNotes`, for example to react to the conversation in real time. The engine applies `presetStyle` and `expressivity` immediately; pass `null` to clear a field so the engine falls back to its default. `customStylePrompt` cannot be changed mid-session — start a new session to change it. Call this after the session's data channel is open; the method throws instead of silently dropping an update while the channel is unavailable.
 
 ```typescript
 // while the session is streaming:

@@ -14,21 +14,17 @@
 /**
  * Built-in performance styles the avatar can follow.
  *
- * Hand-maintained MIRROR of the Lab's `PRESET_STYLES` (anam-org/anam-lab,
- * `src/lib/types/director-notes.ts`), which itself mirrors the engine's
- * accepted cue tags — there is no runtime sync, so this can drift. The server
- * ignores unknown styles. Keep in sync when styles change.
+ * Hand-maintained mirror of the Lab's public `PRESET_STYLES`
+ * (`anam-org/anam-lab`, `src/lib/types/director-notes.ts`). Runtime cue-only
+ * tags are intentionally excluded because the session-token API rejects them
+ * as presets. Keep this union in sync when the public preset set changes.
  */
 export type PresetStyle =
   | 'happy'
   | 'warm'
   | 'playful'
-  | 'laughter'
-  | 'curious'
   | 'supportive'
-  | 'concerned'
   | 'sad'
-  | 'surprised'
   | 'angry'
   | 'distressed';
 
@@ -70,9 +66,9 @@ export type DirectorNotes =
     };
 
 /**
- * Partial Director Notes update for a LIVE (streaming) session, applied via
- * {@link AnamClient.updateDirectorNotes} over the data channel without a
- * restart. All fields are optional — send only what changes.
+ * Partial Director Notes update for a live streaming session, applied via
+ * `AnamClient.updateDirectorNotes` over the data channel without a restart.
+ * At least one field is required; send only what changes.
  *
  * Only Cara 4 avatars support mid-session updates, and the engine applies
  * only `presetStyle` and `expressivity` live. `customStylePrompt` cannot be
@@ -80,15 +76,24 @@ export type DirectorNotes =
  * intentionally not part of this type. No-op on engines that don't support
  * dynamic updates.
  */
-export interface RuntimeDirectorNotes {
-  /**
-   * Preset style to switch to. Pass `null` to clear the override so the
-   * engine falls back to its default behaviour.
-   */
-  presetStyle?: PresetStyle | null;
-  /**
-   * How expressively the style is played, normalized to the range 0–1. Pass
-   * `null` to reset to the engine default.
-   */
-  expressivity?: number | null;
-}
+export type RuntimeDirectorNotes =
+  | {
+      /**
+       * Preset style to switch to. Pass `null` to clear the override so the
+       * engine falls back to its default behaviour.
+       */
+      presetStyle: PresetStyle | null;
+      /**
+       * How expressively the style is played, normalized to the range 0–1.
+       * Pass `null` to reset to the engine default.
+       */
+      expressivity?: number | null;
+    }
+  | {
+      presetStyle?: PresetStyle | null;
+      /**
+       * How expressively the style is played, normalized to the range 0–1.
+       * Pass `null` to reset to the engine default.
+       */
+      expressivity: number | null;
+    };

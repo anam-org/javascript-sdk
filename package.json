@@ -37,10 +37,11 @@
     "build:umd": "webpack --mode=production --config=webpack.config.js",
     "format": "prettier --write \"{src,test}/**/*.ts\"",
     "lint": "eslint \"{src,test}/**/*.ts\" --fix",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "run-s test:director-notes test:connection-milestones",
+    "test:director-notes": "npm run build:main && node test/directorNotesHarness.js && tsc --noEmit --strict --target es2015 --moduleResolution node --skipLibCheck test/directorNotesTypes.ts",
     "test:connection-milestones": "npm run build:main && node test/connectionMilestonesHarness.js",
     "watch": "nodemon -e ts --watch src --exec \"npm run build\"",
-    "prepare": "husky"
+    "prepare": "npm run build"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.3.0",
