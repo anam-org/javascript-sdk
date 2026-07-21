@@ -159,6 +159,11 @@ function testDirectorNoteCues() {
     'angry',
     'distressed',
   ]);
+  assert.equal(Object.isFrozen(DIRECTOR_NOTE_CUE_TAGS), true);
+  assert.throws(
+    () => DIRECTOR_NOTE_CUE_TAGS.push('neutral'),
+    TypeError,
+  );
 
   const notStreaming = createStreamingClient().client;
   notStreaming._isStreaming = false;

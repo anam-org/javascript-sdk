@@ -5,7 +5,7 @@
  * `anam-org/anam-engine/anam_engine/director_notes/cues.py`. It intentionally
  * includes cue-only tags that are not accepted as session-start preset styles.
  */
-export const DIRECTOR_NOTE_CUE_TAGS = [
+export const DIRECTOR_NOTE_CUE_TAGS = Object.freeze([
   'happy',
   'warm',
   'playful',
@@ -17,7 +17,7 @@ export const DIRECTOR_NOTE_CUE_TAGS = [
   'surprised',
   'angry',
   'distressed',
-] as const;
+] as const);
 
 export type DirectorNoteCueTag = (typeof DIRECTOR_NOTE_CUE_TAGS)[number];
 
