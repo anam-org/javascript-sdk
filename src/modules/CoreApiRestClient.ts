@@ -297,7 +297,7 @@ export class CoreApiRestClient {
             : typeof data.error === 'string'
               ? data.error
               : `Request failed with HTTP status ${response.status}`;
-        throw new ClientError(
+        const clientError = new ClientError(
           'Failed to get session token',
           isAuthenticationError
             ? ErrorCode.CLIENT_ERROR_CODE_AUTHENTICATION_ERROR
@@ -305,14 +305,18 @@ export class CoreApiRestClient {
               ? ErrorCode.CLIENT_ERROR_CODE_VALIDATION_ERROR
               : ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
           response.status,
-          { cause: responseMessage, responseBody: data },
+          { cause: responseMessage },
         );
+        // Keep the response available to the caller without forwarding a
+        // potentially sensitive or unbounded validation body into metrics.
+        clientError.details = { cause: responseMessage, responseBody: data };
+        throw clientError;
       }
       if (typeof data.sessionToken !== 'string' || !data.sessionToken) {
         throw new ClientError(
           'Failed to get session token',
           ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
-          response.status,
+          500,
           { cause: 'Response did not include a session token' },
         );
       }

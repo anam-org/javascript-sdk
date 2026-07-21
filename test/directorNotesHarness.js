@@ -55,20 +55,27 @@ async function testTypedConfigWithoutLlmIsForwarded() {
 }
 
 async function testSessionTokenErrorsAreSurfaced() {
-  global.fetch = async () => ({
-    ok: false,
-    status: 400,
-    json: async () => ({
-      error: 'Invalid request body',
-      details: {
-        personaConfig: {
-          directorNotes: {
-            presetStyle: { _errors: ['Invalid Director Notes preset'] },
+  const metricRequests = [];
+  global.fetch = async (url, options) => {
+    if (String(url).includes('/metrics/client')) {
+      metricRequests.push(JSON.parse(options.body));
+      return { ok: true, status: 204, json: async () => ({}) };
+    }
+    return {
+      ok: false,
+      status: 400,
+      json: async () => ({
+        error: 'Invalid request body',
+        details: {
+          personaConfig: {
+            directorNotes: {
+              presetStyle: { _errors: ['Invalid Director Notes preset'] },
+            },
           },
         },
-      },
-    }),
-  });
+      }),
+    };
+  };
 
   const client = new CoreApiRestClient(undefined, 'api-key');
   await assert.rejects(
@@ -81,6 +88,10 @@ async function testSessionTokenErrorsAreSurfaced() {
       error.details?.responseBody?.details?.personaConfig?.directorNotes
         ?.presetStyle?._errors?.[0] === 'Invalid Director Notes preset',
   );
+  assert.equal(metricRequests.length, 1);
+  assert.deepEqual(metricRequests[0].tags.details, {
+    cause: 'Invalid request body',
+  });
 
   for (const status of [400, 401, 403]) {
     global.fetch = async () => ({
@@ -103,6 +114,20 @@ async function testSessionTokenErrorsAreSurfaced() {
           `Request failed with HTTP status ${status}`,
     );
   }
+
+  global.fetch = async () => ({
+    ok: true,
+    status: 201,
+    json: async () => ({}),
+  });
+  await assert.rejects(
+    client.unsafe_getSessionToken(personaConfig),
+    (error) =>
+      error instanceof ClientError &&
+      error.code === ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR &&
+      error.statusCode === 500 &&
+      error.details?.cause === 'Response did not include a session token',
+  );
 }
 
 function createStreamingClient({ isOpen = true } = {}) {
