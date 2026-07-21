@@ -26,8 +26,9 @@ export type PackedAlphaCapability = 'supported' | 'unsupported' | 'unknown';
 /**
  * Query support for the H.264 Main Level 4.0 stream used by packed-alpha-v1.
  * Missing or inconclusive MediaCapabilities implementations are reported as
- * unknown rather than unsupported so older browsers retain their existing
- * WebRTC codec negotiation path.
+ * unknown. Callers conservatively retain the legacy carrier in that case: the
+ * server requires an explicit Main-Level-4 offer, so guessing support could
+ * otherwise turn a graceful quality fallback into a failed session.
  *
  * @internal
  */
@@ -48,9 +49,8 @@ export async function detectPackedAlphaCapability(
     // configuration should use the lower-resolution compatibility path.
     return result.supported && result.smooth ? 'supported' : 'unsupported';
   } catch {
-    // Some otherwise-compatible browsers expose MediaCapabilities but reject
-    // WebRTC configurations. That is not evidence that H.264 Level 4.0 cannot
-    // be decoded, so let normal SDP negotiation decide.
+    // Some browsers expose MediaCapabilities but reject WebRTC configurations.
+    // Treat this as inconclusive; the caller keeps the compatibility path.
     return 'unknown';
   }
 }
@@ -69,9 +69,9 @@ export async function buildTransparentBackgroundSessionOptions(
   if (!enabled) return { transparentBackground: false };
 
   const capability = await detectPackedAlphaCapability(mediaCapabilities);
-  if (capability === 'unsupported') {
+  if (capability !== 'supported') {
     console.warn(
-      'Packed transparent-background video is unsupported or is not expected to decode smoothly on this device; falling back to legacy green-screen keying.',
+      'Packed transparent-background video support could not be confirmed as smooth on this device; falling back to legacy green-screen keying.',
     );
     return { transparentBackground: true };
   }

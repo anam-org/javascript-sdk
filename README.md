@@ -68,7 +68,7 @@ This will start a new session using the pre-configured persona id and start stre
 
 Set `transparentBackground` when creating the client. The SDK requests a
 packed colour/matte rendition and reconstructs it through a source-resolution
-WebGL canvas over your video element. Browsers that explicitly report no
+WebGL canvas over your video element. Browsers that cannot confirm smooth
 support for the packed H.264 stream, and servers that return the original
 1152x768 frame, automatically use the legacy green-screen keyer.
 

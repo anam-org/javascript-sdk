@@ -85,11 +85,13 @@ void (async () => {
         throw new TypeError('WebRTC decodingInfo is not implemented');
       },
     }),
-    {
-      transparentBackground: true,
-      transparentBackgroundTransport: PACKED_ALPHA_TRANSPORT,
-    },
-    'an inconclusive MediaCapabilities implementation must defer to SDP negotiation',
+    { transparentBackground: true },
+    'an inconclusive MediaCapabilities implementation must retain the compatibility path',
+  );
+  assert.deepEqual(
+    await buildTransparentBackgroundSessionOptions(true, undefined),
+    { transparentBackground: true },
+    'a browser without MediaCapabilities must retain the compatibility path',
   );
   assert.deepEqual(
     await buildTransparentBackgroundSessionOptions(false, {
