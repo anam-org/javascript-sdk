@@ -163,6 +163,9 @@ let cueChannelOpen = false;
 anamClient.addListener(AnamEvent.DATA_CHANNEL_OPEN, () => {
   cueChannelOpen = true;
 });
+anamClient.addListener(AnamEvent.CONNECTION_CLOSED, () => {
+  cueChannelOpen = false;
+});
 
 // Call this later from your TTS timing callback for an active persona turn.
 function onTtsCue(tag: DirectorNoteCueTag, atSeconds: number) {
