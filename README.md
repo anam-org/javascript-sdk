@@ -157,18 +157,24 @@ directorNotes: {
 On Cara 4 you can use `sendDirectorNoteCue` to change the performance as a conversation unfolds. Cues use the engine's dedicated cue path, so they do not purge buffered audio or video. Data-channel cues are primarily for audio-passthrough sessions; for Turnkey sessions, prefer inline cue tags in persona speech text.
 
 ```typescript
-import { AnamEvent } from '@anam-ai/js-sdk';
+import { AnamEvent, type DirectorNoteCueTag } from '@anam-ai/js-sdk';
 
+let cueChannelOpen = false;
 anamClient.addListener(AnamEvent.DATA_CHANNEL_OPEN, () => {
-  // apply a cue immediately
-  anamClient.sendDirectorNoteCue('happy');
-
-  // apply a cue after a delay from now
-  anamClient.sendDirectorNoteCue('curious', { inSeconds: 0.5 });
-
-  // align a cue to an offset from the start of persona speech
-  anamClient.sendDirectorNoteCue('surprised', { atSeconds: 1.25 });
+  cueChannelOpen = true;
 });
+
+// Call this later from your TTS timing callback for an active persona turn.
+function onTtsCue(tag: DirectorNoteCueTag, atSeconds: number) {
+  if (!cueChannelOpen) {
+    throw new Error('Director Note cue channel is not open');
+  }
+
+  anamClient.sendDirectorNoteCue(tag, { atSeconds });
+}
+
+// Wire onTtsCue to your TTS provider's cue/word-timing callback. For example,
+// report `warm` at 0 seconds and `surprised` at 1.25 seconds for that turn.
 ```
 
-Register the listener before starting the stream so it cannot miss the event. Sending before `DATA_CHANNEL_OPEN` throws instead of silently dropping the cue. Omitting timing applies the cue immediately. `inSeconds` is a delay from now, while `atSeconds` is an absolute offset from the start of persona speech; provide at most one. Runtime cue tags also include cue-only styles such as `laughter`, `curious`, `concerned`, `surprised`, and `neutral` that are not available as session-start `presetStyle` values.
+Register the listener before starting the stream so it cannot miss the event. Sending before `DATA_CHANNEL_OPEN` throws instead of silently dropping the cue. Omitting timing applies the cue immediately. `inSeconds` is a delay from now during an active response, while `atSeconds` is an absolute offset from the start of persona speech and is preferred when aligning cues to generated audio; provide at most one. Runtime cue tags also include cue-only styles such as `laughter`, `curious`, `concerned`, and `surprised` that are not available as session-start `presetStyle` values.

@@ -17,7 +17,6 @@ export const DIRECTOR_NOTE_CUE_TAGS = [
   'surprised',
   'angry',
   'distressed',
-  'neutral',
 ] as const;
 
 export type DirectorNoteCueTag = (typeof DIRECTOR_NOTE_CUE_TAGS)[number];

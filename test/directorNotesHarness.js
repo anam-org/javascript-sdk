@@ -158,7 +158,6 @@ function testDirectorNoteCues() {
     'surprised',
     'angry',
     'distressed',
-    'neutral',
   ]);
 
   const notStreaming = createStreamingClient().client;
@@ -205,6 +204,10 @@ function testDirectorNoteCues() {
   assert.throws(
     () => client.sendDirectorNoteCue('rage'),
     /unsupported tag "rage"/,
+  );
+  assert.throws(
+    () => client.sendDirectorNoteCue('neutral'),
+    /unsupported tag "neutral"/,
   );
   assert.throws(
     () =>
