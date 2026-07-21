@@ -253,6 +253,7 @@ export default class AnamClient {
     connectionMilestones?: ClientConnectionMilestoneRecorder,
   ): Promise<string> {
     const config = this.personaConfig;
+    this.validatePersonaConfigOrThrow(config);
     // build session options from client options
     const sessionOptions: StartSessionOptions | undefined =
       this.buildStartSessionOptionsForClient();
@@ -707,6 +708,7 @@ export default class AnamClient {
   }
 
   public setPersonaConfig(personaConfig: PersonaConfig): void {
+    this.validatePersonaConfigOrThrow(personaConfig);
     this.personaConfig = personaConfig;
   }
 
@@ -834,6 +836,23 @@ export default class AnamClient {
     handler: ToolCallHandler,
   ): () => void {
     return this.toolCallManager.registerHandler(toolName, handler);
+  }
+
+  private validatePersonaConfigOrThrow(
+    personaConfig: PersonaConfig | undefined,
+  ): void {
+    const directorNotesExpressivity =
+      personaConfig?.directorNotes?.expressivity;
+    if (
+      directorNotesExpressivity !== undefined &&
+      !isValidDirectorNotesExpressivity(directorNotesExpressivity)
+    ) {
+      throw new ClientError(
+        'Director Notes expressivity must be a finite number between 0 and 1',
+        ErrorCode.CLIENT_ERROR_CODE_CONFIGURATION_ERROR,
+        400,
+      );
+    }
   }
 }
 

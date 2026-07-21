@@ -34,7 +34,7 @@ async function testSessionTokenPayload() {
   ]);
 }
 
-async function testBrainlessTypedConfigIsNotMisrepresented() {
+async function testTypedConfigWithoutLlmIsForwarded() {
   const requests = [];
   global.fetch = async (_url, options) => {
     requests.push(JSON.parse(options.body));
@@ -49,14 +49,25 @@ async function testBrainlessTypedConfigIsNotMisrepresented() {
   const { llmId: _llmId, ...brainlessConfig } = personaConfig;
   await client.unsafe_getSessionToken(brainlessConfig);
 
-  assert.deepEqual(requests, [{ clientLabel: 'js-sdk-api-key' }]);
+  assert.deepEqual(requests, [
+    { clientLabel: 'js-sdk-api-key', personaConfig: brainlessConfig },
+  ]);
 }
 
 async function testSessionTokenErrorsAreSurfaced() {
   global.fetch = async () => ({
     ok: false,
     status: 400,
-    json: async () => ({ message: 'Invalid Director Notes preset' }),
+    json: async () => ({
+      error: 'Invalid request body',
+      details: {
+        personaConfig: {
+          directorNotes: {
+            presetStyle: { _errors: ['Invalid Director Notes preset'] },
+          },
+        },
+      },
+    }),
   });
 
   const client = new CoreApiRestClient(undefined, 'api-key');
@@ -66,8 +77,32 @@ async function testSessionTokenErrorsAreSurfaced() {
       error instanceof ClientError &&
       error.code === ErrorCode.CLIENT_ERROR_CODE_VALIDATION_ERROR &&
       error.statusCode === 400 &&
-      error.details?.cause === 'Invalid Director Notes preset',
+      error.details?.cause === 'Invalid request body' &&
+      error.details?.responseBody?.details?.personaConfig?.directorNotes
+        ?.presetStyle?._errors?.[0] === 'Invalid Director Notes preset',
   );
+
+  for (const status of [400, 401, 403]) {
+    global.fetch = async () => ({
+      ok: false,
+      status,
+      json: async () => {
+        throw new SyntaxError('Unexpected non-JSON response');
+      },
+    });
+    await assert.rejects(
+      client.unsafe_getSessionToken(personaConfig),
+      (error) =>
+        error instanceof ClientError &&
+        error.code ===
+          (status === 400
+            ? ErrorCode.CLIENT_ERROR_CODE_VALIDATION_ERROR
+            : ErrorCode.CLIENT_ERROR_CODE_AUTHENTICATION_ERROR) &&
+        error.statusCode === status &&
+        error.details?.cause ===
+          `Request failed with HTTP status ${status}`,
+    );
+  }
 }
 
 function createStreamingClient({ isOpen = true } = {}) {
@@ -85,6 +120,13 @@ function createStreamingClient({ isOpen = true } = {}) {
 }
 
 function testRuntimeUpdates() {
+  const notStreaming = createStreamingClient().client;
+  notStreaming._isStreaming = false;
+  assert.throws(
+    () => notStreaming.updateDirectorNotes({ expressivity: 0.5 }),
+    /not currently streaming/,
+  );
+
   const { client, messages } = createStreamingClient();
   client.updateDirectorNotes({ presetStyle: 'happy', expressivity: 0 });
   client.updateDirectorNotes({ presetStyle: null, expressivity: null });
@@ -138,12 +180,55 @@ function testInitialExpressivityValidation() {
   }
 }
 
+async function testChangedConfigExpressivityValidation() {
+  const client = new AnamClient(undefined, personaConfig, {
+    apiKey: 'api-key',
+  });
+  const invalidConfig = {
+    ...personaConfig,
+    directorNotes: { expressivity: NaN },
+  };
+
+  assert.throws(
+    () => client.setPersonaConfig(invalidConfig),
+    (error) =>
+      error instanceof ClientError &&
+      error.code === ErrorCode.CLIENT_ERROR_CODE_CONFIGURATION_ERROR &&
+      /finite number between 0 and 1/.test(error.message),
+  );
+
+  const mutableConfig = {
+    ...personaConfig,
+    directorNotes: { expressivity: 0.5 },
+  };
+  const mutableClient = new AnamClient(undefined, mutableConfig, {
+    apiKey: 'api-key',
+  });
+  mutableConfig.directorNotes.expressivity = Infinity;
+  let apiCalled = false;
+  mutableClient.apiClient = {
+    startSession: async () => {
+      apiCalled = true;
+      throw new Error('API should not be called');
+    },
+  };
+
+  await assert.rejects(
+    mutableClient.startSession(),
+    (error) =>
+      error instanceof ClientError &&
+      error.code === ErrorCode.CLIENT_ERROR_CODE_CONFIGURATION_ERROR,
+  );
+  assert.equal(apiCalled, false);
+}
+
 async function runHarness() {
   await testSessionTokenPayload();
-  await testBrainlessTypedConfigIsNotMisrepresented();
+  await testTypedConfigWithoutLlmIsForwarded();
   await testSessionTokenErrorsAreSurfaced();
   testRuntimeUpdates();
   testInitialExpressivityValidation();
+  await testChangedConfigExpressivityValidation();
   console.log('director notes harness passed');
 }
 
