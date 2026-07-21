@@ -130,6 +130,10 @@ function testRuntimeUpdates() {
   const { client, messages } = createStreamingClient();
   client.updateDirectorNotes({ presetStyle: 'happy', expressivity: 0 });
   client.updateDirectorNotes({ presetStyle: null, expressivity: null });
+  client.updateDirectorNotes({
+    expressivity: 0.4,
+    customStylePrompt: 'must not reach the live wire',
+  });
 
   assert.deepEqual(messages, [
     {
@@ -139,6 +143,10 @@ function testRuntimeUpdates() {
     {
       message_type: 'persona_config',
       data: { directorNotes: { presetStyle: null, expressivity: null } },
+    },
+    {
+      message_type: 'persona_config',
+      data: { directorNotes: { expressivity: 0.4 } },
     },
   ]);
 

@@ -672,9 +672,14 @@ export default class AnamClient {
       );
     }
 
+    const runtimeDirectorNotes = {
+      presetStyle: directorNotes.presetStyle,
+      expressivity: directorNotes.expressivity,
+    };
+
     const body = JSON.stringify({
       message_type: 'persona_config',
-      data: { directorNotes },
+      data: { directorNotes: runtimeDirectorNotes },
     });
 
     if (!this.streamingClient?.sendDataMessage(body)) {

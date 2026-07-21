@@ -40,4 +40,16 @@ const invalidMixedStyle: DirectorNotes = {
 // @ts-expect-error
 const invalidEmptyRuntimeUpdate: RuntimeDirectorNotes = {};
 
-void [invalidCuePreset, invalidMixedStyle, invalidEmptyRuntimeUpdate];
+// Custom prompts are session-start-only and cannot be sent live.
+const invalidRuntimeCustomPrompt: RuntimeDirectorNotes = {
+  expressivity: 0.5,
+  // @ts-expect-error
+  customStylePrompt: 'Stay composed.',
+};
+
+void [
+  invalidCuePreset,
+  invalidMixedStyle,
+  invalidEmptyRuntimeUpdate,
+  invalidRuntimeCustomPrompt,
+];

@@ -88,6 +88,7 @@ export type RuntimeDirectorNotes =
        * Pass `null` to reset to the engine default.
        */
       expressivity?: number | null;
+      customStylePrompt?: never;
     }
   | {
       presetStyle?: PresetStyle | null;
@@ -96,4 +97,5 @@ export type RuntimeDirectorNotes =
        * Pass `null` to reset to the engine default.
        */
       expressivity: number | null;
+      customStylePrompt?: never;
     };
