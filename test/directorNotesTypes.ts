@@ -1,7 +1,9 @@
 import type {
+  DirectorNoteCueOptions,
+  DirectorNoteCueTag,
   DirectorNotes,
-  RuntimeDirectorNotes,
 } from '../src/types/directorNotes';
+import { AnamEvent } from '../src/types/events';
 
 const preset: DirectorNotes = {
   presetStyle: 'warm',
@@ -9,20 +11,21 @@ const preset: DirectorNotes = {
 };
 const custom: DirectorNotes = { customStylePrompt: 'Stay composed.' };
 const expressivityOnly: DirectorNotes = { expressivity: 1 };
-const runtimePreset: RuntimeDirectorNotes = { presetStyle: null };
-const runtimeExpressivity: RuntimeDirectorNotes = { expressivity: 0 };
-const runtimeBoth: RuntimeDirectorNotes = {
-  presetStyle: 'happy',
-  expressivity: 0.5,
-};
+const immediateCue: DirectorNoteCueOptions = {};
+const relativeCue: DirectorNoteCueOptions = { inSeconds: 0 };
+const absoluteCue: DirectorNoteCueOptions = { atSeconds: 1.25 };
+const cueOnlyTag: DirectorNoteCueTag = 'curious';
+const dataChannelOpenEvent: AnamEvent = AnamEvent.DATA_CHANNEL_OPEN;
 
 void [
   preset,
   custom,
   expressivityOnly,
-  runtimePreset,
-  runtimeExpressivity,
-  runtimeBoth,
+  immediateCue,
+  relativeCue,
+  absoluteCue,
+  cueOnlyTag,
+  dataChannelOpenEvent,
 ];
 
 // Cue-only tags are not valid public presets.
@@ -36,20 +39,15 @@ const invalidMixedStyle: DirectorNotes = {
   customStylePrompt: 'Stay composed.',
 };
 
-// Runtime updates must contain at least one field.
+// Cue timing modes are mutually exclusive.
 // @ts-expect-error
-const invalidEmptyRuntimeUpdate: RuntimeDirectorNotes = {};
-
-// Custom prompts are session-start-only and cannot be sent live.
-const invalidRuntimeCustomPrompt: RuntimeDirectorNotes = {
-  expressivity: 0.5,
-  // @ts-expect-error
-  customStylePrompt: 'Stay composed.',
+const invalidCueTiming: DirectorNoteCueOptions = {
+  inSeconds: 0,
+  atSeconds: 1,
 };
 
-void [
-  invalidCuePreset,
-  invalidMixedStyle,
-  invalidEmptyRuntimeUpdate,
-  invalidRuntimeCustomPrompt,
-];
+// Unknown runtime cue tags are rejected.
+// @ts-expect-error
+const invalidCueTag: DirectorNoteCueTag = 'rage';
+
+void [invalidCuePreset, invalidMixedStyle, invalidCueTiming, invalidCueTag];

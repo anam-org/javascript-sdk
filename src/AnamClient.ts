@@ -27,10 +27,12 @@ import {
   AgentAudioInputConfig,
   AudioPermissionState,
   ConnectionClosedCode,
+  DIRECTOR_NOTE_CUE_TAGS,
+  DirectorNoteCueOptions,
+  DirectorNoteCueTag,
   EventCallbacks,
   InputAudioState,
   PersonaConfig,
-  RuntimeDirectorNotes,
   StartSessionOptions,
   StartSessionResponse,
   ToolCallHandler,
@@ -629,58 +631,73 @@ export default class AnamClient {
   }
 
   /**
-   * Update Director Notes on the active streaming session, applied without
-   * restarting (Cara 4 avatars only).
+   * Send a Director Note cue to the active streaming session without purging
+   * buffered audio or video (Cara 4 avatars only).
    *
-   * Forwarded over the data channel; the engine applies `presetStyle` and
-   * `expressivity` immediately — pass `null` to clear a field so the engine
-   * falls back to its default. `customStylePrompt` cannot be changed
-   * mid-session — start a new session to change it. No-op on non-Cara-4
-   * avatars or engines that don't support dynamic updates.
+   * Omit timing to apply the cue immediately. `inSeconds` delays from now;
+   * `atSeconds` targets an absolute offset from the start of persona speech.
    *
-   * @param directorNotes - Partial update; send only the fields that change.
+   * @param tag - Runtime performance cue understood by the engine.
+   * @param options - Optional mutually exclusive cue timing.
    * @throws Error if not currently streaming, if the data channel is not open,
-   * or if the update is empty or invalid
+   * or if the cue is invalid
    */
-  public updateDirectorNotes(directorNotes: RuntimeDirectorNotes): void {
+  public sendDirectorNoteCue(
+    tag: DirectorNoteCueTag,
+    options: DirectorNoteCueOptions = {},
+  ): void {
     if (!this._isStreaming) {
       throw new Error(
-        'Failed to update director notes: not currently streaming',
+        'Failed to send Director Note cue: not currently streaming',
       );
     }
 
-    if (
-      directorNotes.presetStyle === undefined &&
-      directorNotes.expressivity === undefined
-    ) {
+    if (typeof tag !== 'string' || tag.length === 0) {
       throw new Error(
-        'Failed to update director notes: provide presetStyle and/or expressivity (pass null to clear a field)',
+        'Failed to send Director Note cue: tag must not be empty',
       );
     }
-
-    if (
-      directorNotes.expressivity !== undefined &&
-      directorNotes.expressivity !== null &&
-      !isValidDirectorNotesExpressivity(directorNotes.expressivity)
-    ) {
+    if (Buffer.byteLength(tag, 'utf8') > 64) {
       throw new Error(
-        'Failed to update director notes: expressivity must be a finite number between 0 and 1',
+        'Failed to send Director Note cue: tag must not exceed 64 bytes',
+      );
+    }
+    if (!(DIRECTOR_NOTE_CUE_TAGS as readonly string[]).includes(tag)) {
+      throw new Error(
+        `Failed to send Director Note cue: unsupported tag "${tag}"`,
       );
     }
 
-    const runtimeDirectorNotes = {
-      presetStyle: directorNotes.presetStyle,
-      expressivity: directorNotes.expressivity,
-    };
+    const { inSeconds, atSeconds } = options;
+    if (inSeconds !== undefined && atSeconds !== undefined) {
+      throw new Error(
+        'Failed to send Director Note cue: provide only one of inSeconds or atSeconds',
+      );
+    }
+    for (const [name, value] of [
+      ['inSeconds', inSeconds],
+      ['atSeconds', atSeconds],
+    ] as const) {
+      if (
+        value !== undefined &&
+        (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
+      ) {
+        throw new Error(
+          `Failed to send Director Note cue: ${name} must be a finite non-negative number`,
+        );
+      }
+    }
 
     const body = JSON.stringify({
-      message_type: 'persona_config',
-      data: { directorNotes: runtimeDirectorNotes },
+      message_type: 'director_note_cue',
+      cue: { tag },
+      ...(inSeconds !== undefined ? { in_seconds: inSeconds } : {}),
+      ...(atSeconds !== undefined ? { at_seconds: atSeconds } : {}),
     });
 
     if (!this.streamingClient?.sendDataMessage(body)) {
       throw new Error(
-        'Failed to update director notes: data channel is not open',
+        'Failed to send Director Note cue: data channel is not open',
       );
     }
   }

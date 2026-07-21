@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const AnamClient = require('../dist/main/AnamClient').default;
+const { DIRECTOR_NOTE_CUE_TAGS } = require('../dist/main');
 const { ClientError, ErrorCode } = require('../dist/main/lib/ClientError');
 const {
   CoreApiRestClient,
@@ -144,51 +145,89 @@ function createStreamingClient({ isOpen = true } = {}) {
   return { client, messages };
 }
 
-function testRuntimeUpdates() {
+function testDirectorNoteCues() {
+  assert.deepEqual(DIRECTOR_NOTE_CUE_TAGS, [
+    'happy',
+    'warm',
+    'playful',
+    'laughter',
+    'curious',
+    'supportive',
+    'concerned',
+    'sad',
+    'surprised',
+    'angry',
+    'distressed',
+    'neutral',
+  ]);
+
   const notStreaming = createStreamingClient().client;
   notStreaming._isStreaming = false;
   assert.throws(
-    () => notStreaming.updateDirectorNotes({ expressivity: 0.5 }),
+    () => notStreaming.sendDirectorNoteCue('happy'),
     /not currently streaming/,
   );
 
   const { client, messages } = createStreamingClient();
-  client.updateDirectorNotes({ presetStyle: 'happy', expressivity: 0 });
-  client.updateDirectorNotes({ presetStyle: null, expressivity: null });
-  client.updateDirectorNotes({
-    expressivity: 0.4,
-    customStylePrompt: 'must not reach the live wire',
-  });
+  client.sendDirectorNoteCue('happy');
+  client.sendDirectorNoteCue('curious', { inSeconds: 0 });
+  client.sendDirectorNoteCue('surprised', { atSeconds: 1.25 });
 
   assert.deepEqual(messages, [
     {
-      message_type: 'persona_config',
-      data: { directorNotes: { presetStyle: 'happy', expressivity: 0 } },
+      message_type: 'director_note_cue',
+      cue: { tag: 'happy' },
     },
     {
-      message_type: 'persona_config',
-      data: { directorNotes: { presetStyle: null, expressivity: null } },
+      message_type: 'director_note_cue',
+      cue: { tag: 'curious' },
+      in_seconds: 0,
     },
     {
-      message_type: 'persona_config',
-      data: { directorNotes: { expressivity: 0.4 } },
+      message_type: 'director_note_cue',
+      cue: { tag: 'surprised' },
+      at_seconds: 1.25,
     },
   ]);
 
   assert.throws(
-    () => client.updateDirectorNotes({}),
-    /provide presetStyle and\/or expressivity/,
+    () => client.sendDirectorNoteCue(''),
+    /tag must not be empty/,
   );
-  for (const expressivity of [-0.01, 1.01, NaN, Infinity, -Infinity]) {
+  assert.throws(
+    () => client.sendDirectorNoteCue('x'.repeat(65)),
+    /tag must not exceed 64 bytes/,
+  );
+  assert.throws(
+    () => client.sendDirectorNoteCue('😀'.repeat(17)),
+    /tag must not exceed 64 bytes/,
+  );
+  assert.throws(
+    () => client.sendDirectorNoteCue('rage'),
+    /unsupported tag "rage"/,
+  );
+  assert.throws(
+    () =>
+      client.sendDirectorNoteCue('happy', {
+        inSeconds: 0,
+        atSeconds: 1,
+      }),
+    /provide only one of inSeconds or atSeconds/,
+  );
+  for (const timing of [-0.01, NaN, Infinity, -Infinity]) {
     assert.throws(
-      () => client.updateDirectorNotes({ expressivity }),
-      /finite number between 0 and 1/,
+      () => client.sendDirectorNoteCue('happy', { inSeconds: timing }),
+      /inSeconds must be a finite non-negative number/,
+    );
+    assert.throws(
+      () => client.sendDirectorNoteCue('happy', { atSeconds: timing }),
+      /atSeconds must be a finite non-negative number/,
     );
   }
 
   const unavailable = createStreamingClient({ isOpen: false }).client;
   assert.throws(
-    () => unavailable.updateDirectorNotes({ expressivity: 0.5 }),
+    () => unavailable.sendDirectorNoteCue('happy'),
     /data channel is not open/,
   );
 }
@@ -259,7 +298,7 @@ async function runHarness() {
   await testSessionTokenPayload();
   await testTypedConfigWithoutLlmIsForwarded();
   await testSessionTokenErrorsAreSurfaced();
-  testRuntimeUpdates();
+  testDirectorNoteCues();
   testInitialExpressivityValidation();
   await testChangedConfigExpressivityValidation();
   console.log('director notes harness passed');

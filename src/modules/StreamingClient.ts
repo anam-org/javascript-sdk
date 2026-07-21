@@ -1263,6 +1263,7 @@ export class StreamingClient {
     dataChannel.onopen = () => {
       this.dataChannel = dataChannel ?? null;
       this.connectionMilestones?.record('data_channel_open');
+      this.publicEventEmitter.emit(AnamEvent.DATA_CHANNEL_OPEN);
     };
     dataChannel.onclose = () => {
       this.connectionMilestones?.record('data_channel_closed');

@@ -152,19 +152,23 @@ directorNotes: {
 }
 ```
 
-### Changing Director Notes mid-session
+### Sending Director Note cues mid-session
 
-On Cara 4 you can change the performance **without restarting** the session via `updateDirectorNotes`, for example to react to the conversation in real time. The engine applies `presetStyle` and `expressivity` immediately; pass `null` to clear a field so the engine falls back to its default. `customStylePrompt` cannot be changed mid-session — start a new session to change it. Call this after the session's data channel is open; the method throws instead of silently dropping an update while the channel is unavailable.
+On Cara 4 you can use `sendDirectorNoteCue` to change the performance as a conversation unfolds. Cues use the engine's dedicated cue path, so they do not purge buffered audio or video. Data-channel cues are primarily for audio-passthrough sessions; for Turnkey sessions, prefer inline cue tags in persona speech text.
 
 ```typescript
-// while the session is streaming:
+import { AnamEvent } from '@anam-ai/js-sdk';
 
-// switch to a different preset style
-anamClient.updateDirectorNotes({ presetStyle: 'happy' });
+anamClient.addListener(AnamEvent.DATA_CHANNEL_OPEN, () => {
+  // apply a cue immediately
+  anamClient.sendDirectorNoteCue('happy');
 
-// make the performance more expressive
-anamClient.updateDirectorNotes({ expressivity: 0.6 });
+  // apply a cue after a delay from now
+  anamClient.sendDirectorNoteCue('curious', { inSeconds: 0.5 });
 
-// clear both back to the engine defaults
-anamClient.updateDirectorNotes({ presetStyle: null, expressivity: null });
+  // align a cue to an offset from the start of persona speech
+  anamClient.sendDirectorNoteCue('surprised', { atSeconds: 1.25 });
+});
 ```
+
+Register the listener before starting the stream so it cannot miss the event. Sending before `DATA_CHANNEL_OPEN` throws instead of silently dropping the cue. Omitting timing applies the cue immediately. `inSeconds` is a delay from now, while `atSeconds` is an absolute offset from the start of persona speech; provide at most one. Runtime cue tags also include cue-only styles such as `laughter`, `curious`, `concerned`, `surprised`, and `neutral` that are not available as session-start `presetStyle` values.

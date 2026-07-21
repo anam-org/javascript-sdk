@@ -19,6 +19,7 @@ export type EventCallbacks = {
     messageEvent: MessageStreamEvent,
   ) => void;
   [AnamEvent.CONNECTION_ESTABLISHED]: () => void;
+  [AnamEvent.DATA_CHANNEL_OPEN]: () => void;
   [AnamEvent.CONNECTION_CLOSED]: (
     reason: ConnectionClosedCode,
     details?: string,

@@ -64,38 +64,3 @@ export type DirectorNotes =
       presetStyle?: never;
       customStylePrompt?: never;
     };
-
-/**
- * Partial Director Notes update for a live streaming session, applied via
- * `AnamClient.updateDirectorNotes` over the data channel without a restart.
- * At least one field is required; send only what changes.
- *
- * Only Cara 4 avatars support mid-session updates, and the engine applies
- * only `presetStyle` and `expressivity` live. `customStylePrompt` cannot be
- * changed mid-session (start a new session to change it), so it is
- * intentionally not part of this type. No-op on engines that don't support
- * dynamic updates.
- */
-export type RuntimeDirectorNotes =
-  | {
-      /**
-       * Preset style to switch to. Pass `null` to clear the override so the
-       * engine falls back to its default behaviour.
-       */
-      presetStyle: PresetStyle | null;
-      /**
-       * How expressively the style is played, normalized to the range 0–1.
-       * Pass `null` to reset to the engine default.
-       */
-      expressivity?: number | null;
-      customStylePrompt?: never;
-    }
-  | {
-      presetStyle?: PresetStyle | null;
-      /**
-       * How expressively the style is played, normalized to the range 0–1.
-       * Pass `null` to reset to the engine default.
-       */
-      expressivity: number | null;
-      customStylePrompt?: never;
-    };
