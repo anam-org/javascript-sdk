@@ -271,19 +271,21 @@ export class TransparentBackgroundRenderer {
   private syncOverlayGeometry(): void {
     if (this.destroyed) return;
     const computedVideoStyle = window.getComputedStyle(this.video);
-    const fittedRect = resolveObjectFitRect(
-      this.video.offsetWidth,
-      this.video.offsetHeight,
-      this.video.videoWidth,
-      this.video.videoHeight,
-      computedVideoStyle.objectFit,
-      computedVideoStyle.objectPosition,
-    );
+
+    // Keep the canvas's replaced-element box exactly on the video box. Its
+    // intrinsic bitmap remains videoWidth x videoHeight, so the browser can
+    // apply the same object-fit/object-position algorithm to both elements.
+    // Replaced content is clipped to its own content box, which prevents
+    // `cover` pixels escaping when the parent has visible overflow. Delegating
+    // positioning to CSS also preserves the full <position> grammar (lengths,
+    // edge offsets, and calc()), rather than approximating it in JavaScript.
     Object.assign(this.canvas.style, {
-      left: `${this.video.offsetLeft + fittedRect.left}px`,
-      top: `${this.video.offsetTop + fittedRect.top}px`,
-      width: `${fittedRect.width}px`,
-      height: `${fittedRect.height}px`,
+      left: `${this.video.offsetLeft}px`,
+      top: `${this.video.offsetTop}px`,
+      width: `${this.video.offsetWidth}px`,
+      height: `${this.video.offsetHeight}px`,
+      objectFit: computedVideoStyle.objectFit,
+      objectPosition: computedVideoStyle.objectPosition,
       borderRadius: computedVideoStyle.borderRadius,
       clipPath: computedVideoStyle.clipPath,
       transform: computedVideoStyle.transform,
@@ -538,99 +540,6 @@ function clampUnit(value: number): number {
 
 function roundMetric(value: number): number {
   return Math.round(value * 1000) / 1000;
-}
-
-interface FittedContentRect {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-/** Mirror the replaced-content rectangle produced by CSS `object-fit`. */
-function resolveObjectFitRect(
-  elementWidth: number,
-  elementHeight: number,
-  sourceWidth: number,
-  sourceHeight: number,
-  objectFit: string,
-  objectPosition: string,
-): FittedContentRect {
-  if (
-    elementWidth <= 0 ||
-    elementHeight <= 0 ||
-    sourceWidth <= 0 ||
-    sourceHeight <= 0 ||
-    objectFit === 'fill'
-  ) {
-    return { left: 0, top: 0, width: elementWidth, height: elementHeight };
-  }
-
-  const containScale = Math.min(
-    elementWidth / sourceWidth,
-    elementHeight / sourceHeight,
-  );
-  let scale: number;
-  switch (objectFit) {
-    case 'contain':
-      scale = containScale;
-      break;
-    case 'cover':
-      scale = Math.max(
-        elementWidth / sourceWidth,
-        elementHeight / sourceHeight,
-      );
-      break;
-    case 'none':
-      scale = 1;
-      break;
-    case 'scale-down':
-      scale = Math.min(1, containScale);
-      break;
-    default:
-      return { left: 0, top: 0, width: elementWidth, height: elementHeight };
-  }
-
-  const width = sourceWidth * scale;
-  const height = sourceHeight * scale;
-  const [positionX, positionY] = parseObjectPosition(objectPosition);
-  return {
-    left: (elementWidth - width) * positionX,
-    top: (elementHeight - height) * positionY,
-    width,
-    height,
-  };
-}
-
-function parseObjectPosition(value: string): [number, number] {
-  const parts = value.trim().split(/\s+/);
-  const first = parts[0] ?? '50%';
-  const second = parts[1] ?? '50%';
-  return [
-    parsePositionComponent(first, 'x'),
-    parsePositionComponent(second, 'y'),
-  ];
-}
-
-function parsePositionComponent(value: string, axis: 'x' | 'y'): number {
-  const keywordPositions: Record<string, number> = {
-    left: 0,
-    top: 0,
-    center: 0.5,
-    right: 1,
-    bottom: 1,
-  };
-  if (value in keywordPositions) return keywordPositions[value];
-  if (value.endsWith('%')) {
-    const percentage = Number.parseFloat(value);
-    if (Number.isFinite(percentage)) return percentage / 100;
-  }
-
-  // Computed styles normally normalize object-position to two percentages.
-  // For unsupported length/calc syntax, centering is the least surprising
-  // fallback and matches the browser default on either axis.
-  void axis;
-  return 0.5;
 }
 
 function getFrameCallbackApi(
