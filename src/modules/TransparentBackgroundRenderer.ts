@@ -4,12 +4,14 @@ import {
 } from '../lib/ClientMetrics';
 import { TransparentBackgroundOptions } from '../types/TransparentBackgroundOptions';
 
-// Calibrated on 96 person mattes after the engine's initial H.264 Main/I420
-// profile (520 kbps). A broad soft transition preserves fractional-alpha hair
-// substantially better than a narrow conventional chroma-key threshold.
-const DEFAULT_SIMILARITY = 0.02;
-const DEFAULT_SMOOTHNESS = 0.36;
-const DEFAULT_SPILL = 0.45;
+// Calibrated on the held-out person-matting set after the engine's JPEG q90
+// and H.264 Main/I420 path. A broad transition retains fractional-alpha hair;
+// the exact carrier inverse below removes the green contribution from it.
+const DEFAULT_SIMILARITY = 0.005;
+const DEFAULT_SMOOTHNESS = 0.56;
+const DEFAULT_SPILL = 1.0;
+const SPILL_GUARD_START_ALPHA = 0.9;
+const SPILL_GUARD_END_ALPHA = 0.995;
 const TELEMETRY_FRAME_INTERVAL = 250;
 
 const VERTEX_SHADER_SOURCE = `
@@ -23,10 +25,13 @@ void main() {
 `;
 
 // Key in chroma space so luminance variation introduced by H.264 does not
-// turn a uniformly-green background into a noisy alpha plane. Output is
-// premultiplied because that is the browser compositor's preferred WebGL
-// canvas representation and avoids a bright fringe at translucent edges.
-const FRAGMENT_SHADER_SOURCE = `
+// turn a uniformly-green background into a noisy alpha plane. The source
+// asset is composited over green directly in gamma-encoded sRGB, so subtracting
+// the estimated green contribution recovers premultiplied foreground. Merely
+// multiplying the carrier RGB by alpha would retain that green contribution
+// and produce a bright fringe at translucent edges.
+/** @internal */
+export const FRAGMENT_SHADER_SOURCE = `
 precision mediump float;
 
 uniform sampler2D u_frame;
@@ -51,13 +56,26 @@ void main() {
     chromaDistance
   );
 
-  float greenExcess = max(rgb.g - max(rgb.r, rgb.b), 0.0);
-  rgb.g = max(
-    rgb.g - greenExcess * u_spill * (1.0 - alpha),
+  vec3 premultiplied = clamp(
+    rgb - (1.0 - alpha) * vec3(0.0, 1.0, 0.0),
+    vec3(0.0),
+    vec3(alpha)
+  );
+  float spillGuard = 1.0 - smoothstep(
+    ${SPILL_GUARD_START_ALPHA.toFixed(3)},
+    ${SPILL_GUARD_END_ALPHA.toFixed(3)},
+    alpha
+  );
+  float greenExcess = max(
+    premultiplied.g - max(premultiplied.r, premultiplied.b),
+    0.0
+  );
+  premultiplied.g = max(
+    premultiplied.g - greenExcess * u_spill * spillGuard,
     0.0
   );
 
-  gl_FragColor = vec4(rgb * alpha, alpha);
+  gl_FragColor = vec4(premultiplied, alpha);
 }
 `;
 
@@ -523,7 +541,8 @@ function compileShader(
   return shader;
 }
 
-function resolveKeyOptions(
+/** @internal */
+export function resolveKeyOptions(
   options?: TransparentBackgroundOptions,
 ): ResolvedKeyOptions {
   return {
@@ -533,9 +552,45 @@ function resolveKeyOptions(
   };
 }
 
+/**
+ * CPU reference for the fragment shader's carrier inversion. Kept alongside
+ * the shader so focused tests can verify edge cases without a GPU dependency.
+ *
+ * @internal
+ */
+export function reconstructPremultipliedForeground(
+  rgb: readonly [number, number, number],
+  alphaValue: number,
+  spillValue = DEFAULT_SPILL,
+): [number, number, number] {
+  const alpha = clampUnit(alphaValue);
+  const spill = clampUnit(spillValue);
+  const premultiplied: [number, number, number] = [
+    Math.min(alpha, Math.max(0, rgb[0])),
+    Math.min(alpha, Math.max(0, rgb[1] - (1 - alpha))),
+    Math.min(alpha, Math.max(0, rgb[2])),
+  ];
+  const spillGuard =
+    1 - smoothstep(SPILL_GUARD_START_ALPHA, SPILL_GUARD_END_ALPHA, alpha);
+  const greenExcess = Math.max(
+    premultiplied[1] - Math.max(premultiplied[0], premultiplied[2]),
+    0,
+  );
+  premultiplied[1] = Math.max(
+    premultiplied[1] - greenExcess * spill * spillGuard,
+    0,
+  );
+  return premultiplied;
+}
+
 function clampUnit(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.min(1, Math.max(0, value));
+}
+
+function smoothstep(edge0: number, edge1: number, value: number): number {
+  const t = clampUnit((value - edge0) / (edge1 - edge0));
+  return t * t * (3 - 2 * t);
 }
 
 function roundMetric(value: number): number {
