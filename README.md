@@ -64,6 +64,28 @@ await anamClient.streamToVideoElement('video-element-id');
 
 This will start a new session using the pre-configured persona id and start streaming video element in the DOM with the matching element id.
 
+### Transparent avatar background
+
+Set `transparentBackground` when creating the client. The SDK requests the
+avatar's green-screen rendition and renders it through a source-resolution
+WebGL canvas over your video element.
+
+```typescript
+const anamClient = createClient('your-session-token', {
+  transparentBackground: true,
+});
+
+await anamClient.streamToVideoElement('video-element-id');
+```
+
+The supplied video must be attached to the DOM and should use `autoplay` and
+`playsinline` as usual. The underlying WebRTC `MediaStream` is still an opaque
+green-screen video; transparency exists in the SDK-managed canvas only. As a
+result, `stream()` returns the raw green source, and video-only browser features
+such as native controls and picture-in-picture do not automatically capture the
+transparent canvas. Use `getTransparentBackgroundCanvas()` if you need the
+managed canvas element for layout or capture behavior.
+
 To stop a session use the `stopStreaming` method.
 
 ```typescript

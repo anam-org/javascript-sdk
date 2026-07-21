@@ -1,5 +1,6 @@
 export type { AnamClientOptions } from './AnamClientOptions';
 export type { ConnectionMilestoneMetricsOptions } from './ConnectionMilestoneMetricsOptions';
+export type { TransparentBackgroundOptions } from './TransparentBackgroundOptions';
 export type * from './signalling';
 export { SignalMessageAction } from './signalling'; // need to export this explicitly to avoid enum import issues
 export type * from './streaming';

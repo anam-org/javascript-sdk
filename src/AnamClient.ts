@@ -203,6 +203,10 @@ export default class AnamClient {
     if (this.clientOptions?.voiceDetection) {
       sessionOptions.voiceDetection = this.clientOptions.voiceDetection;
     }
+    if (this.clientOptions?.transparentBackground !== undefined) {
+      sessionOptions.transparentBackground =
+        this.clientOptions.transparentBackground;
+    }
     // return undefined if no options are set
     if (Object.keys(sessionOptions).length === 0) {
       return undefined;
@@ -321,6 +325,10 @@ export default class AnamClient {
             disableInputAudio: this.clientOptions?.disableInputAudio,
           },
           apiGateway: this.clientOptions?.api?.apiGateway,
+          transparentBackground: {
+            enabled: this.clientOptions?.transparentBackground === true,
+            keyOptions: this.clientOptions?.transparentBackgroundOptions,
+          },
           metrics: {
             showPeerConnectionStatsReport:
               this.clientOptions?.metrics?.showPeerConnectionStatsReport ??
@@ -492,7 +500,6 @@ export default class AnamClient {
       });
       throw new Error('Already streaming');
     }
-    this._isStreaming = true;
     if (!this.streamingClient) {
       connectionMilestones.publishFailure({
         failureStage: 'streaming_client_missing',
@@ -502,14 +509,27 @@ export default class AnamClient {
 
     try {
       this.streamingClient.setMediaStreamTargetById(videoElementId);
+      this._isStreaming = true;
       this.streamingClient.startConnection();
     } catch (error) {
       connectionMilestones.publishFailure({
         failureStage: 'start_connection',
         ...getErrorMilestoneTags(error),
       });
+      // Renderer initialization (notably WebGL capability detection) happens
+      // after the server has allocated a session. Do not leak that session when
+      // the local render target cannot be created.
+      await this.stopStreaming();
       throw error;
     }
+  }
+
+  /**
+   * Returns the SDK-managed alpha canvas when transparent background rendering
+   * is enabled and `streamToVideoElement` has installed its render target.
+   */
+  public getTransparentBackgroundCanvas(): HTMLCanvasElement | null {
+    return this.streamingClient?.getTransparentBackgroundCanvas() ?? null;
   }
 
   /**
