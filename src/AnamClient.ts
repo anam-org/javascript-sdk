@@ -178,13 +178,9 @@ export default class AnamClient {
       }
     }
 
-    const directorNotesExpressivity =
-      personaConfig?.directorNotes?.expressivity;
-    if (
-      directorNotesExpressivity !== undefined &&
-      !isValidDirectorNotesExpressivity(directorNotesExpressivity)
-    ) {
-      return 'Director Notes expressivity must be a finite number between 0 and 1';
+    const personaConfigError = getPersonaConfigValidationError(personaConfig);
+    if (personaConfigError) {
+      return personaConfigError;
     }
 
     // Validate voice detection configuration
@@ -846,14 +842,10 @@ export default class AnamClient {
   private validatePersonaConfigOrThrow(
     personaConfig: PersonaConfig | undefined,
   ): void {
-    const directorNotesExpressivity =
-      personaConfig?.directorNotes?.expressivity;
-    if (
-      directorNotesExpressivity !== undefined &&
-      !isValidDirectorNotesExpressivity(directorNotesExpressivity)
-    ) {
+    const configError = getPersonaConfigValidationError(personaConfig);
+    if (configError) {
       throw new ClientError(
-        'Director Notes expressivity must be a finite number between 0 and 1',
+        configError,
         ErrorCode.CLIENT_ERROR_CODE_CONFIGURATION_ERROR,
         400,
       );
@@ -882,3 +874,16 @@ const isValidDirectorNotesExpressivity = (value: unknown): value is number =>
   Number.isFinite(value) &&
   value >= 0 &&
   value <= 1;
+
+const getPersonaConfigValidationError = (
+  personaConfig: PersonaConfig | undefined,
+): string | undefined => {
+  const directorNotesExpressivity = personaConfig?.directorNotes?.expressivity;
+  if (
+    directorNotesExpressivity !== undefined &&
+    !isValidDirectorNotesExpressivity(directorNotesExpressivity)
+  ) {
+    return 'Director Notes expressivity must be a finite number between 0 and 1';
+  }
+  return undefined;
+};
