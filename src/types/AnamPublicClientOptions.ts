@@ -1,5 +1,6 @@
 import { ApiOptions } from '../types';
 import { SessionOptions } from './coreApi/SessionOptions';
+import { ConnectionMilestoneMetricsOptions } from './ConnectionMilestoneMetricsOptions';
 import { VoiceDetectionOptions } from './VoiceDetectionOptions';
 
 export interface AnamPublicClientOptions {
@@ -14,7 +15,7 @@ export interface AnamPublicClientOptions {
   voiceDetection?: VoiceDetectionOptions;
   audioDeviceId?: string;
   disableInputAudio?: boolean;
-  metrics?: {
+  metrics?: ConnectionMilestoneMetricsOptions & {
     showPeerConnectionStatsReport?: boolean;
     peerConnectionStatsReportOutputFormat?: 'console' | 'json';
     /**

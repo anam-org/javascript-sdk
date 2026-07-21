@@ -11,6 +11,7 @@ import {
   setMetricsContext,
 } from './lib/ClientMetrics';
 import { generateCorrelationId } from './lib/correlationId';
+import { ClientConnectionMilestoneRecorder } from './lib/ConnectionMilestones';
 import { validateApiGatewayConfig } from './lib/validateApiGatewayConfig';
 import {
   CoreApiRestClient,
@@ -210,18 +211,58 @@ export default class AnamClient {
     return sessionOptions;
   }
 
+  private startConnectionAttempt(): ClientConnectionMilestoneRecorder {
+    const attemptCorrelationId = generateCorrelationId();
+    setMetricsContext({
+      attemptCorrelationId,
+      sessionId: null,
+      organizationId: this.organizationId,
+    });
+
+    const connectionMilestones = new ClientConnectionMilestoneRecorder({
+      context: {
+        attemptCorrelationId,
+        sessionId: null,
+        organizationId: this.organizationId,
+      },
+      connectionMilestoneSampleRatio:
+        this.clientOptions?.metrics?.connectionMilestoneSampleRatio,
+      slowConnectionThresholdMs:
+        this.clientOptions?.metrics?.slowConnectionThresholdMs,
+    });
+
+    sendClientMetric(
+      ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_SESSION_ATTEMPT,
+      '1',
+    );
+
+    return connectionMilestones;
+  }
+
   private async startSession(
     userProvidedAudioStream?: MediaStream,
+    connectionMilestones?: ClientConnectionMilestoneRecorder,
   ): Promise<string> {
     const config = this.personaConfig;
     // build session options from client options
     const sessionOptions: StartSessionOptions | undefined =
       this.buildStartSessionOptionsForClient();
     // start a new session
-    const response: StartSessionResponse = await this.apiClient.startSession(
-      config,
-      sessionOptions,
-    );
+    connectionMilestones?.record('start_session_request_started');
+    let response: StartSessionResponse;
+    try {
+      response = await this.apiClient.startSession(config, sessionOptions);
+      connectionMilestones?.record('start_session_request_completed');
+    } catch (error) {
+      connectionMilestones?.record('start_session_request_failed', {
+        ...getErrorMilestoneTags(error),
+      });
+      connectionMilestones?.publishFailure({
+        failureStage: 'start_session_request',
+        ...getErrorMilestoneTags(error),
+      });
+      throw error;
+    }
     const {
       sessionId,
       clientConfig,
@@ -233,12 +274,17 @@ export default class AnamClient {
       heartbeatIntervalSeconds,
       maxWsReconnectionAttempts,
       iceServers: defaultIceServers,
+      iceTransportPolicy,
     } = clientConfig;
 
     this.sessionId = sessionId;
     this.toolCallManager.setActiveSession(sessionId);
     setMetricsContext({
       sessionId: this.sessionId,
+    });
+    connectionMilestones?.updateContext({
+      sessionId: this.sessionId,
+      organizationId: this.organizationId,
     });
 
     // Use custom ICE servers if provided, otherwise use server-provided ICE servers.
@@ -265,6 +311,7 @@ export default class AnamClient {
             },
           },
           iceServers,
+          iceTransportPolicy,
           rtcConfiguration: this.clientOptions?.rtcConfiguration,
           inputAudio: {
             inputAudioState: this.inputAudioState,
@@ -287,8 +334,13 @@ export default class AnamClient {
         this.publicEventEmitter,
         this.internalEventEmitter,
         this.toolCallManager,
+        connectionMilestones,
       );
     } catch (error) {
+      connectionMilestones?.publishFailure({
+        failureStage: 'streaming_client_initialization',
+        ...getErrorMilestoneTags(error),
+      });
       this.toolCallManager.clearSessionState();
       setMetricsContext({
         sessionId: null,
@@ -307,11 +359,17 @@ export default class AnamClient {
     return sessionId;
   }
 
-  private async startSessionIfNeeded(userProvidedAudioStream?: MediaStream) {
+  private async startSessionIfNeeded(
+    userProvidedAudioStream?: MediaStream,
+    connectionMilestones?: ClientConnectionMilestoneRecorder,
+  ) {
     if (!this.sessionId || !this.streamingClient) {
-      await this.startSession(userProvidedAudioStream);
+      await this.startSession(userProvidedAudioStream, connectionMilestones);
 
       if (!this.sessionId || !this.streamingClient) {
+        connectionMilestones?.publishFailure({
+          failureStage: 'start_session_validation',
+        });
         throw new ClientError(
           'Session ID or streaming client is not available after starting session',
           ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
@@ -330,22 +388,24 @@ export default class AnamClient {
     if (this._isStreaming) {
       throw new Error('Already streaming');
     }
-    // generate a new ID here to track the attempt
-    const attemptCorrelationId = generateCorrelationId();
-    setMetricsContext({
-      attemptCorrelationId,
-      sessionId: null, // reset sessionId
-    });
-    sendClientMetric(
-      ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_SESSION_ATTEMPT,
-      '1',
-    );
+    const connectionMilestones = this.startConnectionAttempt();
     if (this.clientOptions?.disableInputAudio && userProvidedAudioStream) {
       console.warn(
         'AnamClient: Input audio is disabled. User-provided audio stream will be ignored.',
       );
     }
-    await this.startSessionIfNeeded(userProvidedAudioStream);
+    try {
+      await this.startSessionIfNeeded(
+        userProvidedAudioStream,
+        connectionMilestones,
+      );
+    } catch (error) {
+      connectionMilestones.publishFailure({
+        failureStage: 'start_session',
+        ...getErrorMilestoneTags(error),
+      });
+      throw error;
+    }
 
     this._isStreaming = true;
     return new Promise<MediaStream[]>((resolve) => {
@@ -396,24 +456,22 @@ export default class AnamClient {
     videoElementId: string,
     userProvidedAudioStream?: MediaStream,
   ): Promise<void> {
-    // generate a new ID here to track the attempt
-    const attemptCorrelationId = generateCorrelationId();
-    setMetricsContext({
-      attemptCorrelationId,
-      sessionId: null, // reset sessionId
-    });
-    sendClientMetric(
-      ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_SESSION_ATTEMPT,
-      '1',
-    );
+    const connectionMilestones = this.startConnectionAttempt();
     if (this.clientOptions?.disableInputAudio && userProvidedAudioStream) {
       console.warn(
         'AnamClient: Input audio is disabled. User-provided audio stream will be ignored.',
       );
     }
     try {
-      await this.startSessionIfNeeded(userProvidedAudioStream);
+      await this.startSessionIfNeeded(
+        userProvidedAudioStream,
+        connectionMilestones,
+      );
     } catch (error) {
+      connectionMilestones.publishFailure({
+        failureStage: 'start_session',
+        ...getErrorMilestoneTags(error),
+      });
       if (error instanceof ClientError) {
         throw error;
       }
@@ -430,15 +488,29 @@ export default class AnamClient {
     }
 
     if (this._isStreaming) {
+      connectionMilestones.publishFailure({
+        failureStage: 'already_streaming',
+      });
       throw new Error('Already streaming');
     }
     this._isStreaming = true;
     if (!this.streamingClient) {
+      connectionMilestones.publishFailure({
+        failureStage: 'streaming_client_missing',
+      });
       throw new Error('Failed to stream: streaming client is not available');
     }
 
-    this.streamingClient.setMediaStreamTargetById(videoElementId);
-    this.streamingClient.startConnection();
+    try {
+      this.streamingClient.setMediaStreamTargetById(videoElementId);
+      this.streamingClient.startConnection();
+    } catch (error) {
+      connectionMilestones.publishFailure({
+        failureStage: 'start_connection',
+        ...getErrorMilestoneTags(error),
+      });
+      throw error;
+    }
   }
 
   /**
@@ -703,3 +775,19 @@ export default class AnamClient {
     return this.toolCallManager.registerHandler(toolName, handler);
   }
 }
+
+const getErrorMilestoneTags = (
+  error: unknown,
+): Record<string, string | number> => {
+  if (error instanceof ClientError) {
+    return {
+      errorName: error.name,
+      errorCode: error.code,
+      httpStatusCode: error.statusCode,
+    };
+  }
+  if (error instanceof Error) {
+    return { errorName: error.name };
+  }
+  return {};
+};

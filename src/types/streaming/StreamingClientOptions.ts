@@ -7,6 +7,7 @@ export interface StreamingClientOptions {
   engine: EngineApiRestClientOptions;
   signalling: SignallingClientOptions;
   iceServers: RTCIceServer[];
+  iceTransportPolicy?: RTCIceTransportPolicy;
   rtcConfiguration?: RTCConfiguration;
   inputAudio: InputAudioOptions;
   apiGateway?: ApiGatewayConfig;
