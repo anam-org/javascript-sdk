@@ -2,10 +2,13 @@ const assert = require('assert');
 const {
   FRAGMENT_SHADER_SOURCE,
   PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
-  PACKED_STRAIGHT_ALPHA_FRAGMENT_SHADER_SOURCE,
+  detectLegacyChromaCarrier,
   reconstructPremultipliedForeground,
   resolveKeyOptions,
+  shouldFinalizeLegacyCarrierDetection,
 } = require('../dist/main/modules/TransparentBackgroundRenderer');
+
+const rgba = (pixels) => pixels.flatMap((pixel) => [...pixel, 255]);
 
 const closeTo = (actual, expected, message, epsilon = 1e-7) => {
   assert.equal(actual.length, expected.length, message);
@@ -21,6 +24,84 @@ assert.deepEqual(
   resolveKeyOptions(),
   { similarity: 0.005, smoothness: 0.56, spill: 1 },
   'calibrated defaults must remain explicit and covered by regression tests',
+);
+
+const detectedGreen = detectLegacyChromaCarrier(
+  rgba([
+    [2, 120, 53],
+    [0, 122, 51],
+    [4, 124, 50],
+    [210, 170, 130],
+  ]),
+);
+assert.equal(detectedGreen.name, 'green');
+closeTo(
+  detectedGreen.rgb,
+  [0, 122 / 255, 51 / 255],
+  'decoded dark-green border must select the deployed green carrier',
+);
+assert.equal(detectedGreen.matchedSamples, 3);
+
+const detectedBlue = detectLegacyChromaCarrier(
+  rgba([
+    [1, 72, 185],
+    [0, 71, 187],
+    [3, 69, 190],
+    [0, 220, 40],
+  ]),
+);
+assert.equal(detectedBlue.name, 'blue');
+closeTo(
+  detectedBlue.axis,
+  [0, 0, 1],
+  'decoded blue border must select only the blue key channel',
+);
+assert.equal(detectedBlue.matchedSamples, 3);
+
+const legacyBrightGreen = detectLegacyChromaCarrier(
+  rgba([
+    [0, 253, 1],
+    [2, 255, 0],
+  ]),
+);
+closeTo(
+  legacyBrightGreen.rgb,
+  [0, 1, 0],
+  'legacy pure-green avatars must retain their original key colour',
+);
+
+const unmatchedCarrier = detectLegacyChromaCarrier(
+  rgba([
+    [32, 128, 224],
+    [180, 120, 90],
+  ]),
+);
+assert.equal(unmatchedCarrier.name, 'green');
+assert.equal(unmatchedCarrier.matchedSamples, 0);
+closeTo(
+  unmatchedCarrier.rgb,
+  [0, 122 / 255, 51 / 255],
+  'an inconclusive sample must fail closed to the current green carrier',
+);
+assert.equal(
+  shouldFinalizeLegacyCarrierDetection(unmatchedCarrier, 1),
+  false,
+  'an inconclusive first decoded frame must be retried',
+);
+assert.equal(
+  shouldFinalizeLegacyCarrierDetection(unmatchedCarrier, 2),
+  false,
+  'an inconclusive second decoded frame must still be retried',
+);
+assert.equal(
+  shouldFinalizeLegacyCarrierDetection(unmatchedCarrier, 3),
+  true,
+  'inconclusive or tainted sampling must stop after a bounded third attempt',
+);
+assert.equal(
+  shouldFinalizeLegacyCarrierDetection(detectedBlue, 1),
+  true,
+  'a conclusive blue carrier must lock on the first valid frame',
 );
 assert.deepEqual(
   resolveKeyOptions({ similarity: 0.1, smoothness: 0.2, spill: 0 }),
@@ -95,6 +176,18 @@ closeTo(
   'spill=1 must apply the full guarded green-excess clamp at low alpha',
 );
 
+const blueForeground = [0.1, 0.8, 0.2];
+const blueAlpha = 0.5;
+const blueKey = [0, 71 / 255, 187 / 255];
+const blueComposite = blueForeground.map(
+  (channel, index) => blueAlpha * channel + (1 - blueAlpha) * blueKey[index],
+);
+closeTo(
+  reconstructPremultipliedForeground(blueComposite, blueAlpha, 0, blueKey),
+  blueForeground.map((channel) => channel * blueAlpha),
+  'blue-carrier inversion must preserve a deliberately green foreground',
+);
+
 for (const { rgb, alpha, spill } of [
   { rgb: [-0.2, 1.4, 0.7], alpha: 0.3, spill: 0 },
   { rgb: [0.8, 0.1, 1.2], alpha: 0.6, spill: 1 },
@@ -112,8 +205,13 @@ for (const { rgb, alpha, spill } of [
 
 assert.match(
   FRAGMENT_SHADER_SOURCE,
-  /rgb - \(1\.0 - alpha\) \* vec3\(0\.0, 1\.0, 0\.0\)/,
-  'shader must invert the gamma-encoded green carrier',
+  /rgb - \(1\.0 - alpha\) \* u_carrierColor/,
+  'shader must invert the selected gamma-encoded carrier',
+);
+assert.match(
+  FRAGMENT_SHADER_SOURCE,
+  /premultiplied - u_carrierAxis \* carrierExcess/,
+  'shader must despill only the selected green or blue channel',
 );
 assert.match(
   FRAGMENT_SHADER_SOURCE,
@@ -155,22 +253,6 @@ assert.doesNotMatch(
   PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
   /alpha\s*\*=\s*step|smoothstep\(/,
   'packed renderer must not threshold or reshape transported alpha',
-);
-
-assert.match(
-  PACKED_STRAIGHT_ALPHA_FRAGMENT_SHADER_SOURCE,
-  /vec3 premultiplied = straight \* alpha/,
-  'v2 must premultiply its padded straight colour by the explicit alpha in the client',
-);
-assert.match(
-  PACKED_STRAIGHT_ALPHA_FRAGMENT_SHADER_SOURCE,
-  /gl_FragColor = vec4\(min\(premultiplied, vec3\(alpha\)\), alpha\)/,
-  'v2 must submit valid premultiplied canvas colour',
-);
-assert.doesNotMatch(
-  PACKED_STRAIGHT_ALPHA_FRAGMENT_SHADER_SOURCE,
-  /u_similarity|u_smoothness|u_spill|chroma\(/,
-  'v2 must not re-key or despill its explicit server matte',
 );
 
 console.log('transparent background reconstruction harness passed');

@@ -1,7 +1,7 @@
 import { StartSessionOptions } from '../types/coreApi/StartSessionOptions';
 import {
+  PACKED_ALPHA_CPU_TRANSPORT,
   PACKED_ALPHA_TRANSPORT,
-  PACKED_STRAIGHT_ALPHA_TRANSPORT,
   TransparentBackgroundTransport,
 } from '../types/TransparentBackgroundTransport';
 
@@ -25,7 +25,7 @@ type MediaCapabilitiesLike = Pick<MediaCapabilities, 'decodingInfo'>;
 export type PackedAlphaCapability = 'supported' | 'unsupported' | 'unknown';
 
 /**
- * Query support for the H.264 Main Level 4.0 stream used by packed-alpha-v1/v2.
+ * Query support for the H.264 Main Level 4.0 packed-alpha stream.
  * Missing or inconclusive MediaCapabilities implementations are reported as
  * unknown. Callers conservatively retain the legacy carrier in that case: the
  * server requires an explicit Main-Level-4 offer, so guessing support could
@@ -72,14 +72,14 @@ export async function buildTransparentBackgroundSessionOptions(
   const capability = await detectPackedAlphaCapability(mediaCapabilities);
   if (capability !== 'supported') {
     console.warn(
-      'Packed transparent-background video support could not be confirmed as smooth on this device; falling back to legacy green-screen keying.',
+      'Packed transparent-background video support could not be confirmed as smooth on this device; falling back to legacy adaptive chroma keying.',
     );
     return { transparentBackground: true };
   }
 
   return {
     transparentBackground: true,
-    transparentBackgroundTransport: PACKED_STRAIGHT_ALPHA_TRANSPORT,
+    transparentBackgroundTransport: PACKED_ALPHA_TRANSPORT,
   };
 }
 
@@ -118,7 +118,7 @@ export function prepareOfferForTransparentBackgroundTransport(
 ): RTCSessionDescriptionInit {
   if (
     transport !== PACKED_ALPHA_TRANSPORT &&
-    transport !== PACKED_STRAIGHT_ALPHA_TRANSPORT
+    transport !== PACKED_ALPHA_CPU_TRANSPORT
   ) {
     return offer;
   }

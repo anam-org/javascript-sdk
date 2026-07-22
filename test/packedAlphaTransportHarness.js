@@ -6,11 +6,17 @@ const {
   promotePackedAlphaH264Level,
 } = require('../dist/main/modules/PackedAlphaTransport');
 const {
+  PACKED_ALPHA_CPU_TRANSPORT,
   PACKED_ALPHA_TRANSPORT,
   PACKED_STRAIGHT_ALPHA_TRANSPORT,
 } = require('../dist/main/types/TransparentBackgroundTransport');
 
 void (async () => {
+  assert.equal(
+    PACKED_STRAIGHT_ALPHA_TRANSPORT,
+    PACKED_ALPHA_CPU_TRANSPORT,
+    'the deprecated packed-straight constant must remain a v2 compatibility alias',
+  );
   let decodingConfiguration;
   const supportedMediaCapabilities = {
     decodingInfo: async (configuration) => {
@@ -41,9 +47,9 @@ void (async () => {
     ),
     {
       transparentBackground: true,
-      transparentBackgroundTransport: PACKED_STRAIGHT_ALPHA_TRANSPORT,
+      transparentBackgroundTransport: PACKED_ALPHA_TRANSPORT,
     },
-    'supported devices must request the straight-colour packed-alpha-v2 contract',
+    'supported devices must request the pre-JPEG premultiplied packed-alpha-v1 contract',
   );
 
   const originalWarn = console.warn;
@@ -61,12 +67,12 @@ void (async () => {
         }),
       }),
       { transparentBackground: true },
-      'an explicit unsupported result must retain the legacy green path',
+      'an explicit unsupported result must retain the legacy adaptive chroma path',
     );
   } finally {
     console.warn = originalWarn;
   }
-  assert.match(warning, /falling back to legacy green-screen keying/);
+  assert.match(warning, /falling back to legacy adaptive chroma keying/);
 
   assert.equal(
     await detectPackedAlphaCapability({
@@ -150,14 +156,14 @@ void (async () => {
   assert.notStrictEqual(packedOffer, ordinaryOffer);
   assert.equal(packedOffer.type, 'offer');
   assert.equal(packedOffer.sdp, promotedSdp);
-  const packedV2Offer = prepareOfferForTransparentBackgroundTransport(
+  const packedCpuOffer = prepareOfferForTransparentBackgroundTransport(
     ordinaryOffer,
-    PACKED_STRAIGHT_ALPHA_TRANSPORT,
+    PACKED_ALPHA_CPU_TRANSPORT,
   );
   assert.equal(
-    packedV2Offer.sdp,
+    packedCpuOffer.sdp,
     promotedSdp,
-    'v2 uses the same 1152x1536 H264 Level 4 transport geometry',
+    'the engine-CPU control uses the same packed H264 geometry',
   );
   assert.equal(
     ordinaryOffer.sdp,

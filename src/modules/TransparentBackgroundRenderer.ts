@@ -4,14 +4,14 @@ import {
 } from '../lib/ClientMetrics';
 import { TransparentBackgroundOptions } from '../types/TransparentBackgroundOptions';
 import {
+  PACKED_ALPHA_CPU_TRANSPORT,
   PACKED_ALPHA_TRANSPORT,
-  PACKED_STRAIGHT_ALPHA_TRANSPORT,
   TransparentBackgroundTransport,
 } from '../types/TransparentBackgroundTransport';
 
 // Calibrated on the held-out person-matting set after the engine's JPEG q90
 // and H.264 Main/I420 path. A broad transition retains fractional-alpha hair;
-// the exact carrier inverse below removes the green contribution from it.
+// the exact carrier inverse below removes the selected carrier contribution.
 const DEFAULT_SIMILARITY = 0.005;
 const DEFAULT_SMOOTHNESS = 0.56;
 const DEFAULT_SPILL = 1.0;
@@ -23,6 +23,39 @@ const BACKGROUND_ALPHA_FLOOR = 0.02;
 const SPILL_GUARD_START_ALPHA = 0.9;
 const SPILL_GUARD_END_ALPHA = 0.995;
 const TELEMETRY_FRAME_INTERVAL = 250;
+const LEGACY_CARRIER_SAMPLE_SIZE = 64;
+const LEGACY_CARRIER_MATCH_TOLERANCE = 48;
+const LEGACY_CARRIER_MAX_DETECTION_ATTEMPTS = 3;
+
+export interface LegacyChromaCarrier {
+  name: 'green' | 'blue';
+  rgb: readonly [number, number, number];
+  axis: readonly [number, number, number];
+  matchedSamples: number;
+}
+
+const LEGACY_GREEN_CARRIER: LegacyChromaCarrier = {
+  name: 'green',
+  rgb: [0, 122 / 255, 51 / 255],
+  axis: [0, 1, 0],
+  matchedSamples: 0,
+};
+
+const LEGACY_CARRIER_CANDIDATES: readonly LegacyChromaCarrier[] = [
+  LEGACY_GREEN_CARRIER,
+  {
+    name: 'blue',
+    rgb: [0, 71 / 255, 187 / 255],
+    axis: [0, 0, 1],
+    matchedSamples: 0,
+  },
+  {
+    name: 'green',
+    rgb: [0, 1, 0],
+    axis: [0, 1, 0],
+    matchedSamples: 0,
+  },
+];
 
 const VERTEX_SHADER_SOURCE = `
 attribute vec2 a_position;
@@ -34,12 +67,11 @@ void main() {
 }
 `;
 
-// Key in chroma space so luminance variation introduced by H.264 does not
-// turn a uniformly-green background into a noisy alpha plane. The source
-// asset is composited over green directly in gamma-encoded sRGB, so subtracting
-// the estimated green contribution recovers premultiplied foreground. Merely
-// multiplying the carrier RGB by alpha would retain that green contribution
-// and produce a bright fringe at translucent edges.
+// Key in chroma space so luminance variation introduced by H.264 does not turn
+// a uniform carrier into a noisy alpha plane. Avatar creation selects green or
+// blue to avoid foreground colour collisions; a one-time decoded-border sample
+// chooses the corresponding uniforms. Subtracting the gamma-encoded carrier
+// contribution recovers premultiplied foreground at translucent edges.
 /** @internal */
 export const FRAGMENT_SHADER_SOURCE = `
 precision mediump float;
@@ -48,6 +80,8 @@ uniform sampler2D u_frame;
 uniform float u_similarity;
 uniform float u_smoothness;
 uniform float u_spill;
+uniform vec3 u_carrierColor;
+uniform vec3 u_carrierAxis;
 varying vec2 v_texCoord;
 
 vec2 chroma(vec3 rgb) {
@@ -58,8 +92,7 @@ vec2 chroma(vec3 rgb) {
 
 void main() {
   vec3 rgb = texture2D(u_frame, v_texCoord).rgb;
-  vec2 greenChroma = chroma(vec3(0.0, 1.0, 0.0));
-  float chromaDistance = distance(chroma(rgb), greenChroma);
+  float chromaDistance = distance(chroma(rgb), chroma(u_carrierColor));
   float alpha = smoothstep(
     u_similarity,
     u_similarity + max(u_smoothness, 0.0001),
@@ -68,7 +101,7 @@ void main() {
   alpha *= step(${BACKGROUND_ALPHA_FLOOR.toFixed(3)}, alpha);
 
   vec3 premultiplied = clamp(
-    rgb - (1.0 - alpha) * vec3(0.0, 1.0, 0.0),
+    rgb - (1.0 - alpha) * u_carrierColor,
     vec3(0.0),
     vec3(alpha)
   );
@@ -77,22 +110,24 @@ void main() {
     ${SPILL_GUARD_END_ALPHA.toFixed(3)},
     alpha
   );
-  float greenExcess = max(
-    premultiplied.g - max(premultiplied.r, premultiplied.b),
+  float carrierValue = dot(premultiplied, u_carrierAxis);
+  vec3 otherChannels = premultiplied * (vec3(1.0) - u_carrierAxis);
+  float carrierExcess = max(
+    carrierValue - max(otherChannels.r, max(otherChannels.g, otherChannels.b)),
     0.0
   );
-  premultiplied.g = max(
-    premultiplied.g - greenExcess * u_spill * spillGuard,
-    0.0
+  premultiplied = max(
+    premultiplied - u_carrierAxis * carrierExcess * u_spill * spillGuard,
+    vec3(0.0)
   );
 
   gl_FragColor = vec4(premultiplied, alpha);
 }
 `;
 
-// packed-alpha-v1 carries already-premultiplied colour in the top half of the
-// video and a grayscale alpha plane in the bottom half. Sampling the planes
-// directly avoids another estimate, despill pass, or alpha cutoff in-browser.
+// Both packed transports carry already-premultiplied colour in the top half
+// and a grayscale alpha plane in the bottom half. V1 keys pre-JPEG in M2F; v2
+// is the engine-CPU post-JPEG control. The client reconstruction is identical.
 /** @internal */
 export const PACKED_ALPHA_FRAGMENT_SHADER_SOURCE = `
 precision mediump float;
@@ -120,34 +155,6 @@ void main() {
 }
 `;
 
-// packed-alpha-v2 carries padded straight (unassociated) colour. Multiplying
-// only after the separately decoded matte is sampled prevents 4:2:0 from
-// blending foreground chroma with transparent black at moving hair edges.
-/** @internal */
-export const PACKED_STRAIGHT_ALPHA_FRAGMENT_SHADER_SOURCE = `
-precision mediump float;
-
-uniform sampler2D u_frame;
-varying vec2 v_texCoord;
-
-void main() {
-  vec2 colourCoord = vec2(
-    v_texCoord.x,
-    0.5 + v_texCoord.y * 0.5
-  );
-  vec2 alphaCoord = vec2(
-    v_texCoord.x,
-    v_texCoord.y * 0.5
-  );
-  vec3 straight = texture2D(u_frame, colourCoord).rgb;
-  vec3 alphaRgb = texture2D(u_frame, alphaCoord).rgb;
-  float alpha = dot(alphaRgb, vec3(0.2126, 0.7152, 0.0722));
-  vec3 premultiplied = straight * alpha;
-
-  gl_FragColor = vec4(min(premultiplied, vec3(alpha)), alpha);
-}
-`;
-
 type OptionalVideoFrameCallbacks = {
   requestVideoFrameCallback?: (
     callback: (now: DOMHighResTimeStamp) => void,
@@ -169,10 +176,10 @@ interface GlResources {
   similarityLocation: WebGLUniformLocation;
   smoothnessLocation: WebGLUniformLocation;
   spillLocation: WebGLUniformLocation;
+  carrierColorLocation: WebGLUniformLocation;
+  carrierAxisLocation: WebGLUniformLocation;
   packedAlphaProgram: WebGLProgram;
   packedAlphaPositionLocation: number;
-  packedStraightAlphaProgram: WebGLProgram;
-  packedStraightAlphaPositionLocation: number;
 }
 
 export type TransparentFrameMode =
@@ -217,6 +224,9 @@ export class TransparentBackgroundRenderer {
   private readonly originalParentPosition: string;
   private changedParentPosition = false;
   private lastGeometrySignature: string | null = null;
+  private legacyCarrier: LegacyChromaCarrier = LEGACY_GREEN_CARRIER;
+  private legacyCarrierDetected = false;
+  private legacyCarrierDetectionAttempts = 0;
 
   constructor(
     video: HTMLVideoElement,
@@ -468,20 +478,15 @@ export class TransparentBackgroundRenderer {
       gl.viewport(0, 0, this.canvas.width, this.canvas.height);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      const packedAlpha = geometry.mode === PACKED_ALPHA_TRANSPORT;
-      const packedStraightAlpha =
-        geometry.mode === PACKED_STRAIGHT_ALPHA_TRANSPORT;
-      const packed = packedAlpha || packedStraightAlpha;
-      const program = packedStraightAlpha
-        ? this.resources.packedStraightAlphaProgram
-        : packedAlpha
-          ? this.resources.packedAlphaProgram
-          : this.resources.legacyProgram;
-      const positionLocation = packedStraightAlpha
-        ? this.resources.packedStraightAlphaPositionLocation
-        : packedAlpha
-          ? this.resources.packedAlphaPositionLocation
-          : this.resources.legacyPositionLocation;
+      const packedAlpha =
+        geometry.mode === PACKED_ALPHA_TRANSPORT ||
+        geometry.mode === PACKED_ALPHA_CPU_TRANSPORT;
+      const program = packedAlpha
+        ? this.resources.packedAlphaProgram
+        : this.resources.legacyProgram;
+      const positionLocation = packedAlpha
+        ? this.resources.packedAlphaPositionLocation
+        : this.resources.legacyPositionLocation;
       gl.useProgram(program);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.resources.positionBuffer);
       gl.enableVertexAttribArray(positionLocation);
@@ -497,7 +502,25 @@ export class TransparentBackgroundRenderer {
         gl.UNSIGNED_BYTE,
         this.video,
       );
-      if (!packed) {
+      if (!packedAlpha) {
+        if (!this.legacyCarrierDetected) {
+          const candidate = this.detectLegacyCarrierFromVideo();
+          this.legacyCarrierDetectionAttempts += 1;
+          if (
+            shouldFinalizeLegacyCarrierDetection(
+              candidate,
+              this.legacyCarrierDetectionAttempts,
+            )
+          ) {
+            this.legacyCarrier = candidate;
+            this.legacyCarrierDetected = true;
+            this.report('legacy_carrier_detected', 1, {
+              carrier: this.legacyCarrier.name,
+              matchedSamples: this.legacyCarrier.matchedSamples,
+              attempts: this.legacyCarrierDetectionAttempts,
+            });
+          }
+        }
         gl.uniform1f(
           this.resources.similarityLocation,
           this.keyOptions.similarity,
@@ -507,6 +530,18 @@ export class TransparentBackgroundRenderer {
           this.keyOptions.smoothness,
         );
         gl.uniform1f(this.resources.spillLocation, this.keyOptions.spill);
+        gl.uniform3f(
+          this.resources.carrierColorLocation,
+          this.legacyCarrier.rgb[0],
+          this.legacyCarrier.rgb[1],
+          this.legacyCarrier.rgb[2],
+        );
+        gl.uniform3f(
+          this.resources.carrierAxisLocation,
+          this.legacyCarrier.axis[0],
+          this.legacyCarrier.axis[1],
+          this.legacyCarrier.axis[2],
+        );
       }
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     } catch (error) {
@@ -541,6 +576,76 @@ export class TransparentBackgroundRenderer {
     }
   }
 
+  private detectLegacyCarrierFromVideo(): LegacyChromaCarrier {
+    try {
+      const sampleCanvas = document.createElement('canvas');
+      sampleCanvas.width = LEGACY_CARRIER_SAMPLE_SIZE;
+      sampleCanvas.height = 4;
+      const context = sampleCanvas.getContext('2d', {
+        willReadFrequently: true,
+      });
+      if (!context) return LEGACY_GREEN_CARRIER;
+
+      const sourceWidth = this.video.videoWidth;
+      const sourceHeight = this.video.videoHeight;
+      const border = Math.max(
+        1,
+        Math.floor(Math.min(sourceWidth, sourceHeight) / 64),
+      );
+      context.drawImage(
+        this.video,
+        0,
+        0,
+        sourceWidth,
+        border,
+        0,
+        0,
+        LEGACY_CARRIER_SAMPLE_SIZE,
+        1,
+      );
+      context.drawImage(
+        this.video,
+        0,
+        sourceHeight - border,
+        sourceWidth,
+        border,
+        0,
+        1,
+        LEGACY_CARRIER_SAMPLE_SIZE,
+        1,
+      );
+      context.drawImage(
+        this.video,
+        0,
+        0,
+        border,
+        sourceHeight,
+        0,
+        2,
+        LEGACY_CARRIER_SAMPLE_SIZE,
+        1,
+      );
+      context.drawImage(
+        this.video,
+        sourceWidth - border,
+        0,
+        border,
+        sourceHeight,
+        0,
+        3,
+        LEGACY_CARRIER_SAMPLE_SIZE,
+        1,
+      );
+      return detectLegacyChromaCarrier(
+        context.getImageData(0, 0, LEGACY_CARRIER_SAMPLE_SIZE, 4).data,
+      );
+    } catch {
+      // WebRTC video is normally origin-clean. If a custom media source taints
+      // the sampling canvas, retain the historical green fallback.
+      return LEGACY_GREEN_CARRIER;
+    }
+  }
+
   private applyFrameGeometry(geometry: TransparentFrameGeometry): void {
     const signature = `${geometry.mode}:${this.video.videoWidth}x${this.video.videoHeight}`;
     if (signature === this.lastGeometrySignature) return;
@@ -567,11 +672,11 @@ export class TransparentBackgroundRenderer {
     this.video.style.opacity = '0';
     if (
       (this.transport === PACKED_ALPHA_TRANSPORT ||
-        this.transport === PACKED_STRAIGHT_ALPHA_TRANSPORT) &&
+        this.transport === PACKED_ALPHA_CPU_TRANSPORT) &&
       geometry.mode === 'green-key-v1'
     ) {
       console.warn(
-        'Packed transparent-background transport returned a legacy green-screen frame; using the compatibility keyer.',
+        'Packed transparent-background transport returned a legacy chroma-carrier frame; using the adaptive compatibility keyer.',
       );
       this.report('transport_fallback', 1, {
         deliveredTransport: 'green-key-v1',
@@ -591,7 +696,6 @@ export class TransparentBackgroundRenderer {
     const gl = this.gl;
     let legacyProgram: WebGLProgram | null = null;
     let packedAlphaProgram: WebGLProgram | null = null;
-    let packedStraightAlphaProgram: WebGLProgram | null = null;
     let positionBuffer: WebGLBuffer | null = null;
     let texture: WebGLTexture | null = null;
 
@@ -605,11 +709,6 @@ export class TransparentBackgroundRenderer {
         gl,
         VERTEX_SHADER_SOURCE,
         PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
-      );
-      packedStraightAlphaProgram = createProgram(
-        gl,
-        VERTEX_SHADER_SOURCE,
-        PACKED_STRAIGHT_ALPHA_FRAGMENT_SHADER_SOURCE,
       );
 
       positionBuffer = gl.createBuffer();
@@ -637,10 +736,6 @@ export class TransparentBackgroundRenderer {
         packedAlphaProgram,
         'a_position',
       );
-      const packedStraightAlphaPositionLocation = gl.getAttribLocation(
-        packedStraightAlphaProgram,
-        'a_position',
-      );
       const similarityLocation = gl.getUniformLocation(
         legacyProgram,
         'u_similarity',
@@ -650,13 +745,22 @@ export class TransparentBackgroundRenderer {
         'u_smoothness',
       );
       const spillLocation = gl.getUniformLocation(legacyProgram, 'u_spill');
+      const carrierColorLocation = gl.getUniformLocation(
+        legacyProgram,
+        'u_carrierColor',
+      );
+      const carrierAxisLocation = gl.getUniformLocation(
+        legacyProgram,
+        'u_carrierAxis',
+      );
       if (
         legacyPositionLocation < 0 ||
         packedAlphaPositionLocation < 0 ||
-        packedStraightAlphaPositionLocation < 0 ||
         !similarityLocation ||
         !smoothnessLocation ||
-        !spillLocation
+        !spillLocation ||
+        !carrierColorLocation ||
+        !carrierAxisLocation
       ) {
         throw new Error(
           'Unable to resolve transparent renderer shader inputs.',
@@ -671,18 +775,16 @@ export class TransparentBackgroundRenderer {
         similarityLocation,
         smoothnessLocation,
         spillLocation,
+        carrierColorLocation,
+        carrierAxisLocation,
         packedAlphaProgram,
         packedAlphaPositionLocation,
-        packedStraightAlphaProgram,
-        packedStraightAlphaPositionLocation,
       };
     } catch (error) {
       if (positionBuffer) gl.deleteBuffer(positionBuffer);
       if (texture) gl.deleteTexture(texture);
       if (legacyProgram) gl.deleteProgram(legacyProgram);
       if (packedAlphaProgram) gl.deleteProgram(packedAlphaProgram);
-      if (packedStraightAlphaProgram)
-        gl.deleteProgram(packedStraightAlphaProgram);
       throw error;
     }
   }
@@ -693,7 +795,6 @@ export class TransparentBackgroundRenderer {
     gl.deleteTexture(resources.texture);
     gl.deleteProgram(resources.legacyProgram);
     gl.deleteProgram(resources.packedAlphaProgram);
-    gl.deleteProgram(resources.packedStraightAlphaProgram);
   }
 
   private onContextLost(event: Event): void {
@@ -811,7 +912,7 @@ export function resolveTransparentFrameGeometry(
 
   if (
     transport !== PACKED_ALPHA_TRANSPORT &&
-    transport !== PACKED_STRAIGHT_ALPHA_TRANSPORT
+    transport !== PACKED_ALPHA_CPU_TRANSPORT
   ) {
     return {
       mode: 'green-key-v1',
@@ -855,6 +956,67 @@ export function resolveKeyOptions(
 }
 
 /**
+ * Pick one legacy carrier from a small decoded border sample. The server-side
+ * packed path never calls this; it exists only for the compatibility keyer
+ * used when packed H.264 support cannot be confirmed on a device.
+ *
+ * @internal
+ */
+export function detectLegacyChromaCarrier(
+  rgbaSamples: ArrayLike<number>,
+): LegacyChromaCarrier {
+  if (rgbaSamples.length < 4) return { ...LEGACY_GREEN_CARRIER };
+
+  let winner = LEGACY_GREEN_CARRIER;
+  let winnerMatches = 0;
+  let winnerMatchedDistance = Number.POSITIVE_INFINITY;
+  for (const candidate of LEGACY_CARRIER_CANDIDATES) {
+    const carrierBytes = candidate.rgb.map((channel) => channel * 255);
+    let matches = 0;
+    let matchedDistance = 0;
+    for (let offset = 0; offset + 2 < rgbaSamples.length; offset += 4) {
+      const redDelta = Math.abs(rgbaSamples[offset] - carrierBytes[0]);
+      const greenDelta = Math.abs(rgbaSamples[offset + 1] - carrierBytes[1]);
+      const blueDelta = Math.abs(rgbaSamples[offset + 2] - carrierBytes[2]);
+      if (
+        Math.max(redDelta, greenDelta, blueDelta) <=
+        LEGACY_CARRIER_MATCH_TOLERANCE
+      ) {
+        matches += 1;
+        matchedDistance +=
+          redDelta * redDelta + greenDelta * greenDelta + blueDelta * blueDelta;
+      }
+    }
+    if (
+      matches > winnerMatches ||
+      (matches === winnerMatches &&
+        matches > 0 &&
+        matchedDistance < winnerMatchedDistance)
+    ) {
+      winner = candidate;
+      winnerMatches = matches;
+      winnerMatchedDistance = matchedDistance;
+    }
+  }
+
+  return {
+    ...winner,
+    matchedSamples: winnerMatches,
+  };
+}
+
+/** @internal */
+export function shouldFinalizeLegacyCarrierDetection(
+  carrier: LegacyChromaCarrier,
+  attempts: number,
+): boolean {
+  return (
+    carrier.matchedSamples > 0 ||
+    attempts >= LEGACY_CARRIER_MAX_DETECTION_ATTEMPTS
+  );
+}
+
+/**
  * CPU reference for the fragment shader's carrier inversion. Kept alongside
  * the shader so focused tests can verify edge cases without a GPU dependency.
  *
@@ -864,23 +1026,37 @@ export function reconstructPremultipliedForeground(
   rgb: readonly [number, number, number],
   alphaValue: number,
   spillValue = DEFAULT_SPILL,
+  carrierRgb: readonly [number, number, number] = [0, 1, 0],
 ): [number, number, number] {
   const unclippedAlpha = clampUnit(alphaValue);
   const alpha = unclippedAlpha < BACKGROUND_ALPHA_FLOOR ? 0 : unclippedAlpha;
   const spill = clampUnit(spillValue);
   const premultiplied: [number, number, number] = [
-    Math.min(alpha, Math.max(0, rgb[0])),
-    Math.min(alpha, Math.max(0, rgb[1] - (1 - alpha))),
-    Math.min(alpha, Math.max(0, rgb[2])),
+    Math.min(alpha, Math.max(0, rgb[0] - (1 - alpha) * carrierRgb[0])),
+    Math.min(alpha, Math.max(0, rgb[1] - (1 - alpha) * carrierRgb[1])),
+    Math.min(alpha, Math.max(0, rgb[2] - (1 - alpha) * carrierRgb[2])),
   ];
   const spillGuard =
     1 - smoothstep(SPILL_GUARD_START_ALPHA, SPILL_GUARD_END_ALPHA, alpha);
-  const greenExcess = Math.max(
-    premultiplied[1] - Math.max(premultiplied[0], premultiplied[2]),
+  const carrierChannel =
+    carrierRgb[2] > carrierRgb[1] && carrierRgb[2] > carrierRgb[0]
+      ? 2
+      : carrierRgb[1] > carrierRgb[0]
+        ? 1
+        : 0;
+  const otherChannels = [0, 1, 2].filter(
+    (channel) => channel !== carrierChannel,
+  );
+  const carrierExcess = Math.max(
+    premultiplied[carrierChannel] -
+      Math.max(
+        premultiplied[otherChannels[0]],
+        premultiplied[otherChannels[1]],
+      ),
     0,
   );
-  premultiplied[1] = Math.max(
-    premultiplied[1] - greenExcess * spill * spillGuard,
+  premultiplied[carrierChannel] = Math.max(
+    premultiplied[carrierChannel] - carrierExcess * spill * spillGuard,
     0,
   );
   return premultiplied;
