@@ -9,17 +9,20 @@ import {
   TransparentBackgroundTransport,
 } from '../types/TransparentBackgroundTransport';
 
-// Calibrated on the held-out person-matting set after the engine's JPEG q90
-// and H.264 Main/I420 path. A broad transition retains fractional-alpha hair;
-// the exact carrier inverse below removes the selected carrier contribution.
-const DEFAULT_SIMILARITY = 0.005;
-const DEFAULT_SMOOTHNESS = 0.56;
-const DEFAULT_SPILL = 1.0;
+// Calibrated on whole-subject fit/validation/test splits across raw, H.264
+// 520 kbps, and H.264 2.42 Mbps stages. RGB distance preserves fractional
+// hair better than the previous chroma-only key for the dark motion-safe
+// carriers. The guarded colour recovery avoids amplifying codec hue errors.
+const DEFAULT_SIMILARITY = 0.01;
+const DEFAULT_SMOOTHNESS = 0.44;
+const DEFAULT_SPILL = 0.5;
 // H.264/JPEG ringing leaves a very small non-zero alpha tail in otherwise
 // uniform background pixels. Keeping it produces a faint grey/coloured veil
 // over the page. The five-person transport holdout put the live p99.9 tail at
 // ~0.012; 0.02 clears it while changing edge error by only 0.2%.
 const BACKGROUND_ALPHA_FLOOR = 0.02;
+const RECOVERY_BLEND_START_ALPHA = 0.12;
+const RECOVERY_BLEND_END_ALPHA = 0.82;
 const SPILL_GUARD_START_ALPHA = 0.9;
 const SPILL_GUARD_END_ALPHA = 0.995;
 const TELEMETRY_FRAME_INTERVAL = 250;
@@ -67,11 +70,9 @@ void main() {
 }
 `;
 
-// Key in chroma space so luminance variation introduced by H.264 does not turn
-// a uniform carrier into a noisy alpha plane. Avatar creation selects green or
-// blue to avoid foreground colour collisions; a one-time decoded-border sample
-// chooses the corresponding uniforms. Subtracting the gamma-encoded carrier
-// contribution recovers premultiplied foreground at translucent edges.
+// Avatar creation selects green or blue to avoid foreground colour collisions;
+// a one-time decoded-border sample chooses the corresponding uniforms. The
+// distance and colour-recovery constants mirror the held-out server key.
 /** @internal */
 export const FRAGMENT_SHADER_SOURCE = `
 precision mediump float;
@@ -84,27 +85,28 @@ uniform vec3 u_carrierColor;
 uniform vec3 u_carrierAxis;
 varying vec2 v_texCoord;
 
-vec2 chroma(vec3 rgb) {
-  float cb = -0.168736 * rgb.r - 0.331264 * rgb.g + 0.5 * rgb.b;
-  float cr = 0.5 * rgb.r - 0.418688 * rgb.g - 0.081312 * rgb.b;
-  return vec2(cb, cr);
-}
-
 void main() {
   vec3 rgb = texture2D(u_frame, v_texCoord).rgb;
-  float chromaDistance = distance(chroma(rgb), chroma(u_carrierColor));
+  float carrierDistance = distance(rgb, u_carrierColor);
   float alpha = smoothstep(
     u_similarity,
     u_similarity + max(u_smoothness, 0.0001),
-    chromaDistance
+    carrierDistance
   );
   alpha *= step(${BACKGROUND_ALPHA_FLOOR.toFixed(3)}, alpha);
 
-  vec3 premultiplied = clamp(
+  vec3 subtracted = clamp(
     rgb - (1.0 - alpha) * u_carrierColor,
     vec3(0.0),
     vec3(alpha)
   );
+  vec3 observed = rgb * alpha;
+  float recoveryBlend = smoothstep(
+    ${RECOVERY_BLEND_START_ALPHA.toFixed(3)},
+    ${RECOVERY_BLEND_END_ALPHA.toFixed(3)},
+    alpha
+  );
+  vec3 premultiplied = mix(observed, subtracted, recoveryBlend);
   float spillGuard = 1.0 - smoothstep(
     ${SPILL_GUARD_START_ALPHA.toFixed(3)},
     ${SPILL_GUARD_END_ALPHA.toFixed(3)},
@@ -1017,8 +1019,9 @@ export function shouldFinalizeLegacyCarrierDetection(
 }
 
 /**
- * CPU reference for the fragment shader's carrier inversion. Kept alongside
- * the shader so focused tests can verify edge cases without a GPU dependency.
+ * CPU reference for the fragment shader's guarded colour recovery. Kept
+ * alongside the shader so focused tests can verify edge cases without a GPU
+ * dependency.
  *
  * @internal
  */
@@ -1026,16 +1029,31 @@ export function reconstructPremultipliedForeground(
   rgb: readonly [number, number, number],
   alphaValue: number,
   spillValue = DEFAULT_SPILL,
-  carrierRgb: readonly [number, number, number] = [0, 1, 0],
+  carrierRgb: readonly [number, number, number] = LEGACY_GREEN_CARRIER.rgb,
 ): [number, number, number] {
   const unclippedAlpha = clampUnit(alphaValue);
   const alpha = unclippedAlpha < BACKGROUND_ALPHA_FLOOR ? 0 : unclippedAlpha;
   const spill = clampUnit(spillValue);
-  const premultiplied: [number, number, number] = [
+  const subtracted: [number, number, number] = [
     Math.min(alpha, Math.max(0, rgb[0] - (1 - alpha) * carrierRgb[0])),
     Math.min(alpha, Math.max(0, rgb[1] - (1 - alpha) * carrierRgb[1])),
     Math.min(alpha, Math.max(0, rgb[2] - (1 - alpha) * carrierRgb[2])),
   ];
+  const observed: [number, number, number] = [
+    rgb[0] * alpha,
+    rgb[1] * alpha,
+    rgb[2] * alpha,
+  ];
+  const recoveryBlend = smoothstep(
+    RECOVERY_BLEND_START_ALPHA,
+    RECOVERY_BLEND_END_ALPHA,
+    alpha,
+  );
+  const premultiplied: [number, number, number] = [0, 1, 2].map(
+    (channel) =>
+      observed[channel] * (1 - recoveryBlend) +
+      subtracted[channel] * recoveryBlend,
+  ) as [number, number, number];
   const spillGuard =
     1 - smoothstep(SPILL_GUARD_START_ALPHA, SPILL_GUARD_END_ALPHA, alpha);
   const carrierChannel =
@@ -1060,6 +1078,38 @@ export function reconstructPremultipliedForeground(
     0,
   );
   return premultiplied;
+}
+
+/**
+ * CPU reference for the complete legacy fragment shader. Inputs and output
+ * are normalized sRGB/premultiplied RGBA respectively.
+ *
+ * @internal
+ */
+export function keyLegacyPixel(
+  rgb: readonly [number, number, number],
+  carrierRgb: readonly [number, number, number] = LEGACY_GREEN_CARRIER.rgb,
+  options?: TransparentBackgroundOptions,
+): [number, number, number, number] {
+  const resolved = resolveKeyOptions(options);
+  const distance = Math.sqrt(
+    (rgb[0] - carrierRgb[0]) ** 2 +
+      (rgb[1] - carrierRgb[1]) ** 2 +
+      (rgb[2] - carrierRgb[2]) ** 2,
+  );
+  const unclippedAlpha = smoothstep(
+    resolved.similarity,
+    resolved.similarity + Math.max(resolved.smoothness, 0.0001),
+    distance,
+  );
+  const alpha = unclippedAlpha < BACKGROUND_ALPHA_FLOOR ? 0 : unclippedAlpha;
+  const premultiplied = reconstructPremultipliedForeground(
+    rgb,
+    alpha,
+    resolved.spill,
+    carrierRgb,
+  );
+  return [...premultiplied, alpha];
 }
 
 function clampUnit(value: number): number {

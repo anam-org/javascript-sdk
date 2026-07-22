@@ -3,6 +3,7 @@ const {
   FRAGMENT_SHADER_SOURCE,
   PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
   detectLegacyChromaCarrier,
+  keyLegacyPixel,
   reconstructPremultipliedForeground,
   resolveKeyOptions,
   shouldFinalizeLegacyCarrierDetection,
@@ -22,7 +23,7 @@ const closeTo = (actual, expected, message, epsilon = 1e-7) => {
 
 assert.deepEqual(
   resolveKeyOptions(),
-  { similarity: 0.005, smoothness: 0.56, spill: 1 },
+  { similarity: 0.01, smoothness: 0.44, spill: 0.5 },
   'calibrated defaults must remain explicit and covered by regression tests',
 );
 
@@ -110,90 +111,100 @@ assert.deepEqual(
 );
 
 closeTo(
-  reconstructPremultipliedForeground([0, 1, 0], 0),
-  [0, 0, 0],
-  'fully transparent exact green must reconstruct to transparent black',
+  keyLegacyPixel([0, 122 / 255, 51 / 255]),
+  [0, 0, 0, 0],
+  'the exact dark-green carrier must reconstruct to transparent black',
+);
+
+closeTo(
+  keyLegacyPixel([0.02, 122 / 255, 51 / 255]),
+  [0, 0, 0, 0],
+  'the measured codec-noise alpha tail must be floored to transparent',
+);
+
+closeTo(
+  keyLegacyPixel([0.05, 122 / 255, 51 / 255]),
+  [
+    0.0011645379413974457, 0.007900590739676788, 0.004658151765589783,
+    0.023290758827948913,
+  ],
+  'a just-visible carrier deviation must match the held-out RGB key fixture',
+);
+
+const darkGreen = [0, 122 / 255, 51 / 255];
+closeTo(
+  keyLegacyPixel([0.12, 0.42, 0.18], darkGreen),
+  [
+    0.026715424077240528, 0.057808537750836525, 0.03477855641001681,
+    0.19615563544778447,
+  ],
+  'green-carrier guarded recovery must match the held-out CPU fixture',
+);
+
+const blueKey = [0, 71 / 255, 187 / 255];
+closeTo(
+  keyLegacyPixel([0.08, 0.35, 0.62], blueKey),
+  [
+    0.02658094751407277, 0.09548590370748197, 0.12334501296618385,
+    0.257536997095212,
+  ],
+  'blue-carrier guarded recovery must match the held-out CPU fixture',
+);
+
+closeTo(
+  keyLegacyPixel([0.05, 0.95, 0.08], darkGreen),
+  [0.05, 0.95, 0.08, 1],
+  'opaque genuine green must stay unchanged',
 );
 
 closeTo(
   reconstructPremultipliedForeground([0.01, 0.99, 0.01], 0.019),
   [0, 0, 0],
-  'sub-threshold codec noise must become fully transparent',
+  'the colour-recovery helper must apply the same background alpha floor',
 );
 
-const blonde = [0.8, 0.7, 0.55];
-const blondeAlpha = 0.5;
-const blondeCarrier = [
-  blondeAlpha * blonde[0],
-  blondeAlpha * blonde[1] + (1 - blondeAlpha),
-  blondeAlpha * blonde[2],
-];
+const guardedInput = [0.12, 0.42, 0.18];
+const guardedAlpha = 0.19615563544778447;
+const withoutDespill = reconstructPremultipliedForeground(
+  guardedInput,
+  guardedAlpha,
+  0,
+  darkGreen,
+);
+const withDespill = reconstructPremultipliedForeground(
+  guardedInput,
+  guardedAlpha,
+  1,
+  darkGreen,
+);
+assert.ok(
+  withDespill[1] < withoutDespill[1],
+  'despill must reduce only the carrier channel when it is excessive',
+);
 closeTo(
-  reconstructPremultipliedForeground(blondeCarrier, blondeAlpha),
-  blonde.map((channel) => channel * blondeAlpha),
-  'fractional blonde-like sRGB carrier must recover its premultiplied foreground',
+  [withDespill[0], withDespill[2]],
+  [withoutDespill[0], withoutDespill[2]],
+  'despill must preserve the non-carrier channels',
 );
 
-closeTo(
-  reconstructPremultipliedForeground([0.2, 0.3, 0.4], 1),
-  [0.2, 0.3, 0.4],
-  'opaque ordinary colour must stay unchanged',
-);
-closeTo(
-  reconstructPremultipliedForeground([0.05, 0.9, 0.08], 1),
-  [0.05, 0.9, 0.08],
-  'opaque genuine green must stay unchanged',
-);
-
-const guardEndAlpha = 0.995;
 const nearOpaqueGreen = [0.05, 0.9, 0.08];
-const nearOpaqueGreenCarrier = [
-  guardEndAlpha * nearOpaqueGreen[0],
-  guardEndAlpha * nearOpaqueGreen[1] + (1 - guardEndAlpha),
-  guardEndAlpha * nearOpaqueGreen[2],
-];
 closeTo(
-  reconstructPremultipliedForeground(nearOpaqueGreenCarrier, guardEndAlpha),
-  nearOpaqueGreen.map((channel) => channel * guardEndAlpha),
-  'green-spill clamp must be fully faded out by alpha 0.995',
+  reconstructPremultipliedForeground(nearOpaqueGreen, 1, 1, darkGreen),
+  nearOpaqueGreen,
+  'recovery and despill must preserve opaque foreground colour',
 );
 
-const greenForeground = [0.1, 0.9, 0.1];
-const greenAlpha = 0.5;
-const greenCarrier = [
-  greenAlpha * greenForeground[0],
-  greenAlpha * greenForeground[1] + (1 - greenAlpha),
-  greenAlpha * greenForeground[2],
-];
-closeTo(
-  reconstructPremultipliedForeground(greenCarrier, greenAlpha, 0),
-  greenForeground.map((channel) => channel * greenAlpha),
-  'spill=0 must perform only the exact carrier inverse',
-);
-closeTo(
-  reconstructPremultipliedForeground(greenCarrier, greenAlpha, 1),
-  [0.05, 0.05, 0.05],
-  'spill=1 must apply the full guarded green-excess clamp at low alpha',
-);
-
-const blueForeground = [0.1, 0.8, 0.2];
-const blueAlpha = 0.5;
-const blueKey = [0, 71 / 255, 187 / 255];
-const blueComposite = blueForeground.map(
-  (channel, index) => blueAlpha * channel + (1 - blueAlpha) * blueKey[index],
-);
-closeTo(
-  reconstructPremultipliedForeground(blueComposite, blueAlpha, 0, blueKey),
-  blueForeground.map((channel) => channel * blueAlpha),
-  'blue-carrier inversion must preserve a deliberately green foreground',
-);
-
-for (const { rgb, alpha, spill } of [
-  { rgb: [-0.2, 1.4, 0.7], alpha: 0.3, spill: 0 },
-  { rgb: [0.8, 0.1, 1.2], alpha: 0.6, spill: 1 },
-  { rgb: [0.5, 0.9, 0.2], alpha: 0.95, spill: 0.5 },
+for (const { rgb, alpha, spill, carrier } of [
+  { rgb: [0.2, 0.7, 0.3], alpha: 0.3, spill: 0, carrier: darkGreen },
+  { rgb: [0.8, 0.1, 1], alpha: 0.6, spill: 1, carrier: blueKey },
+  { rgb: [0.5, 0.9, 0.2], alpha: 0.95, spill: 0.5, carrier: darkGreen },
 ]) {
-  const reconstructed = reconstructPremultipliedForeground(rgb, alpha, spill);
+  const reconstructed = reconstructPremultipliedForeground(
+    rgb,
+    alpha,
+    spill,
+    carrier,
+  );
   reconstructed.forEach((channel) => {
     assert.ok(channel >= 0, 'premultiplied channels must not be negative');
     assert.ok(
@@ -205,8 +216,28 @@ for (const { rgb, alpha, spill } of [
 
 assert.match(
   FRAGMENT_SHADER_SOURCE,
+  /distance\(rgb, u_carrierColor\)/,
+  'shader must use normalized RGB distance from the detected carrier',
+);
+assert.match(
+  FRAGMENT_SHADER_SOURCE,
   /rgb - \(1\.0 - alpha\) \* u_carrierColor/,
-  'shader must invert the selected gamma-encoded carrier',
+  'shader must compute carrier-subtracted colour recovery',
+);
+assert.match(
+  FRAGMENT_SHADER_SOURCE,
+  /vec3 observed = rgb \* alpha/,
+  'shader must include observed-colour premultiplication',
+);
+assert.match(
+  FRAGMENT_SHADER_SOURCE,
+  /mix\(observed, subtracted, recoveryBlend\)/,
+  'shader must guard carrier subtraction with the calibrated blend',
+);
+assert.match(
+  FRAGMENT_SHADER_SOURCE,
+  /smoothstep\(\s*0\.120,\s*0\.820,\s*alpha/,
+  'shader must use the calibrated guarded-recovery alpha interval',
 );
 assert.match(
   FRAGMENT_SHADER_SOURCE,
@@ -246,7 +277,7 @@ assert.match(
 );
 assert.doesNotMatch(
   PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
-  /u_similarity|u_smoothness|u_spill|chroma\(/,
+  /u_similarity|u_smoothness|u_spill|carrierDistance|recoveryBlend/,
   'packed renderer must not run the legacy key or despill operations',
 );
 assert.doesNotMatch(
