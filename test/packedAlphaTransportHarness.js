@@ -7,6 +7,7 @@ const {
 } = require('../dist/main/modules/PackedAlphaTransport');
 const {
   PACKED_ALPHA_TRANSPORT,
+  PACKED_STRAIGHT_ALPHA_TRANSPORT,
 } = require('../dist/main/types/TransparentBackgroundTransport');
 
 void (async () => {
@@ -40,9 +41,9 @@ void (async () => {
     ),
     {
       transparentBackground: true,
-      transparentBackgroundTransport: PACKED_ALPHA_TRANSPORT,
+      transparentBackgroundTransport: PACKED_STRAIGHT_ALPHA_TRANSPORT,
     },
-    'supported devices must request packed-alpha-v1',
+    'supported devices must request the straight-colour packed-alpha-v2 contract',
   );
 
   const originalWarn = console.warn;
@@ -149,6 +150,15 @@ void (async () => {
   assert.notStrictEqual(packedOffer, ordinaryOffer);
   assert.equal(packedOffer.type, 'offer');
   assert.equal(packedOffer.sdp, promotedSdp);
+  const packedV2Offer = prepareOfferForTransparentBackgroundTransport(
+    ordinaryOffer,
+    PACKED_STRAIGHT_ALPHA_TRANSPORT,
+  );
+  assert.equal(
+    packedV2Offer.sdp,
+    promotedSdp,
+    'v2 uses the same 1152x1536 H264 Level 4 transport geometry',
+  );
   assert.equal(
     ordinaryOffer.sdp,
     ordinarySdp,

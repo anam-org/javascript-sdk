@@ -6,6 +6,7 @@ const {
 } = require('../dist/main/modules/TransparentBackgroundRenderer');
 const {
   PACKED_ALPHA_TRANSPORT,
+  PACKED_STRAIGHT_ALPHA_TRANSPORT,
 } = require('../dist/main/types/TransparentBackgroundTransport');
 
 setClientMetricsDisabled(true);
@@ -143,7 +144,7 @@ assert.deepEqual(
     buffers: cover.deletedResources.buffers.length,
     textures: cover.deletedResources.textures.length,
   },
-  { programs: 2, buffers: 1, textures: 1 },
+  { programs: 3, buffers: 1, textures: 1 },
   'destroy must release each shader program, buffer, and texture exactly once',
 );
 
@@ -164,6 +165,20 @@ assert.deepEqual(
     canvasHeight: 384,
   },
   'proportionally downscaled packed frames must preserve the two-plane layout',
+);
+assert.deepEqual(
+  resolveTransparentFrameGeometry(
+    1152,
+    1536,
+    PACKED_STRAIGHT_ALPHA_TRANSPORT,
+    2048,
+  ),
+  {
+    mode: 'packed-alpha-v2',
+    canvasWidth: 1152,
+    canvasHeight: 768,
+  },
+  'v2 must preserve the same two-plane geometry while selecting straight-colour reconstruction',
 );
 assert.deepEqual(
   resolveTransparentFrameGeometry(1152, 768, PACKED_ALPHA_TRANSPORT, 2048),

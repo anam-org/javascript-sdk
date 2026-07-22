@@ -1,6 +1,7 @@
 import { StartSessionOptions } from '../types/coreApi/StartSessionOptions';
 import {
   PACKED_ALPHA_TRANSPORT,
+  PACKED_STRAIGHT_ALPHA_TRANSPORT,
   TransparentBackgroundTransport,
 } from '../types/TransparentBackgroundTransport';
 
@@ -24,7 +25,7 @@ type MediaCapabilitiesLike = Pick<MediaCapabilities, 'decodingInfo'>;
 export type PackedAlphaCapability = 'supported' | 'unsupported' | 'unknown';
 
 /**
- * Query support for the H.264 Main Level 4.0 stream used by packed-alpha-v1.
+ * Query support for the H.264 Main Level 4.0 stream used by packed-alpha-v1/v2.
  * Missing or inconclusive MediaCapabilities implementations are reported as
  * unknown. Callers conservatively retain the legacy carrier in that case: the
  * server requires an explicit Main-Level-4 offer, so guessing support could
@@ -78,7 +79,7 @@ export async function buildTransparentBackgroundSessionOptions(
 
   return {
     transparentBackground: true,
-    transparentBackgroundTransport: PACKED_ALPHA_TRANSPORT,
+    transparentBackgroundTransport: PACKED_STRAIGHT_ALPHA_TRANSPORT,
   };
 }
 
@@ -115,6 +116,12 @@ export function prepareOfferForTransparentBackgroundTransport(
   offer: RTCSessionDescriptionInit,
   transport: TransparentBackgroundTransport | undefined,
 ): RTCSessionDescriptionInit {
-  if (transport !== PACKED_ALPHA_TRANSPORT || !offer.sdp) return offer;
+  if (
+    transport !== PACKED_ALPHA_TRANSPORT &&
+    transport !== PACKED_STRAIGHT_ALPHA_TRANSPORT
+  ) {
+    return offer;
+  }
+  if (!offer.sdp) return offer;
   return { ...offer, sdp: promotePackedAlphaH264Level(offer.sdp) };
 }

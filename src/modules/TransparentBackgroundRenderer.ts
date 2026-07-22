@@ -5,6 +5,7 @@ import {
 import { TransparentBackgroundOptions } from '../types/TransparentBackgroundOptions';
 import {
   PACKED_ALPHA_TRANSPORT,
+  PACKED_STRAIGHT_ALPHA_TRANSPORT,
   TransparentBackgroundTransport,
 } from '../types/TransparentBackgroundTransport';
 
@@ -119,6 +120,34 @@ void main() {
 }
 `;
 
+// packed-alpha-v2 carries padded straight (unassociated) colour. Multiplying
+// only after the separately decoded matte is sampled prevents 4:2:0 from
+// blending foreground chroma with transparent black at moving hair edges.
+/** @internal */
+export const PACKED_STRAIGHT_ALPHA_FRAGMENT_SHADER_SOURCE = `
+precision mediump float;
+
+uniform sampler2D u_frame;
+varying vec2 v_texCoord;
+
+void main() {
+  vec2 colourCoord = vec2(
+    v_texCoord.x,
+    0.5 + v_texCoord.y * 0.5
+  );
+  vec2 alphaCoord = vec2(
+    v_texCoord.x,
+    v_texCoord.y * 0.5
+  );
+  vec3 straight = texture2D(u_frame, colourCoord).rgb;
+  vec3 alphaRgb = texture2D(u_frame, alphaCoord).rgb;
+  float alpha = dot(alphaRgb, vec3(0.2126, 0.7152, 0.0722));
+  vec3 premultiplied = straight * alpha;
+
+  gl_FragColor = vec4(min(premultiplied, vec3(alpha)), alpha);
+}
+`;
+
 type OptionalVideoFrameCallbacks = {
   requestVideoFrameCallback?: (
     callback: (now: DOMHighResTimeStamp) => void,
@@ -142,11 +171,14 @@ interface GlResources {
   spillLocation: WebGLUniformLocation;
   packedAlphaProgram: WebGLProgram;
   packedAlphaPositionLocation: number;
+  packedStraightAlphaProgram: WebGLProgram;
+  packedStraightAlphaPositionLocation: number;
 }
 
 export type TransparentFrameMode =
   | 'green-key-v1'
   | 'packed-alpha-v1'
+  | 'packed-alpha-v2'
   | 'unsupported';
 
 export interface TransparentFrameGeometry {
@@ -437,12 +469,19 @@ export class TransparentBackgroundRenderer {
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       const packedAlpha = geometry.mode === PACKED_ALPHA_TRANSPORT;
-      const program = packedAlpha
-        ? this.resources.packedAlphaProgram
-        : this.resources.legacyProgram;
-      const positionLocation = packedAlpha
-        ? this.resources.packedAlphaPositionLocation
-        : this.resources.legacyPositionLocation;
+      const packedStraightAlpha =
+        geometry.mode === PACKED_STRAIGHT_ALPHA_TRANSPORT;
+      const packed = packedAlpha || packedStraightAlpha;
+      const program = packedStraightAlpha
+        ? this.resources.packedStraightAlphaProgram
+        : packedAlpha
+          ? this.resources.packedAlphaProgram
+          : this.resources.legacyProgram;
+      const positionLocation = packedStraightAlpha
+        ? this.resources.packedStraightAlphaPositionLocation
+        : packedAlpha
+          ? this.resources.packedAlphaPositionLocation
+          : this.resources.legacyPositionLocation;
       gl.useProgram(program);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.resources.positionBuffer);
       gl.enableVertexAttribArray(positionLocation);
@@ -458,7 +497,7 @@ export class TransparentBackgroundRenderer {
         gl.UNSIGNED_BYTE,
         this.video,
       );
-      if (!packedAlpha) {
+      if (!packed) {
         gl.uniform1f(
           this.resources.similarityLocation,
           this.keyOptions.similarity,
@@ -527,7 +566,8 @@ export class TransparentBackgroundRenderer {
     this.canvas.style.opacity = '';
     this.video.style.opacity = '0';
     if (
-      this.transport === PACKED_ALPHA_TRANSPORT &&
+      (this.transport === PACKED_ALPHA_TRANSPORT ||
+        this.transport === PACKED_STRAIGHT_ALPHA_TRANSPORT) &&
       geometry.mode === 'green-key-v1'
     ) {
       console.warn(
@@ -551,6 +591,7 @@ export class TransparentBackgroundRenderer {
     const gl = this.gl;
     let legacyProgram: WebGLProgram | null = null;
     let packedAlphaProgram: WebGLProgram | null = null;
+    let packedStraightAlphaProgram: WebGLProgram | null = null;
     let positionBuffer: WebGLBuffer | null = null;
     let texture: WebGLTexture | null = null;
 
@@ -564,6 +605,11 @@ export class TransparentBackgroundRenderer {
         gl,
         VERTEX_SHADER_SOURCE,
         PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
+      );
+      packedStraightAlphaProgram = createProgram(
+        gl,
+        VERTEX_SHADER_SOURCE,
+        PACKED_STRAIGHT_ALPHA_FRAGMENT_SHADER_SOURCE,
       );
 
       positionBuffer = gl.createBuffer();
@@ -591,6 +637,10 @@ export class TransparentBackgroundRenderer {
         packedAlphaProgram,
         'a_position',
       );
+      const packedStraightAlphaPositionLocation = gl.getAttribLocation(
+        packedStraightAlphaProgram,
+        'a_position',
+      );
       const similarityLocation = gl.getUniformLocation(
         legacyProgram,
         'u_similarity',
@@ -603,6 +653,7 @@ export class TransparentBackgroundRenderer {
       if (
         legacyPositionLocation < 0 ||
         packedAlphaPositionLocation < 0 ||
+        packedStraightAlphaPositionLocation < 0 ||
         !similarityLocation ||
         !smoothnessLocation ||
         !spillLocation
@@ -622,12 +673,16 @@ export class TransparentBackgroundRenderer {
         spillLocation,
         packedAlphaProgram,
         packedAlphaPositionLocation,
+        packedStraightAlphaProgram,
+        packedStraightAlphaPositionLocation,
       };
     } catch (error) {
       if (positionBuffer) gl.deleteBuffer(positionBuffer);
       if (texture) gl.deleteTexture(texture);
       if (legacyProgram) gl.deleteProgram(legacyProgram);
       if (packedAlphaProgram) gl.deleteProgram(packedAlphaProgram);
+      if (packedStraightAlphaProgram)
+        gl.deleteProgram(packedStraightAlphaProgram);
       throw error;
     }
   }
@@ -638,6 +693,7 @@ export class TransparentBackgroundRenderer {
     gl.deleteTexture(resources.texture);
     gl.deleteProgram(resources.legacyProgram);
     gl.deleteProgram(resources.packedAlphaProgram);
+    gl.deleteProgram(resources.packedStraightAlphaProgram);
   }
 
   private onContextLost(event: Event): void {
@@ -753,7 +809,10 @@ export function resolveTransparentFrameGeometry(
     };
   }
 
-  if (transport !== PACKED_ALPHA_TRANSPORT) {
+  if (
+    transport !== PACKED_ALPHA_TRANSPORT &&
+    transport !== PACKED_STRAIGHT_ALPHA_TRANSPORT
+  ) {
     return {
       mode: 'green-key-v1',
       canvasWidth: width,
@@ -763,7 +822,7 @@ export function resolveTransparentFrameGeometry(
 
   if (height % 2 === 0 && height * 3 === width * 4) {
     return {
-      mode: PACKED_ALPHA_TRANSPORT,
+      mode: transport,
       canvasWidth: width,
       canvasHeight: height / 2,
     };

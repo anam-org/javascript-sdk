@@ -2,6 +2,7 @@ const assert = require('assert');
 const {
   FRAGMENT_SHADER_SOURCE,
   PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
+  PACKED_STRAIGHT_ALPHA_FRAGMENT_SHADER_SOURCE,
   reconstructPremultipliedForeground,
   resolveKeyOptions,
 } = require('../dist/main/modules/TransparentBackgroundRenderer');
@@ -154,6 +155,22 @@ assert.doesNotMatch(
   PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
   /alpha\s*\*=\s*step|smoothstep\(/,
   'packed renderer must not threshold or reshape transported alpha',
+);
+
+assert.match(
+  PACKED_STRAIGHT_ALPHA_FRAGMENT_SHADER_SOURCE,
+  /vec3 premultiplied = straight \* alpha/,
+  'v2 must premultiply its padded straight colour by the explicit alpha in the client',
+);
+assert.match(
+  PACKED_STRAIGHT_ALPHA_FRAGMENT_SHADER_SOURCE,
+  /gl_FragColor = vec4\(min\(premultiplied, vec3\(alpha\)\), alpha\)/,
+  'v2 must submit valid premultiplied canvas colour',
+);
+assert.doesNotMatch(
+  PACKED_STRAIGHT_ALPHA_FRAGMENT_SHADER_SOURCE,
+  /u_similarity|u_smoothness|u_spill|chroma\(/,
+  'v2 must not re-key or despill its explicit server matte',
 );
 
 console.log('transparent background reconstruction harness passed');
