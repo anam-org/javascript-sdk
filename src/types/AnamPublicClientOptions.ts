@@ -6,7 +6,7 @@ export interface AnamPublicClientOptions {
   api?: ApiOptions;
   voiceDetection?: VoiceDetectionOptions;
   /**
-   * Show the AI avatar disclosure at session start.
+   * Show the AI avatar disclosure throughout the session.
    * Omit to use Anam's default. Explicit false requires an eligible plan.
    */
   showAiAvatarDisclosure?: boolean;

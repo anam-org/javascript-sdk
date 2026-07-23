@@ -107,7 +107,7 @@ import { createClient } from '@anam-ai/js-sdk';
 const anamClient = createClient('your-session-token');
 ```
 
-To request the AI avatar disclosure at session start:
+To show the AI avatar disclosure throughout the session:
 
 ```typescript
 const anamClient = createClient('your-session-token', {
