@@ -272,6 +272,21 @@ assert.match(
 );
 assert.match(
   PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
+  /v_texCoord\.x \* 0\.5/,
+  'packed renderer must sample portrait colour from the left half',
+);
+assert.match(
+  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
+  /0\.5 \+ v_texCoord\.x \* 0\.5/,
+  'packed renderer must sample portrait alpha from the right half',
+);
+assert.match(
+  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
+  /u_horizontalLayout/,
+  'packed renderer must select the orientation negotiated by frame geometry',
+);
+assert.match(
+  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
   /gl_FragColor = vec4\(min\(premultiplied, vec3\(alpha\)\), alpha\)/,
   'packed renderer must submit the transported premultiplied colour and alpha',
 );

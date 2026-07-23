@@ -127,24 +127,45 @@ void main() {
 }
 `;
 
-// Both packed transports carry already-premultiplied colour in the top half
-// and a grayscale alpha plane in the bottom half. V1 keys pre-JPEG in M2F; v2
-// is the engine-CPU post-JPEG control. The client reconstruction is identical.
+// Both packed transports carry already-premultiplied colour and a grayscale
+// alpha plane. Landscape stacks the planes vertically; portrait places them
+// side-by-side so neither wire dimension exceeds WebGL 1's guaranteed 2048
+// texture limit. V1 keys pre-JPEG in M2F; v2 is the engine-CPU post-JPEG
+// control. The client reconstruction is otherwise identical.
 /** @internal */
 export const PACKED_ALPHA_FRAGMENT_SHADER_SOURCE = `
 precision mediump float;
 
 uniform sampler2D u_frame;
+uniform float u_horizontalLayout;
 varying vec2 v_texCoord;
 
 void main() {
-  vec2 colourCoord = vec2(
+  vec2 verticalColourCoord = vec2(
     v_texCoord.x,
     0.5 + v_texCoord.y * 0.5
   );
-  vec2 alphaCoord = vec2(
+  vec2 verticalAlphaCoord = vec2(
     v_texCoord.x,
     v_texCoord.y * 0.5
+  );
+  vec2 horizontalColourCoord = vec2(
+    v_texCoord.x * 0.5,
+    v_texCoord.y
+  );
+  vec2 horizontalAlphaCoord = vec2(
+    0.5 + v_texCoord.x * 0.5,
+    v_texCoord.y
+  );
+  vec2 colourCoord = mix(
+    verticalColourCoord,
+    horizontalColourCoord,
+    u_horizontalLayout
+  );
+  vec2 alphaCoord = mix(
+    verticalAlphaCoord,
+    horizontalAlphaCoord,
+    u_horizontalLayout
   );
   vec3 premultiplied = texture2D(u_frame, colourCoord).rgb;
   vec3 alphaRgb = texture2D(u_frame, alphaCoord).rgb;
@@ -182,6 +203,7 @@ interface GlResources {
   carrierAxisLocation: WebGLUniformLocation;
   packedAlphaProgram: WebGLProgram;
   packedAlphaPositionLocation: number;
+  packedAlphaHorizontalLayoutLocation: WebGLUniformLocation;
 }
 
 export type TransparentFrameMode =
@@ -194,6 +216,7 @@ export interface TransparentFrameGeometry {
   mode: TransparentFrameMode;
   canvasWidth: number;
   canvasHeight: number;
+  packedLayout?: 'vertical' | 'horizontal';
   reason?: string;
 }
 
@@ -504,7 +527,12 @@ export class TransparentBackgroundRenderer {
         gl.UNSIGNED_BYTE,
         this.video,
       );
-      if (!packedAlpha) {
+      if (packedAlpha) {
+        gl.uniform1f(
+          this.resources.packedAlphaHorizontalLayoutLocation,
+          geometry.packedLayout === 'horizontal' ? 1 : 0,
+        );
+      } else {
         if (!this.legacyCarrierDetected) {
           const candidate = this.detectLegacyCarrierFromVideo();
           this.legacyCarrierDetectionAttempts += 1;
@@ -755,6 +783,10 @@ export class TransparentBackgroundRenderer {
         legacyProgram,
         'u_carrierAxis',
       );
+      const packedAlphaHorizontalLayoutLocation = gl.getUniformLocation(
+        packedAlphaProgram,
+        'u_horizontalLayout',
+      );
       if (
         legacyPositionLocation < 0 ||
         packedAlphaPositionLocation < 0 ||
@@ -762,7 +794,8 @@ export class TransparentBackgroundRenderer {
         !smoothnessLocation ||
         !spillLocation ||
         !carrierColorLocation ||
-        !carrierAxisLocation
+        !carrierAxisLocation ||
+        !packedAlphaHorizontalLayoutLocation
       ) {
         throw new Error(
           'Unable to resolve transparent renderer shader inputs.',
@@ -781,6 +814,7 @@ export class TransparentBackgroundRenderer {
         carrierAxisLocation,
         packedAlphaProgram,
         packedAlphaPositionLocation,
+        packedAlphaHorizontalLayoutLocation,
       };
     } catch (error) {
       if (positionBuffer) gl.deleteBuffer(positionBuffer);
@@ -877,10 +911,11 @@ function compileShader(
 }
 
 /**
- * Resolve the decoded frame layout before uploading it to WebGL. Packed
- * frames are 3:4 because two 3:2 planes are stacked vertically; legacy Cara 4
- * frames are 3:2. Ratio-based matching also permits a decoder to deliver a
- * proportionally downscaled frame without silently sampling the wrong plane.
+ * Resolve the decoded frame layout before uploading it to WebGL. Landscape
+ * packed frames are 3:4 (two 3:2 planes stacked vertically); portrait packed
+ * frames are 4:3 (two 2:3 planes placed horizontally). Ratio-based matching
+ * also permits a decoder to deliver a proportionally downscaled frame without
+ * silently sampling the wrong plane.
  *
  * @internal
  */
@@ -928,9 +963,18 @@ export function resolveTransparentFrameGeometry(
       mode: transport,
       canvasWidth: width,
       canvasHeight: height / 2,
+      packedLayout: 'vertical',
     };
   }
-  if (width * 2 === height * 3) {
+  if (width % 2 === 0 && width * 3 === height * 4) {
+    return {
+      mode: transport,
+      canvasWidth: width / 2,
+      canvasHeight: height,
+      packedLayout: 'horizontal',
+    };
+  }
+  if (width * 2 === height * 3 || height * 2 === width * 3) {
     return {
       mode: 'green-key-v1',
       canvasWidth: width,

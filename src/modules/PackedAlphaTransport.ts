@@ -5,19 +5,34 @@ import {
   TransparentBackgroundTransport,
 } from '../types/TransparentBackgroundTransport';
 
-const PACKED_ALPHA_DECODING_CONFIGURATION: MediaDecodingConfiguration = {
-  type: 'webrtc',
-  video: {
-    // Match the RTP format we actually negotiate. This is also the form used
-    // by the Media Capabilities specification's WebRTC H.264 example.
-    contentType:
-      'video/H264;level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d0028',
-    width: 1152,
-    height: 1536,
-    bitrate: 2_500_000,
-    framerate: 25,
-  },
-};
+const PACKED_ALPHA_VIDEO_CONFIGURATION = {
+  // Match the RTP format we actually negotiate. This is also the form used by
+  // the Media Capabilities specification's WebRTC H.264 example.
+  contentType:
+    'video/H264;level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d0028',
+  bitrate: 2_500_000,
+  framerate: 25,
+} as const;
+
+const PACKED_ALPHA_DECODING_CONFIGURATIONS: readonly MediaDecodingConfiguration[] =
+  [
+    {
+      type: 'webrtc',
+      video: {
+        ...PACKED_ALPHA_VIDEO_CONFIGURATION,
+        width: 1152,
+        height: 1536,
+      },
+    },
+    {
+      type: 'webrtc',
+      video: {
+        ...PACKED_ALPHA_VIDEO_CONFIGURATION,
+        width: 1536,
+        height: 1152,
+      },
+    },
+  ];
 
 type MediaCapabilitiesLike = Pick<MediaCapabilities, 'decodingInfo'>;
 
@@ -25,7 +40,10 @@ type MediaCapabilitiesLike = Pick<MediaCapabilities, 'decodingInfo'>;
 export type PackedAlphaCapability = 'supported' | 'unsupported' | 'unknown';
 
 /**
- * Query support for the H.264 Main Level 4.0 packed-alpha stream.
+ * Query support for both orientations of the H.264 Main Level 4.0 packed-alpha
+ * stream. MediaCapabilities results can be orientation-sensitive, and the SDK
+ * does not know the token's requested output dimensions at this point, so both
+ * landscape and portrait carriers must independently report supported+smooth.
  * Missing or inconclusive MediaCapabilities implementations are reported as
  * unknown. Callers conservatively retain the legacy carrier in that case: the
  * server requires an explicit Main-Level-4 offer, so guessing support could
@@ -42,13 +60,17 @@ export async function detectPackedAlphaCapability(
   if (!mediaCapabilities?.decodingInfo) return 'unknown';
 
   try {
-    const result = await mediaCapabilities.decodingInfo(
-      PACKED_ALPHA_DECODING_CONFIGURATION,
+    const results = await Promise.all(
+      PACKED_ALPHA_DECODING_CONFIGURATIONS.map((configuration) =>
+        mediaCapabilities.decodingInfo(configuration),
+      ),
     );
     // The packed frame doubles the decoded pixel count. A decoder that can
     // technically accept Main Level 4.0 but is not expected to sustain this
     // configuration should use the lower-resolution compatibility path.
-    return result.supported && result.smooth ? 'supported' : 'unsupported';
+    return results.every((result) => result.supported && result.smooth)
+      ? 'supported'
+      : 'unsupported';
   } catch {
     // Some browsers expose MediaCapabilities but reject WebRTC configurations.
     // Treat this as inconclusive; the caller keeps the compatibility path.

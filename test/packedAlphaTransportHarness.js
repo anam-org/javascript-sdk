@@ -17,10 +17,10 @@ void (async () => {
     PACKED_ALPHA_CPU_TRANSPORT,
     'the deprecated packed-straight constant must remain a v2 compatibility alias',
   );
-  let decodingConfiguration;
+  const decodingConfigurations = [];
   const supportedMediaCapabilities = {
     decodingInfo: async (configuration) => {
-      decodingConfiguration = configuration;
+      decodingConfigurations.push(configuration);
       return { supported: true, smooth: true, powerEfficient: true };
     },
   };
@@ -29,17 +29,34 @@ void (async () => {
     await detectPackedAlphaCapability(supportedMediaCapabilities),
     'supported',
   );
-  assert.deepEqual(decodingConfiguration, {
-    type: 'webrtc',
-    video: {
-      contentType:
-        'video/H264;level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d0028',
-      width: 1152,
-      height: 1536,
-      bitrate: 2500000,
-      framerate: 25,
-    },
-  });
+  assert.deepEqual(
+    decodingConfigurations,
+    [
+      {
+        type: 'webrtc',
+        video: {
+          contentType:
+            'video/H264;level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d0028',
+          width: 1152,
+          height: 1536,
+          bitrate: 2500000,
+          framerate: 25,
+        },
+      },
+      {
+        type: 'webrtc',
+        video: {
+          contentType:
+            'video/H264;level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d0028',
+          width: 1536,
+          height: 1152,
+          bitrate: 2500000,
+          framerate: 25,
+        },
+      },
+    ],
+    'capability detection must probe both packed wire orientations',
+  );
   assert.deepEqual(
     await buildTransparentBackgroundSessionOptions(
       true,
@@ -84,6 +101,27 @@ void (async () => {
     }),
     'unsupported',
     'a supported decoder that cannot sustain the packed resolution must use the compatibility path',
+  );
+
+  const orientationSpecificProbes = [];
+  assert.equal(
+    await detectPackedAlphaCapability({
+      decodingInfo: async (configuration) => {
+        orientationSpecificProbes.push(configuration);
+        return {
+          supported: configuration.video.width === 1152,
+          smooth: true,
+          powerEfficient: true,
+        };
+      },
+    }),
+    'unsupported',
+    'portrait decode support must not be inferred from landscape support',
+  );
+  assert.equal(
+    orientationSpecificProbes.length,
+    2,
+    'both orientations must be probed even when their results differ',
   );
 
   assert.deepEqual(

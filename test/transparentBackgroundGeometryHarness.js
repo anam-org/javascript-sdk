@@ -154,6 +154,7 @@ assert.deepEqual(
     mode: 'packed-alpha-v1',
     canvasWidth: 1152,
     canvasHeight: 768,
+    packedLayout: 'vertical',
   },
   'packed Cara 4 frames must expose a 1152x768 canvas',
 );
@@ -163,6 +164,7 @@ assert.deepEqual(
     mode: 'packed-alpha-v1',
     canvasWidth: 576,
     canvasHeight: 384,
+    packedLayout: 'vertical',
   },
   'proportionally downscaled packed frames must preserve the two-plane layout',
 );
@@ -172,8 +174,38 @@ assert.deepEqual(
     mode: 'packed-alpha-v2',
     canvasWidth: 1152,
     canvasHeight: 768,
+    packedLayout: 'vertical',
   },
   'the engine-CPU control must use the same premultiplied two-plane geometry',
+);
+assert.deepEqual(
+  resolveTransparentFrameGeometry(1536, 1152, PACKED_ALPHA_TRANSPORT, 2048),
+  {
+    mode: 'packed-alpha-v1',
+    canvasWidth: 768,
+    canvasHeight: 1152,
+    packedLayout: 'horizontal',
+  },
+  'packed Cara 4 portrait frames must expose a 768x1152 canvas',
+);
+assert.deepEqual(
+  resolveTransparentFrameGeometry(768, 576, PACKED_ALPHA_TRANSPORT, 2048),
+  {
+    mode: 'packed-alpha-v1',
+    canvasWidth: 384,
+    canvasHeight: 576,
+    packedLayout: 'horizontal',
+  },
+  'the portrait half-resolution ABR rung must preserve the two-plane layout',
+);
+assert.deepEqual(
+  resolveTransparentFrameGeometry(1536, 1152, undefined, 2048),
+  {
+    mode: 'green-key-v1',
+    canvasWidth: 1536,
+    canvasHeight: 1152,
+  },
+  'ordinary 4:3 video must never be unpacked without a negotiated packed transport',
 );
 assert.deepEqual(
   resolveTransparentFrameGeometry(1152, 768, PACKED_ALPHA_TRANSPORT, 2048),
@@ -183,6 +215,15 @@ assert.deepEqual(
     canvasHeight: 768,
   },
   'a standard Cara 4 frame must select the legacy keyer compatibility path',
+);
+assert.deepEqual(
+  resolveTransparentFrameGeometry(768, 1152, PACKED_ALPHA_TRANSPORT, 2048),
+  {
+    mode: 'green-key-v1',
+    canvasWidth: 768,
+    canvasHeight: 1152,
+  },
+  'a standard portrait Cara 4 frame must select the legacy keyer compatibility path',
 );
 assert.equal(
   resolveTransparentFrameGeometry(1280, 720, PACKED_ALPHA_TRANSPORT, 2048).mode,
