@@ -4,6 +4,7 @@ const {
   PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
   detectLegacyChromaCarrier,
   keyLegacyPixel,
+  reconstructPackedAlphaPixel,
   reconstructPremultipliedForeground,
   resolveKeyOptions,
   shouldFinalizeLegacyCarrierDetection,
@@ -290,15 +291,35 @@ assert.match(
   /gl_FragColor = vec4\(min\(premultiplied, vec3\(alpha\)\), alpha\)/,
   'packed renderer must submit the transported premultiplied colour and alpha',
 );
+assert.match(
+  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
+  /foreground = step\(\s*0\.070,\s*alpha\s*\)/,
+  'packed renderer must clear the decoded-video black pedestal',
+);
+assert.match(
+  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
+  /premultiplied \*= foreground/,
+  'packed renderer must clear pedestal colour together with pedestal alpha',
+);
 assert.doesNotMatch(
   PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
   /u_similarity|u_smoothness|u_spill|carrierDistance|recoveryBlend/,
   'packed renderer must not run the legacy key or despill operations',
 );
-assert.doesNotMatch(
-  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
-  /alpha\s*\*=\s*step|smoothstep\(/,
-  'packed renderer must not threshold or reshape transported alpha',
+closeTo(
+  reconstructPackedAlphaPixel([0.02, 0.03, 0.05], 16 / 255),
+  [0, 0, 0, 0],
+  'decoded limited-range black must reconstruct to transparent black',
+);
+closeTo(
+  reconstructPackedAlphaPixel([0.03, 0.08, 0.2], 0.2),
+  [0.03, 0.08, 0.2, 0.2],
+  'packed alpha above the pedestal must remain byte-for-byte unchanged',
+);
+closeTo(
+  reconstructPackedAlphaPixel([0.4, 0.1, 0.3], 0.25),
+  [0.25, 0.1, 0.25, 0.25],
+  'invalid premultiplied channels must still clamp to alpha',
 );
 
 console.log('transparent background reconstruction harness passed');

@@ -21,6 +21,12 @@ const DEFAULT_SPILL = 0.5;
 // over the page. The five-person transport holdout put the live p99.9 tail at
 // ~0.012; 0.02 clears it while changing edge error by only 0.2%.
 const BACKGROUND_ALPHA_FLOOR = 0.02;
+// Some browser hardware-decode paths expose limited-range video black to the
+// WebGL texture as roughly 12-16/255 instead of zero. Packed alpha transports
+// that decoder pedestal literally, painting a pale rectangle over the page
+// even though the server matte is zero. Clear only that sub-visible pedestal;
+// unlike feathering this leaves every alpha value above the floor unchanged.
+const PACKED_ALPHA_BACKGROUND_FLOOR = 0.07;
 const RECOVERY_BLEND_START_ALPHA = 0.12;
 const RECOVERY_BLEND_END_ALPHA = 0.82;
 const SPILL_GUARD_START_ALPHA = 0.9;
@@ -170,10 +176,17 @@ void main() {
   vec3 premultiplied = texture2D(u_frame, colourCoord).rgb;
   vec3 alphaRgb = texture2D(u_frame, alphaCoord).rgb;
   float alpha = dot(alphaRgb, vec3(0.2126, 0.7152, 0.0722));
+  float foreground = step(
+    ${PACKED_ALPHA_BACKGROUND_FLOOR.toFixed(3)},
+    alpha
+  );
+  alpha *= foreground;
+  premultiplied *= foreground;
 
   // Compression can make an individual premultiplied colour channel exceed
-  // alpha by a code value. Clamp only that invalid premultiplied state; do not
-  // estimate, despill, or threshold the transported matte.
+  // alpha by a code value. Clamp only that invalid premultiplied state after
+  // clearing the decoded-video black pedestal; do not estimate or despill the
+  // transported matte.
   gl_FragColor = vec4(min(premultiplied, vec3(alpha)), alpha);
 }
 `;
@@ -1122,6 +1135,28 @@ export function reconstructPremultipliedForeground(
     0,
   );
   return premultiplied;
+}
+
+/**
+ * CPU reference for packed-alpha black-pedestal removal.
+ *
+ * @internal
+ */
+export function reconstructPackedAlphaPixel(
+  premultipliedRgb: readonly [number, number, number],
+  alphaValue: number,
+): [number, number, number, number] {
+  const unclippedAlpha = clampUnit(alphaValue);
+  if (unclippedAlpha < PACKED_ALPHA_BACKGROUND_FLOOR) {
+    return [0, 0, 0, 0];
+  }
+
+  return [
+    Math.min(clampUnit(premultipliedRgb[0]), unclippedAlpha),
+    Math.min(clampUnit(premultipliedRgb[1]), unclippedAlpha),
+    Math.min(clampUnit(premultipliedRgb[2]), unclippedAlpha),
+    unclippedAlpha,
+  ];
 }
 
 /**
