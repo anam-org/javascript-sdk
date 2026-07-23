@@ -13,6 +13,7 @@ export enum ClientMetricMeasurement {
   CLIENT_METRIC_MEASUREMENT_SESSION_ATTEMPT = 'client_session_attempt',
   CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS = 'client_session_success',
   CLIENT_METRIC_MEASUREMENT_ICE_RESTART = 'client_ice_restart',
+  CLIENT_METRIC_MEASUREMENT_TRANSPARENT_RENDERER = 'client_transparent_renderer',
 }
 
 const CLIENT_METRICS_MAX_BATCH_SIZE = 50;
