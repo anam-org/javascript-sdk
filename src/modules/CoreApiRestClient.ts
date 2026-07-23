@@ -16,7 +16,6 @@ import {
 } from '../types';
 import { RetryOptions } from '../types/coreApi/ApiOptions';
 import { StartSessionOptions } from '../types/coreApi/StartSessionOptions';
-import { isCustomPersonaConfig } from '../types/PersonaConfig';
 
 interface ResolvedRetryOptions {
   maxAttempts: number;
@@ -263,12 +262,10 @@ export class CoreApiRestClient {
       );
     }
 
-    let body: { clientLabel: string; personaConfig?: PersonaConfig } = {
+    const body: { clientLabel: string; personaConfig: PersonaConfig } = {
       clientLabel: 'js-sdk-api-key',
+      personaConfig,
     };
-    if (isCustomPersonaConfig(personaConfig)) {
-      body = { ...body, personaConfig };
-    }
     try {
       const targetPath = `${this.apiVersion}/auth/session-token`;
       const { url, headers } = this.buildGatewayUrlAndHeaders(targetPath, {
@@ -281,10 +278,59 @@ export class CoreApiRestClient {
         headers,
         body: JSON.stringify(body),
       });
-      const data = await response.json();
+      let data: Record<string, unknown> = {};
+      try {
+        const responseBody: unknown = await response.json();
+        if (responseBody && typeof responseBody === 'object') {
+          data = responseBody as Record<string, unknown>;
+        }
+      } catch {
+        // Gateways can return empty or non-JSON error bodies. Status-based
+        // classification below must still preserve the real HTTP failure.
+      }
+      if (!response.ok) {
+        const isAuthenticationError =
+          response.status === 401 || response.status === 403;
+        const responseMessage =
+          typeof data.message === 'string'
+            ? data.message
+            : typeof data.error === 'string'
+              ? data.error
+              : `Request failed with HTTP status ${response.status}`;
+        const clientError = new ClientError(
+          'Failed to get session token',
+          isAuthenticationError
+            ? ErrorCode.CLIENT_ERROR_CODE_AUTHENTICATION_ERROR
+            : response.status >= 400 && response.status < 500
+              ? ErrorCode.CLIENT_ERROR_CODE_VALIDATION_ERROR
+              : ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
+          response.status,
+          { cause: responseMessage },
+        );
+        // Keep the response available to the caller without forwarding a
+        // potentially sensitive or unbounded validation body into metrics.
+        clientError.details = { cause: responseMessage, responseBody: data };
+        throw clientError;
+      }
+      if (typeof data.sessionToken !== 'string' || !data.sessionToken) {
+        throw new ClientError(
+          'Failed to get session token',
+          ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
+          500,
+          { cause: 'Response did not include a session token' },
+        );
+      }
       return data.sessionToken;
-    } catch (e) {
-      throw new Error('Failed to get session token');
+    } catch (error) {
+      if (error instanceof ClientError) {
+        throw error;
+      }
+      throw new ClientError(
+        'Failed to get session token',
+        ErrorCode.CLIENT_ERROR_CODE_SERVER_ERROR,
+        500,
+        { cause: error instanceof Error ? error.message : String(error) },
+      );
     }
   }
 

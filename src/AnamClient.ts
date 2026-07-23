@@ -27,6 +27,9 @@ import {
   AgentAudioInputConfig,
   AudioPermissionState,
   ConnectionClosedCode,
+  DIRECTOR_NOTE_CUE_TAGS,
+  DirectorNoteCueOptions,
+  DirectorNoteCueTag,
   EventCallbacks,
   InputAudioState,
   PersonaConfig,
@@ -177,6 +180,11 @@ export default class AnamClient {
       }
     }
 
+    const personaConfigError = getPersonaConfigValidationError(personaConfig);
+    if (personaConfigError) {
+      return personaConfigError;
+    }
+
     // Validate voice detection configuration
     if (options?.voiceDetection) {
       if (options.disableInputAudio) {
@@ -243,6 +251,7 @@ export default class AnamClient {
     connectionMilestones?: ClientConnectionMilestoneRecorder,
   ): Promise<string> {
     const config = this.personaConfig;
+    this.validatePersonaConfigOrThrow(config);
     // build session options from client options
     const sessionOptions: StartSessionOptions | undefined =
       this.buildStartSessionOptionsForClient();
@@ -621,6 +630,78 @@ export default class AnamClient {
     this.sendDataMessage(body);
   }
 
+  /**
+   * Send a Director Note cue to the active streaming session without purging
+   * buffered audio or video (Cara 4 avatars only).
+   *
+   * Omit timing to apply the cue immediately. `inSeconds` delays from now;
+   * `atSeconds` targets an absolute offset from the start of persona speech.
+   *
+   * @param tag - Runtime performance cue understood by the engine.
+   * @param options - Optional mutually exclusive cue timing.
+   * @throws Error if not currently streaming, if the data channel is not open,
+   * or if the cue is invalid
+   */
+  public sendDirectorNoteCue(
+    tag: DirectorNoteCueTag,
+    options: DirectorNoteCueOptions = {},
+  ): void {
+    if (!this._isStreaming) {
+      throw new Error(
+        'Failed to send Director Note cue: not currently streaming',
+      );
+    }
+
+    if (typeof tag !== 'string' || tag.length === 0) {
+      throw new Error(
+        'Failed to send Director Note cue: tag must not be empty',
+      );
+    }
+    if (Buffer.byteLength(tag, 'utf8') > 64) {
+      throw new Error(
+        'Failed to send Director Note cue: tag must not exceed 64 bytes',
+      );
+    }
+    if (!(DIRECTOR_NOTE_CUE_TAGS as readonly string[]).includes(tag)) {
+      throw new Error(
+        `Failed to send Director Note cue: unsupported tag "${tag}"`,
+      );
+    }
+
+    const { inSeconds, atSeconds } = options;
+    if (inSeconds !== undefined && atSeconds !== undefined) {
+      throw new Error(
+        'Failed to send Director Note cue: provide only one of inSeconds or atSeconds',
+      );
+    }
+    for (const [name, value] of [
+      ['inSeconds', inSeconds],
+      ['atSeconds', atSeconds],
+    ] as const) {
+      if (
+        value !== undefined &&
+        (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
+      ) {
+        throw new Error(
+          `Failed to send Director Note cue: ${name} must be a finite non-negative number`,
+        );
+      }
+    }
+
+    const body = JSON.stringify({
+      message_type: 'director_note_cue',
+      cue: { tag },
+      ...(inSeconds !== undefined ? { in_seconds: inSeconds } : {}),
+      ...(atSeconds !== undefined ? { at_seconds: atSeconds } : {}),
+    });
+
+    if (!this.streamingClient?.sendDataMessage(body)) {
+      throw new Error(
+        'Failed to send Director Note cue: data channel is not open',
+      );
+    }
+  }
+
   public async stopStreaming(): Promise<void> {
     if (this.streamingClient) {
       this.publicEventEmitter.emit(
@@ -645,6 +726,7 @@ export default class AnamClient {
   }
 
   public setPersonaConfig(personaConfig: PersonaConfig): void {
+    this.validatePersonaConfigOrThrow(personaConfig);
     this.personaConfig = personaConfig;
   }
 
@@ -773,6 +855,19 @@ export default class AnamClient {
   ): () => void {
     return this.toolCallManager.registerHandler(toolName, handler);
   }
+
+  private validatePersonaConfigOrThrow(
+    personaConfig: PersonaConfig | undefined,
+  ): void {
+    const configError = getPersonaConfigValidationError(personaConfig);
+    if (configError) {
+      throw new ClientError(
+        configError,
+        ErrorCode.CLIENT_ERROR_CODE_CONFIGURATION_ERROR,
+        400,
+      );
+    }
+  }
 }
 
 const getErrorMilestoneTags = (
@@ -789,4 +884,23 @@ const getErrorMilestoneTags = (
     return { errorName: error.name };
   }
   return {};
+};
+
+const isValidDirectorNotesExpressivity = (value: unknown): value is number =>
+  typeof value === 'number' &&
+  Number.isFinite(value) &&
+  value >= 0 &&
+  value <= 1;
+
+const getPersonaConfigValidationError = (
+  personaConfig: PersonaConfig | undefined,
+): string | undefined => {
+  const directorNotesExpressivity = personaConfig?.directorNotes?.expressivity;
+  if (
+    directorNotesExpressivity !== undefined &&
+    !isValidDirectorNotesExpressivity(directorNotesExpressivity)
+  ) {
+    return 'Director Notes expressivity must be a finite number between 0 and 1';
+  }
+  return undefined;
 };

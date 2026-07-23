@@ -21,3 +21,4 @@ export { ConnectionClosedCode } from './events'; // need to export this explicit
 export { AgentAudioInputStream } from './AgentAudioInputStream';
 export type * from './toolCalling';
 export type * from './directorNotes';
+export { DIRECTOR_NOTE_CUE_TAGS } from './directorNotes';

@@ -45,6 +45,7 @@ To use the SDK you first need to create an instance of `AnamClient`. For local d
 import { unsafe_createClientWithApiKey } from '@anam-ai/js-sdk';
 
 const anamClient = unsafe_createClientWithApiKey('your-api-key', {
+  personaId: '<PERSONA ID HERE>',
   name: 'Cara',
   avatarId: '30fa96d0-26c4-4e55-94a0-517025942e18',
   voiceId: '6bfbe25a-979d-40f3-a92b-5394170af54b',
@@ -109,3 +110,74 @@ const anamClient = createClient('your-session-token');
 Regardless of whether you initialise the client using an API key or session token the client exposes the same set of available methods for streaming.
 
 [See here](#starting-a-session-in-production-environments) for an example sequence diagram of starting a session in production environments.
+
+## Director Notes (Cara 4)
+
+On Cara 4 avatars you can add **Director Notes** to guide the avatar's performance. Provide either a built-in `presetStyle` **or** a free-form `customStylePrompt` — the two are mutually exclusive (enforced by the `DirectorNotes` type) — plus an optional `expressivity` value, normalized from `0` to `1`, controlling how expressively the style is played (lower values are steadier; higher values increase style and speech-driven motion together; omit it to use the engine default). Director Notes are forwarded unchanged to session-token creation and are only applied on Cara 4 avatars; on older models the server ignores them and the session proceeds without them.
+
+```typescript
+import { unsafe_createClientWithApiKey } from '@anam-ai/js-sdk';
+
+const anamClient = unsafe_createClientWithApiKey('your-api-key', {
+  personaId: '<PERSONA ID HERE>',
+  name: 'Cara',
+  // Use a Cara 4 avatar — Director Notes are ignored on older models.
+  avatarId: '30fa96d0-26c4-4e55-94a0-517025942e18',
+  voiceId: '6bfbe25a-979d-40f3-a92b-5394170af54b',
+  llmId: '<LLM ID HERE>',
+  systemPrompt:
+    '[STYLE] Reply in natural speech without formatting. [PERSONALITY] You are Cara, a helpful assistant.',
+  directorNotes: {
+    presetStyle: 'warm',
+    expressivity: 0.5,
+  },
+});
+```
+
+To use a free-form style instead of a preset, provide `customStylePrompt`:
+
+```typescript
+directorNotes: {
+  customStylePrompt:
+    'Warm smile, composed, slightly amused, looking directly at camera',
+  expressivity: 0.5,
+}
+```
+
+You can also set `expressivity` on its own to tune how expressively the avatar's default style is played:
+
+```typescript
+directorNotes: {
+  expressivity: 0.2,
+}
+```
+
+### Sending Director Note cues mid-session
+
+On Cara 4 you can use `sendDirectorNoteCue` to change the performance as a conversation unfolds. Cues use the engine's dedicated cue path, so they do not purge buffered audio or video. Data-channel cues are primarily for audio-passthrough sessions; for Turnkey sessions, prefer inline cue tags in persona speech text.
+
+```typescript
+import { AnamEvent, type DirectorNoteCueTag } from '@anam-ai/js-sdk';
+
+let cueChannelOpen = false;
+anamClient.addListener(AnamEvent.DATA_CHANNEL_OPEN, () => {
+  cueChannelOpen = true;
+});
+anamClient.addListener(AnamEvent.CONNECTION_CLOSED, () => {
+  cueChannelOpen = false;
+});
+
+// Call this later from your TTS timing callback for an active persona turn.
+function onTtsCue(tag: DirectorNoteCueTag, atSeconds: number) {
+  if (!cueChannelOpen) {
+    throw new Error('Director Note cue channel is not open');
+  }
+
+  anamClient.sendDirectorNoteCue(tag, { atSeconds });
+}
+
+// Wire onTtsCue to your TTS provider's cue/word-timing callback. For example,
+// report `warm` at 0 seconds and `surprised` at 1.25 seconds for that turn.
+```
+
+Register the listener before starting the stream so it cannot miss the event. Sending before `DATA_CHANNEL_OPEN` throws instead of silently dropping the cue. Omitting timing applies the cue immediately. `inSeconds` is a delay from now during an active response, while `atSeconds` is an absolute offset from the start of persona speech and is preferred when aligning cues to generated audio; provide at most one. Runtime cue tags also include cue-only styles such as `laughter`, `curious`, `concerned`, and `surprised` that are not available as session-start `presetStyle` values.

@@ -464,10 +464,12 @@ export class StreamingClient {
     this.sendDataMessage(JSON.stringify(message));
   }
 
-  public sendDataMessage(message: string) {
+  public sendDataMessage(message: string): boolean {
     if (this.dataChannel && this.dataChannel.readyState === 'open') {
       this.dataChannel.send(message);
+      return true;
     }
+    return false;
   }
 
   public setMediaStreamTargetById(videoElementId: string) {
@@ -1261,6 +1263,7 @@ export class StreamingClient {
     dataChannel.onopen = () => {
       this.dataChannel = dataChannel ?? null;
       this.connectionMilestones?.record('data_channel_open');
+      this.publicEventEmitter.emit(AnamEvent.DATA_CHANNEL_OPEN);
     };
     dataChannel.onclose = () => {
       this.connectionMilestones?.record('data_channel_closed');
