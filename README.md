@@ -107,6 +107,14 @@ import { createClient } from '@anam-ai/js-sdk';
 const anamClient = createClient('your-session-token');
 ```
 
+To show the AI avatar disclosure throughout the session:
+
+```typescript
+const anamClient = createClient('your-session-token', {
+  showAiAvatarDisclosure: true,
+});
+```
+
 Regardless of whether you initialise the client using an API key or session token the client exposes the same set of available methods for streaming.
 
 [See here](#starting-a-session-in-production-environments) for an example sequence diagram of starting a session in production environments.
