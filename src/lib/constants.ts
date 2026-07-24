@@ -8,6 +8,9 @@ export const DEFAULT_API_VERSION = '/v1'; // include the leading slash
 
 export const CLIENT_METADATA = {
   client: 'js-sdk',
+  // Placeholder substituted by semantic-release-mirror-version. The substitution
+  // must happen here in src, not only in dist: `npm publish` re-runs the `prepare`
+  // build, which would otherwise regenerate dist with the placeholder intact.
   version: '0.0.0-automated',
 };
 
