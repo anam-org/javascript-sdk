@@ -64,9 +64,9 @@ void (async () => {
     ),
     {
       transparentBackground: true,
-      transparentBackgroundTransport: PACKED_ALPHA_TRANSPORT,
+      transparentBackgroundTransport: PACKED_ALPHA_CPU_TRANSPORT,
     },
-    'supported devices must request the pre-JPEG premultiplied packed-alpha-v1 contract',
+    'supported devices must request the engine-CPU RGB-distance packed-alpha-v2 contract',
   );
 
   const originalWarn = console.warn;

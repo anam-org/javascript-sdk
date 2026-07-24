@@ -101,7 +101,7 @@ export async function buildTransparentBackgroundSessionOptions(
 
   return {
     transparentBackground: true,
-    transparentBackgroundTransport: PACKED_ALPHA_TRANSPORT,
+    transparentBackgroundTransport: PACKED_ALPHA_CPU_TRANSPORT,
   };
 }
 
