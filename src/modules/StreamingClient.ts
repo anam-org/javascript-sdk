@@ -506,7 +506,10 @@ export class StreamingClient {
           'StreamingClient - startConnection: error preparing peer connection',
           error,
         );
-        this.handleWebrtcFailure(error);
+        // If the connection was torn down while the pre-gather task was still
+        // in flight, shutdown() has already set iceRestartStopped and the
+        // rejection is expected - don't surface a spurious WebRTC failure.
+        if (!this.iceRestartStopped) this.handleWebrtcFailure(error);
       });
       // Establish the signalling channel concurrently with ICE gathering.
       this.signallingClient.connect();
