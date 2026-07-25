@@ -298,23 +298,13 @@ assert.match(
 );
 assert.match(
   PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
-  /uniform vec2 u_outputTexel/,
-  'packed renderer must express the feather in decoded output pixels',
+  /float alpha = unpackAlpha\(v_texCoord\)/,
+  'packed renderer must use the server-feathered transported alpha directly',
 );
-assert.match(
+assert.doesNotMatch(
   PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
-  /float e11 = min3/,
-  'packed renderer must erode only the outside edge',
-);
-assert.match(
-  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
-  /49\.0 \* b0 \+ 158\.0 \* b1 \+ 49\.0 \* b2/,
-  'packed renderer must apply the selected three-tap feather',
-);
-assert.match(
-  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
-  /premultiplied \*= alpha \/ max\(a22, 0\.0001\)/,
-  'packed renderer must keep colour premultiplied when alpha contracts',
+  /u_outputTexel|min3|49\.0 \* b0|premultiplied \*=/,
+  'packed renderer must not apply an additional client-side feather',
 );
 assert.doesNotMatch(
   PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
