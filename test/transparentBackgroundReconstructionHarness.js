@@ -278,7 +278,7 @@ assert.match(
 );
 assert.match(
   PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
-  /0\.5 \+ v_texCoord\.x \* 0\.5/,
+  /0\.5 \+ outputCoord\.x \* 0\.5/,
   'packed renderer must sample portrait alpha from the right half',
 );
 assert.match(
@@ -293,13 +293,28 @@ assert.match(
 );
 assert.match(
   PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
-  /foreground = step\(\s*0\.070,\s*alpha\s*\)/,
+  /alpha \* step\(0\.070, alpha\)/,
   'packed renderer must clear the decoded-video black pedestal',
 );
 assert.match(
   PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
-  /premultiplied \*= foreground/,
-  'packed renderer must clear pedestal colour together with pedestal alpha',
+  /uniform vec2 u_outputTexel/,
+  'packed renderer must express the feather in decoded output pixels',
+);
+assert.match(
+  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
+  /float e11 = min3/,
+  'packed renderer must erode only the outside edge',
+);
+assert.match(
+  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
+  /49\.0 \* b0 \+ 158\.0 \* b1 \+ 49\.0 \* b2/,
+  'packed renderer must apply the selected three-tap feather',
+);
+assert.match(
+  PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,
+  /premultiplied \*= alpha \/ max\(a22, 0\.0001\)/,
+  'packed renderer must keep colour premultiplied when alpha contracts',
 );
 assert.doesNotMatch(
   PACKED_ALPHA_FRAGMENT_SHADER_SOURCE,

@@ -144,23 +144,39 @@ precision mediump float;
 
 uniform sampler2D u_frame;
 uniform float u_horizontalLayout;
+uniform vec2 u_outputTexel;
 varying vec2 v_texCoord;
+
+float unpackAlpha(vec2 outputCoord) {
+  vec2 verticalAlphaCoord = vec2(
+    outputCoord.x,
+    outputCoord.y * 0.5
+  );
+  vec2 horizontalAlphaCoord = vec2(
+    0.5 + outputCoord.x * 0.5,
+    outputCoord.y
+  );
+  vec2 alphaCoord = mix(
+    verticalAlphaCoord,
+    horizontalAlphaCoord,
+    u_horizontalLayout
+  );
+  vec3 alphaRgb = texture2D(u_frame, alphaCoord).rgb;
+  float alpha = dot(alphaRgb, vec3(0.2126, 0.7152, 0.0722));
+  return alpha * step(${PACKED_ALPHA_BACKGROUND_FLOOR.toFixed(3)}, alpha);
+}
+
+float min3(float a, float b, float c) {
+  return min(a, min(b, c));
+}
 
 void main() {
   vec2 verticalColourCoord = vec2(
     v_texCoord.x,
     0.5 + v_texCoord.y * 0.5
   );
-  vec2 verticalAlphaCoord = vec2(
-    v_texCoord.x,
-    v_texCoord.y * 0.5
-  );
   vec2 horizontalColourCoord = vec2(
     v_texCoord.x * 0.5,
-    v_texCoord.y
-  );
-  vec2 horizontalAlphaCoord = vec2(
-    0.5 + v_texCoord.x * 0.5,
     v_texCoord.y
   );
   vec2 colourCoord = mix(
@@ -168,20 +184,52 @@ void main() {
     horizontalColourCoord,
     u_horizontalLayout
   );
-  vec2 alphaCoord = mix(
-    verticalAlphaCoord,
-    horizontalAlphaCoord,
-    u_horizontalLayout
-  );
   vec3 premultiplied = texture2D(u_frame, colourCoord).rgb;
-  vec3 alphaRgb = texture2D(u_frame, alphaCoord).rgb;
-  float alpha = dot(alphaRgb, vec3(0.2126, 0.7152, 0.0722));
-  float foreground = step(
-    ${PACKED_ALPHA_BACKGROUND_FLOOR.toFixed(3)},
-    alpha
-  );
-  alpha *= foreground;
-  premultiplied *= foreground;
+
+  // Apply the selected one-sided 1.5 px feather after decode, in output-plane
+  // pixels. ABR may halve the packed carrier before it reaches the browser;
+  // post-decode treatment keeps the visible feather stable at every rung.
+  float a00 = unpackAlpha(v_texCoord + u_outputTexel * vec2(-2.0, -2.0));
+  float a01 = unpackAlpha(v_texCoord + u_outputTexel * vec2(-1.0, -2.0));
+  float a02 = unpackAlpha(v_texCoord + u_outputTexel * vec2( 0.0, -2.0));
+  float a03 = unpackAlpha(v_texCoord + u_outputTexel * vec2( 1.0, -2.0));
+  float a04 = unpackAlpha(v_texCoord + u_outputTexel * vec2( 2.0, -2.0));
+  float a10 = unpackAlpha(v_texCoord + u_outputTexel * vec2(-2.0, -1.0));
+  float a11 = unpackAlpha(v_texCoord + u_outputTexel * vec2(-1.0, -1.0));
+  float a12 = unpackAlpha(v_texCoord + u_outputTexel * vec2( 0.0, -1.0));
+  float a13 = unpackAlpha(v_texCoord + u_outputTexel * vec2( 1.0, -1.0));
+  float a14 = unpackAlpha(v_texCoord + u_outputTexel * vec2( 2.0, -1.0));
+  float a20 = unpackAlpha(v_texCoord + u_outputTexel * vec2(-2.0,  0.0));
+  float a21 = unpackAlpha(v_texCoord + u_outputTexel * vec2(-1.0,  0.0));
+  float a22 = unpackAlpha(v_texCoord);
+  float a23 = unpackAlpha(v_texCoord + u_outputTexel * vec2( 1.0,  0.0));
+  float a24 = unpackAlpha(v_texCoord + u_outputTexel * vec2( 2.0,  0.0));
+  float a30 = unpackAlpha(v_texCoord + u_outputTexel * vec2(-2.0,  1.0));
+  float a31 = unpackAlpha(v_texCoord + u_outputTexel * vec2(-1.0,  1.0));
+  float a32 = unpackAlpha(v_texCoord + u_outputTexel * vec2( 0.0,  1.0));
+  float a33 = unpackAlpha(v_texCoord + u_outputTexel * vec2( 1.0,  1.0));
+  float a34 = unpackAlpha(v_texCoord + u_outputTexel * vec2( 2.0,  1.0));
+  float a40 = unpackAlpha(v_texCoord + u_outputTexel * vec2(-2.0,  2.0));
+  float a41 = unpackAlpha(v_texCoord + u_outputTexel * vec2(-1.0,  2.0));
+  float a42 = unpackAlpha(v_texCoord + u_outputTexel * vec2( 0.0,  2.0));
+  float a43 = unpackAlpha(v_texCoord + u_outputTexel * vec2( 1.0,  2.0));
+  float a44 = unpackAlpha(v_texCoord + u_outputTexel * vec2( 2.0,  2.0));
+
+  float e00 = min3(min3(a00, a01, a02), min3(a10, a11, a12), min3(a20, a21, a22));
+  float e01 = min3(min3(a01, a02, a03), min3(a11, a12, a13), min3(a21, a22, a23));
+  float e02 = min3(min3(a02, a03, a04), min3(a12, a13, a14), min3(a22, a23, a24));
+  float e10 = min3(min3(a10, a11, a12), min3(a20, a21, a22), min3(a30, a31, a32));
+  float e11 = min3(min3(a11, a12, a13), min3(a21, a22, a23), min3(a31, a32, a33));
+  float e12 = min3(min3(a12, a13, a14), min3(a22, a23, a24), min3(a32, a33, a34));
+  float e20 = min3(min3(a20, a21, a22), min3(a30, a31, a32), min3(a40, a41, a42));
+  float e21 = min3(min3(a21, a22, a23), min3(a31, a32, a33), min3(a41, a42, a43));
+  float e22 = min3(min3(a22, a23, a24), min3(a32, a33, a34), min3(a42, a43, a44));
+
+  float b0 = (49.0 * e00 + 158.0 * e01 + 49.0 * e02) / 256.0;
+  float b1 = (49.0 * e10 + 158.0 * e11 + 49.0 * e12) / 256.0;
+  float b2 = (49.0 * e20 + 158.0 * e21 + 49.0 * e22) / 256.0;
+  float alpha = min(a22, (49.0 * b0 + 158.0 * b1 + 49.0 * b2) / 256.0);
+  premultiplied *= alpha / max(a22, 0.0001);
 
   // Compression can make an individual premultiplied colour channel exceed
   // alpha by a code value. Clamp only that invalid premultiplied state after
@@ -217,6 +265,7 @@ interface GlResources {
   packedAlphaProgram: WebGLProgram;
   packedAlphaPositionLocation: number;
   packedAlphaHorizontalLayoutLocation: WebGLUniformLocation;
+  packedAlphaOutputTexelLocation: WebGLUniformLocation;
 }
 
 export type TransparentFrameMode =
@@ -545,6 +594,11 @@ export class TransparentBackgroundRenderer {
           this.resources.packedAlphaHorizontalLayoutLocation,
           geometry.packedLayout === 'horizontal' ? 1 : 0,
         );
+        gl.uniform2f(
+          this.resources.packedAlphaOutputTexelLocation,
+          1 / this.canvas.width,
+          1 / this.canvas.height,
+        );
       } else {
         if (!this.legacyCarrierDetected) {
           const candidate = this.detectLegacyCarrierFromVideo();
@@ -800,6 +854,10 @@ export class TransparentBackgroundRenderer {
         packedAlphaProgram,
         'u_horizontalLayout',
       );
+      const packedAlphaOutputTexelLocation = gl.getUniformLocation(
+        packedAlphaProgram,
+        'u_outputTexel',
+      );
       if (
         legacyPositionLocation < 0 ||
         packedAlphaPositionLocation < 0 ||
@@ -808,7 +866,8 @@ export class TransparentBackgroundRenderer {
         !spillLocation ||
         !carrierColorLocation ||
         !carrierAxisLocation ||
-        !packedAlphaHorizontalLayoutLocation
+        !packedAlphaHorizontalLayoutLocation ||
+        !packedAlphaOutputTexelLocation
       ) {
         throw new Error(
           'Unable to resolve transparent renderer shader inputs.',
@@ -828,6 +887,7 @@ export class TransparentBackgroundRenderer {
         packedAlphaProgram,
         packedAlphaPositionLocation,
         packedAlphaHorizontalLayoutLocation,
+        packedAlphaOutputTexelLocation,
       };
     } catch (error) {
       if (positionBuffer) gl.deleteBuffer(positionBuffer);
