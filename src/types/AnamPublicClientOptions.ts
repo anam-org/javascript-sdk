@@ -5,11 +5,7 @@ import { VoiceDetectionOptions } from './VoiceDetectionOptions';
 export interface AnamPublicClientOptions {
   api?: ApiOptions;
   voiceDetection?: VoiceDetectionOptions;
-  /**
-   * Show the AI avatar disclosure throughout the session.
-   * Omit to use Anam's default. Explicit false requires an eligible plan.
-   */
-  showAiAvatarDisclosure?: boolean;
+  showAIAvatarDisclosure?: boolean;
   audioDeviceId?: string;
   disableInputAudio?: boolean;
   metrics?: ConnectionMilestoneMetricsOptions & {

@@ -211,9 +211,9 @@ export default class AnamClient {
     if (this.clientOptions?.voiceDetection) {
       sessionOptions.voiceDetection = this.clientOptions.voiceDetection;
     }
-    if (this.clientOptions?.showAiAvatarDisclosure !== undefined) {
-      sessionOptions.showAiAvatarDisclosure =
-        this.clientOptions.showAiAvatarDisclosure;
+    if (this.clientOptions?.showAIAvatarDisclosure !== undefined) {
+      sessionOptions.showAIAvatarDisclosure =
+        this.clientOptions.showAIAvatarDisclosure;
     }
     // return undefined if no options are set
     if (Object.keys(sessionOptions).length === 0) {
