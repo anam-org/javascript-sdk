@@ -105,7 +105,7 @@ export class ToolCallManager {
     }
 
     try {
-      let result = await handler.onStart(payload);
+      const result = await handler.onStart(payload);
       if (toolCallEvent.tool_type === 'client') {
         this.sendToolResult({
           sessionId: toolCallEvent.session_id,

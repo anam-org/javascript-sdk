@@ -19,7 +19,7 @@ export class EngineApiRestClient {
     try {
       // Determine the URL and headers based on API Gateway configuration
       let url: string;
-      let headers: Record<string, string> = {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
 
