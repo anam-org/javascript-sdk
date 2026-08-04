@@ -39,8 +39,8 @@ const detectedGreen = detectLegacyChromaCarrier(
 assert.equal(detectedGreen.name, 'green');
 closeTo(
   detectedGreen.rgb,
-  [0, 122 / 255, 51 / 255],
-  'decoded dark-green border must select the deployed green carrier',
+  [2 / 255, 122 / 255, 51 / 255],
+  'decoded dark-green border must calibrate the selected carrier',
 );
 assert.equal(detectedGreen.matchedSamples, 3);
 
@@ -59,6 +59,11 @@ closeTo(
   'decoded blue border must select only the blue key channel',
 );
 assert.equal(detectedBlue.matchedSamples, 3);
+closeTo(
+  detectedBlue.rgb,
+  [1 / 255, 71 / 255, 187 / 255],
+  'decoded blue border must calibrate the selected carrier',
+);
 
 const legacyBrightGreen = detectLegacyChromaCarrier(
   rgba([
@@ -68,8 +73,37 @@ const legacyBrightGreen = detectLegacyChromaCarrier(
 );
 closeTo(
   legacyBrightGreen.rgb,
-  [0, 1, 0],
-  'legacy pure-green avatars must retain their original key colour',
+  [1 / 255, 254 / 255, 0.5 / 255],
+  'legacy pure-green avatars must calibrate around their decoded key colour',
+);
+
+const liftedDecodedCarrier = detectLegacyChromaCarrier(
+  rgba([
+    [13, 130, 62],
+    [15, 132, 64],
+    [14, 131, 63],
+    [210, 170, 130],
+  ]),
+);
+closeTo(
+  liftedDecodedCarrier.rgb,
+  [14 / 255, 131 / 255, 63 / 255],
+  'limited-range decode lift must be absorbed into the local carrier key',
+);
+assert.ok(
+  keyLegacyPixel(
+    [14 / 255, 131 / 255, 63 / 255],
+    [0, 122 / 255, 51 / 255],
+  )[3] > 0.02,
+  'the ideal server key reproduces the visible frame-shaped alpha veil',
+);
+closeTo(
+  keyLegacyPixel(
+    [14 / 255, 131 / 255, 63 / 255],
+    liftedDecodedCarrier.rgb,
+  ),
+  [0, 0, 0, 0],
+  'the decoded local key must reconstruct the lifted carrier as transparent',
 );
 
 const unmatchedCarrier = detectLegacyChromaCarrier(

@@ -1028,10 +1028,12 @@ export function detectLegacyChromaCarrier(
   let winner = LEGACY_GREEN_CARRIER;
   let winnerMatches = 0;
   let winnerMatchedDistance = Number.POSITIVE_INFINITY;
+  let winnerMatchedPixels: Array<readonly [number, number, number]> = [];
   for (const candidate of LEGACY_CARRIER_CANDIDATES) {
     const carrierBytes = candidate.rgb.map((channel) => channel * 255);
     let matches = 0;
     let matchedDistance = 0;
+    const matchedPixels: Array<readonly [number, number, number]> = [];
     for (let offset = 0; offset + 2 < rgbaSamples.length; offset += 4) {
       const redDelta = Math.abs(rgbaSamples[offset] - carrierBytes[0]);
       const greenDelta = Math.abs(rgbaSamples[offset + 1] - carrierBytes[1]);
@@ -1041,6 +1043,11 @@ export function detectLegacyChromaCarrier(
         LEGACY_CARRIER_MATCH_TOLERANCE
       ) {
         matches += 1;
+        matchedPixels.push([
+          rgbaSamples[offset],
+          rgbaSamples[offset + 1],
+          rgbaSamples[offset + 2],
+        ]);
         matchedDistance +=
           redDelta * redDelta + greenDelta * greenDelta + blueDelta * blueDelta;
       }
@@ -1054,13 +1061,39 @@ export function detectLegacyChromaCarrier(
       winner = candidate;
       winnerMatches = matches;
       winnerMatchedDistance = matchedDistance;
+      winnerMatchedPixels = matchedPixels;
     }
   }
 
+  // Browser video decode is not colour-exact. In particular, limited-range
+  // H.264 paths can lift or shift every carrier pixel by enough that keying
+  // against the ideal server RGB leaves a faint, frame-shaped alpha veil.
+  // The matched border pixels are the carrier after that decode path. Their
+  // per-channel medians give us a robust local key colour while ignoring the
+  // foreground pixels that can touch one edge of the frame.
+  const decodedRgb =
+    winnerMatches > 0
+      ? ([0, 1, 2].map((channel) =>
+          medianByte(winnerMatchedPixels.map((pixel) => pixel[channel])),
+        ) as [number, number, number])
+      : winner.rgb;
+
   return {
     ...winner,
+    rgb: decodedRgb,
     matchedSamples: winnerMatches,
   };
+}
+
+function medianByte(values: readonly number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  const median =
+    sorted.length % 2 === 0
+      ? (sorted[middle - 1] + sorted[middle]) / 2
+      : sorted[middle];
+  return clampUnit(median / 255);
 }
 
 /** @internal */
