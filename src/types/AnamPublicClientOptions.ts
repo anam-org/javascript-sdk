@@ -9,7 +9,8 @@ export interface AnamPublicClientOptions {
   /**
    * Selects the engine region for API-key clients. The region is bound to the
    * session token when the SDK mints it, so `strict` can prevent cross-region
-   * capacity failover for the entire session.
+   * capacity failover for the entire session. Known values today are `'eu'`
+   * and `'us'`; additional regions may be introduced over time.
    */
   sessionRegion?: SessionRegionOptions;
   audioDeviceId?: string;

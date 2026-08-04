@@ -56,7 +56,7 @@ export default class AnamClient {
   };
 
   private sessionId: string | null = null;
-  private servedRegion: 'eu' | 'us' | null = null;
+  private servedRegion: string | null = null;
   private organizationId: string | null = null;
 
   private streamingClient: StreamingClient | null = null;
@@ -859,7 +859,12 @@ export default class AnamClient {
     return this.sessionId;
   }
 
-  public getActiveSessionRegion(): 'eu' | 'us' | null {
+  /**
+   * Returns the region serving the active session. Known values today are
+   * `'eu'` and `'us'`; additional regions may be introduced over time. Treat
+   * unrecognized values as informational.
+   */
+  public getActiveSessionRegion(): string | null {
     return this.servedRegion;
   }
 
