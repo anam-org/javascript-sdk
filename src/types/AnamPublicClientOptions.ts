@@ -1,6 +1,7 @@
 import { ApiOptions } from '../types';
 import { ConnectionMilestoneMetricsOptions } from './ConnectionMilestoneMetricsOptions';
 import { VoiceDetectionOptions } from './VoiceDetectionOptions';
+import { TransparentBackgroundOptions } from './TransparentBackgroundOptions';
 
 export interface AnamPublicClientOptions {
   api?: ApiOptions;
@@ -25,4 +26,17 @@ export interface AnamPublicClientOptions {
    * precedence over `rtcConfiguration.iceServers`.
    */
   rtcConfiguration?: RTCConfiguration;
+  /**
+   * Request the avatar's transparent rendition and render it as a transparent
+   * WebGL canvas over the video element supplied to `streamToVideoElement`.
+   *
+   * The underlying MediaStream remains an ordinary opaque WebRTC video. Calls
+   * to `stream()` therefore return an opaque packed colour/matte video (or the
+   * legacy green-screen fallback); transparent pixels exist only in the
+   * SDK-managed canvas renderer.
+   * @default false
+   */
+  transparentBackground?: boolean;
+  /** Optional tuning for the legacy green-screen compatibility keyer. */
+  transparentBackgroundOptions?: TransparentBackgroundOptions;
 }

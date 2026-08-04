@@ -40,6 +40,7 @@ import {
 import { AgentAudioInputStream } from './types/AgentAudioInputStream';
 import { TalkMessageStream } from './types/TalkMessageStream';
 import { ToolCallManager } from './modules/ToolCallManager';
+import { buildTransparentBackgroundSessionOptions } from './modules/PackedAlphaTransport';
 export default class AnamClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
@@ -206,11 +207,19 @@ export default class AnamClient {
     return undefined;
   }
 
-  private buildStartSessionOptionsForClient(): StartSessionOptions | undefined {
+  private async buildStartSessionOptionsForClient(): Promise<
+    StartSessionOptions | undefined
+  > {
     const sessionOptions: StartSessionOptions = {};
     if (this.clientOptions?.voiceDetection) {
       sessionOptions.voiceDetection = this.clientOptions.voiceDetection;
     }
+    Object.assign(
+      sessionOptions,
+      await buildTransparentBackgroundSessionOptions(
+        this.clientOptions?.transparentBackground,
+      ),
+    );
     // return undefined if no options are set
     if (Object.keys(sessionOptions).length === 0) {
       return undefined;
@@ -254,7 +263,7 @@ export default class AnamClient {
     this.validatePersonaConfigOrThrow(config);
     // build session options from client options
     const sessionOptions: StartSessionOptions | undefined =
-      this.buildStartSessionOptionsForClient();
+      await this.buildStartSessionOptionsForClient();
     // start a new session
     connectionMilestones?.record('start_session_request_started');
     let response: StartSessionResponse;
@@ -330,6 +339,11 @@ export default class AnamClient {
             disableInputAudio: this.clientOptions?.disableInputAudio,
           },
           apiGateway: this.clientOptions?.api?.apiGateway,
+          transparentBackground: {
+            enabled: this.clientOptions?.transparentBackground === true,
+            keyOptions: this.clientOptions?.transparentBackgroundOptions,
+            transport: sessionOptions?.transparentBackgroundTransport,
+          },
           metrics: {
             showPeerConnectionStatsReport:
               this.clientOptions?.metrics?.showPeerConnectionStatsReport ??
@@ -501,7 +515,6 @@ export default class AnamClient {
       });
       throw new Error('Already streaming');
     }
-    this._isStreaming = true;
     if (!this.streamingClient) {
       connectionMilestones.publishFailure({
         failureStage: 'streaming_client_missing',
@@ -511,14 +524,27 @@ export default class AnamClient {
 
     try {
       this.streamingClient.setMediaStreamTargetById(videoElementId);
+      this._isStreaming = true;
       this.streamingClient.startConnection();
     } catch (error) {
       connectionMilestones.publishFailure({
         failureStage: 'start_connection',
         ...getErrorMilestoneTags(error),
       });
+      // Renderer initialization (notably WebGL capability detection) happens
+      // after the server has allocated a session. Do not leak that session when
+      // the local render target cannot be created.
+      await this.stopStreaming();
       throw error;
     }
+  }
+
+  /**
+   * Returns the SDK-managed alpha canvas when transparent background rendering
+   * is enabled and `streamToVideoElement` has installed its render target.
+   */
+  public getTransparentBackgroundCanvas(): HTMLCanvasElement | null {
+    return this.streamingClient?.getTransparentBackgroundCanvas() ?? null;
   }
 
   /**
