@@ -11,6 +11,7 @@ const personaConfig = {
 
 async function runHarness() {
   const requests = [];
+  let includeRegion = true;
   global.fetch = async (url, options) => {
     requests.push({ url: String(url), body: JSON.parse(options.body) });
     if (String(url).includes('/auth/session-token')) {
@@ -33,7 +34,7 @@ async function runHarness() {
           maxWsReconnectionAttempts: 3,
           iceServers: [],
         },
-        region: 'eu',
+        ...(includeRegion ? { region: 'eu' } : {}),
       }),
     };
   };
@@ -49,6 +50,13 @@ async function runHarness() {
     regionPolicy: 'strict',
   });
   assert.equal(client.getActiveSessionRegion(), 'eu');
+  await client.stopStreaming();
+  assert.equal(client.getActiveSessionRegion(), null);
+
+  includeRegion = false;
+  await client.startSession();
+  assert.equal(client.getActiveSessionRegion(), null);
+  await client.stopStreaming();
 }
 
 runHarness()
