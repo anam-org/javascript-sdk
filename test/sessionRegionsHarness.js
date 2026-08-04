@@ -12,6 +12,7 @@ const personaConfig = {
 async function runHarness() {
   const requests = [];
   let includeRegion = true;
+  let failStreamingClientInit = false;
   global.fetch = async (url, options) => {
     requests.push({ url: String(url), body: JSON.parse(options.body) });
     if (String(url).includes('/auth/session-token')) {
@@ -26,7 +27,7 @@ async function runHarness() {
       status: 200,
       json: async () => ({
         sessionId: 'session-1',
-        engineHost: 'engine.test',
+        engineHost: failStreamingClientInit ? '' : 'engine.test',
         engineProtocol: 'https',
         signallingEndpoint: '/ws',
         clientConfig: {
@@ -57,6 +58,14 @@ async function runHarness() {
   await client.startSession();
   assert.equal(client.getActiveSessionRegion(), null);
   await client.stopStreaming();
+
+  includeRegion = true;
+  failStreamingClientInit = true;
+  await assert.rejects(
+    client.startSession(),
+    /Failed to initialize streaming client/,
+  );
+  assert.equal(client.getActiveSessionRegion(), null);
 }
 
 runHarness()

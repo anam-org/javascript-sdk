@@ -358,6 +358,7 @@ export default class AnamClient {
         ...getErrorMilestoneTags(error),
       });
       this.toolCallManager.clearSessionState();
+      this.servedRegion = null;
       setMetricsContext({
         sessionId: null,
       });
