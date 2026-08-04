@@ -5,4 +5,9 @@ export type {
   StartSessionResponse,
   ClientConfigResponse,
 } from './StartSessionResponse';
-export { StartSessionOptions } from './StartSessionOptions';
+export type {
+  SessionRegion,
+  SessionRegionOptions,
+  SessionRegionPolicy,
+  StartSessionOptions,
+} from './StartSessionOptions';

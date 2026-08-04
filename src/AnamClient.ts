@@ -56,6 +56,7 @@ export default class AnamClient {
   };
 
   private sessionId: string | null = null;
+  private servedRegion: 'eu' | 'us' | null = null;
   private organizationId: string | null = null;
 
   private streamingClient: StreamingClient | null = null;
@@ -211,6 +212,11 @@ export default class AnamClient {
     if (this.clientOptions?.voiceDetection) {
       sessionOptions.voiceDetection = this.clientOptions.voiceDetection;
     }
+    if (this.clientOptions?.sessionRegion) {
+      sessionOptions.region = this.clientOptions.sessionRegion.region;
+      sessionOptions.regionPolicy =
+        this.clientOptions.sessionRegion.regionPolicy;
+    }
     // return undefined if no options are set
     if (Object.keys(sessionOptions).length === 0) {
       return undefined;
@@ -277,6 +283,7 @@ export default class AnamClient {
       engineHost,
       engineProtocol,
       signallingEndpoint,
+      region,
     } = response;
     const {
       heartbeatIntervalSeconds,
@@ -286,6 +293,7 @@ export default class AnamClient {
     } = clientConfig;
 
     this.sessionId = sessionId;
+    this.servedRegion = region ?? null;
     this.toolCallManager.setActiveSession(sessionId);
     setMetricsContext({
       sessionId: this.sessionId,
@@ -712,6 +720,7 @@ export default class AnamClient {
       await this.streamingClient.stopConnection();
       this.streamingClient = null;
       this.sessionId = null;
+      this.servedRegion = null;
       setMetricsContext({
         attemptCorrelationId: null,
         sessionId: null,
@@ -847,6 +856,10 @@ export default class AnamClient {
 
   public getActiveSessionId(): string | null {
     return this.sessionId;
+  }
+
+  public getActiveSessionRegion(): 'eu' | 'us' | null {
+    return this.servedRegion;
   }
 
   public registerToolCallHandler(

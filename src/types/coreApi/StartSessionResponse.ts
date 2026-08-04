@@ -1,5 +1,6 @@
 export interface StartSessionResponse {
   sessionId: string;
+  region?: 'eu' | 'us';
   engineHost: string;
   engineProtocol: string;
   signallingEndpoint: string;

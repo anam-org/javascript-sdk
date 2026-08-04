@@ -1,10 +1,17 @@
 import { ApiOptions } from '../types';
 import { ConnectionMilestoneMetricsOptions } from './ConnectionMilestoneMetricsOptions';
 import { VoiceDetectionOptions } from './VoiceDetectionOptions';
+import { SessionRegionOptions } from './coreApi/StartSessionOptions';
 
 export interface AnamPublicClientOptions {
   api?: ApiOptions;
   voiceDetection?: VoiceDetectionOptions;
+  /**
+   * Selects the engine region for API-key clients. The region is bound to the
+   * session token when the SDK mints it, so `strict` can prevent cross-region
+   * capacity failover for the entire session.
+   */
+  sessionRegion?: SessionRegionOptions;
   audioDeviceId?: string;
   disableInputAudio?: boolean;
   metrics?: ConnectionMilestoneMetricsOptions & {

@@ -89,7 +89,10 @@ export class CoreApiRestClient {
           400,
         );
       }
-      this.sessionToken = await this.unsafe_getSessionToken(personaConfig);
+      this.sessionToken = await this.unsafe_getSessionToken(
+        personaConfig,
+        sessionOptions,
+      );
     }
 
     // Check if brainType is being used and log deprecation warning
@@ -247,6 +250,7 @@ export class CoreApiRestClient {
 
   public async unsafe_getSessionToken(
     personaConfig: PersonaConfig,
+    sessionOptions?: StartSessionOptions,
   ): Promise<string> {
     console.warn(
       'Using an insecure method. This method should not be used in production.',
@@ -262,9 +266,14 @@ export class CoreApiRestClient {
       );
     }
 
-    const body: { clientLabel: string; personaConfig: PersonaConfig } = {
+    const body: {
+      clientLabel: string;
+      personaConfig: PersonaConfig;
+      sessionOptions?: StartSessionOptions;
+    } = {
       clientLabel: 'js-sdk-api-key',
       personaConfig,
+      ...(sessionOptions ? { sessionOptions } : {}),
     };
     try {
       const targetPath = `${this.apiVersion}/auth/session-token`;
