@@ -212,11 +212,6 @@ export default class AnamClient {
     if (this.clientOptions?.voiceDetection) {
       sessionOptions.voiceDetection = this.clientOptions.voiceDetection;
     }
-    if (this.clientOptions?.sessionRegion) {
-      sessionOptions.region = this.clientOptions.sessionRegion.region;
-      sessionOptions.regionPolicy =
-        this.clientOptions.sessionRegion.regionPolicy;
-    }
     // return undefined if no options are set
     if (Object.keys(sessionOptions).length === 0) {
       return undefined;

@@ -1,10 +1,4 @@
-import { StartSessionOptions, unsafe_createClientWithApiKey } from '../src';
-
-const startSessionOptions: StartSessionOptions = {
-  region: 'ap',
-  regionPolicy: 'preferred',
-};
-void startSessionOptions;
+import { unsafe_createClientWithApiKey } from '../src';
 
 const client = unsafe_createClientWithApiKey(
   'api-key',
@@ -13,12 +7,6 @@ const client = unsafe_createClientWithApiKey(
     name: 'Cara',
     avatarId: 'avatar-1',
     voiceId: 'voice-1',
-  },
-  {
-    sessionRegion: {
-      region: 'ap',
-      regionPolicy: 'preferred',
-    },
   },
 );
 
