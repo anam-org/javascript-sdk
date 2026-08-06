@@ -56,6 +56,7 @@ export default class AnamClient {
   };
 
   private sessionId: string | null = null;
+  private servedRegion: string | null = null;
   private organizationId: string | null = null;
 
   private streamingClient: StreamingClient | null = null;
@@ -277,6 +278,7 @@ export default class AnamClient {
       engineHost,
       engineProtocol,
       signallingEndpoint,
+      region,
     } = response;
     const {
       heartbeatIntervalSeconds,
@@ -286,6 +288,7 @@ export default class AnamClient {
     } = clientConfig;
 
     this.sessionId = sessionId;
+    this.servedRegion = region ?? null;
     this.toolCallManager.setActiveSession(sessionId);
     setMetricsContext({
       sessionId: this.sessionId,
@@ -350,6 +353,7 @@ export default class AnamClient {
         ...getErrorMilestoneTags(error),
       });
       this.toolCallManager.clearSessionState();
+      this.servedRegion = null;
       setMetricsContext({
         sessionId: null,
       });
@@ -712,6 +716,7 @@ export default class AnamClient {
       await this.streamingClient.stopConnection();
       this.streamingClient = null;
       this.sessionId = null;
+      this.servedRegion = null;
       setMetricsContext({
         attemptCorrelationId: null,
         sessionId: null,
@@ -847,6 +852,10 @@ export default class AnamClient {
 
   public getActiveSessionId(): string | null {
     return this.sessionId;
+  }
+
+  public getActiveSessionRegion(): string | null {
+    return this.servedRegion;
   }
 
   public registerToolCallHandler(
