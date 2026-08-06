@@ -1,10 +1,5 @@
 export interface StartSessionResponse {
   sessionId: string;
-  /**
-   * Actual region that served the session. Known values today are `'eu'` and
-   * `'us'`; additional regions may be introduced over time. Treat unrecognized
-   * values as informational.
-   */
   region?: string | null;
   engineHost: string;
   engineProtocol: string;

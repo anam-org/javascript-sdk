@@ -854,11 +854,6 @@ export default class AnamClient {
     return this.sessionId;
   }
 
-  /**
-   * Returns the region serving the active session. Known values today are
-   * `'eu'` and `'us'`; additional regions may be introduced over time. Treat
-   * unrecognized values as informational.
-   */
   public getActiveSessionRegion(): string | null {
     return this.servedRegion;
   }
