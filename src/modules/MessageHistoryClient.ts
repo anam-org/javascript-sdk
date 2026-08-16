@@ -1,5 +1,6 @@
 import {
   Message,
+  MessageUtterance,
   WebRtcTextMessageEvent,
   MessageRole,
   MessageStreamEvent,
@@ -38,6 +39,7 @@ export class MessageHistoryClient {
       endOfSpeech: event.end_of_speech,
       interrupted: event.interrupted,
       contentIndex: event.content_index,
+      ...(event.utterance_id ? { utteranceId: event.utterance_id } : {}),
       ...(correlationId ? { correlationId } : {}),
       ...(event.cue_tag ? { cueTag: event.cue_tag } : {}),
     };
@@ -54,6 +56,28 @@ export class MessageHistoryClient {
     this.messages.push(userMessage);
   }
 
+  // Appends a chunk to the message's per-utterance breakdown. The engine prepends a joining
+  // space to the first chunk of each new utterance so the turn-level content concatenates
+  // correctly; it is not part of the utterance itself, so it is trimmed here.
+  private static appendUtterance(
+    utterances: MessageUtterance[] | undefined,
+    messageEvent: MessageStreamEvent,
+  ): MessageUtterance[] | undefined {
+    if (!messageEvent.utteranceId) return utterances;
+    const previous = utterances ?? [];
+    const last = previous[previous.length - 1];
+    if (last && last.id === messageEvent.utteranceId) {
+      return [
+        ...previous.slice(0, -1),
+        { ...last, content: last.content + messageEvent.content },
+      ];
+    }
+    return [
+      ...previous,
+      { id: messageEvent.utteranceId, content: messageEvent.content.trimStart() },
+    ];
+  }
+
   private processPersonaMessage(messageEvent: MessageStreamEvent): void {
     const personaMessage: Message = {
       id: messageEvent.id,
@@ -67,15 +91,27 @@ export class MessageHistoryClient {
     );
     if (existingMessageIndex !== -1) {
       const existingMessage = this.messages[existingMessageIndex];
+      const utterances = MessageHistoryClient.appendUtterance(
+        existingMessage.utterances,
+        messageEvent,
+      );
       // update the existing message
       this.messages[existingMessageIndex] = {
         ...existingMessage,
         content: existingMessage.content + personaMessage.content,
         interrupted: existingMessage.interrupted || personaMessage.interrupted,
+        ...(utterances ? { utterances } : {}),
       };
     } else {
+      const utterances = MessageHistoryClient.appendUtterance(
+        undefined,
+        messageEvent,
+      );
       // add the new persona message to the history
-      this.messages.push(personaMessage);
+      this.messages.push({
+        ...personaMessage,
+        ...(utterances ? { utterances } : {}),
+      });
     }
   }
 
