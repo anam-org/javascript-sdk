@@ -64,19 +64,18 @@ export class MessageHistoryClient {
     messageEvent: MessageStreamEvent,
   ): MessageUtterance[] | undefined {
     if (!messageEvent.utteranceId) return utterances;
-    const previous = utterances ?? [];
-    const last = previous[previous.length - 1];
+    const current = utterances ?? [];
+    const last = current[current.length - 1];
     if (last && last.id === messageEvent.utteranceId) {
-      return [
-        ...previous.slice(0, -1),
-        { ...last, content: last.content + messageEvent.content },
-      ];
+      last.content += messageEvent.content;
+      return current;
     }
     const content =
-      previous.length > 0 && messageEvent.content.startsWith(' ')
+      current.length > 0 && messageEvent.content.startsWith(' ')
         ? messageEvent.content.slice(1)
         : messageEvent.content;
-    return [...previous, { id: messageEvent.utteranceId, content }];
+    current.push({ id: messageEvent.utteranceId, content });
+    return current;
   }
 
   private processPersonaMessage(messageEvent: MessageStreamEvent): void {
