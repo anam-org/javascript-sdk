@@ -86,6 +86,25 @@ function testHistorySplitsUtterancesKeepsTurnShape() {
   assert.equal(streamEvents[2].utteranceId, 'uuid-b');
 }
 
+function testHistoryPreservesNonSeparatorWhitespace() {
+  const { getHistory, emit } = setup();
+  emit(personaChunk({ content: ' Leading', utterance_id: 'uuid-a' }));
+  emit(
+    personaChunk({
+      content: '  Second',
+      content_index: 1,
+      utterance_id: 'uuid-b',
+      end_of_speech: true,
+    }),
+  );
+  const history = getHistory();
+  assert.equal(history[0].content, ' Leading  Second');
+  assert.deepEqual(history[0].utterances, [
+    { id: 'uuid-a', content: ' Leading' },
+    { id: 'uuid-b', content: ' Second' },
+  ]);
+}
+
 function testHistoryShapeUnchangedWithoutUtteranceIds() {
   const { getHistory, emit } = setup();
   emit(personaChunk({ content: 'Hello' }));
@@ -105,6 +124,7 @@ function main() {
   testUtteranceIdExposedOnStreamEvents();
   testMissingOrEmptyUtteranceIdOmitted();
   testHistorySplitsUtterancesKeepsTurnShape();
+  testHistoryPreservesNonSeparatorWhitespace();
   testHistoryShapeUnchangedWithoutUtteranceIds();
   console.log('utteranceIdHarness: all tests passed');
 }

@@ -56,9 +56,9 @@ export class MessageHistoryClient {
     this.messages.push(userMessage);
   }
 
-  // Appends a chunk to the message's per-utterance breakdown. The engine prepends a joining
-  // space to the first chunk of each new utterance so the turn-level content concatenates
-  // correctly; it is not part of the utterance itself, so it is trimmed here.
+  // Appends a chunk to the message's per-utterance breakdown. A joining space is prepended
+  // to each subsequent utterance so the turn-level content concatenates correctly; remove
+  // only that separator while preserving all other leading whitespace.
   private static appendUtterance(
     utterances: MessageUtterance[] | undefined,
     messageEvent: MessageStreamEvent,
@@ -72,10 +72,11 @@ export class MessageHistoryClient {
         { ...last, content: last.content + messageEvent.content },
       ];
     }
-    return [
-      ...previous,
-      { id: messageEvent.utteranceId, content: messageEvent.content.trimStart() },
-    ];
+    const content =
+      previous.length > 0 && messageEvent.content.startsWith(' ')
+        ? messageEvent.content.slice(1)
+        : messageEvent.content;
+    return [...previous, { id: messageEvent.utteranceId, content }];
   }
 
   private processPersonaMessage(messageEvent: MessageStreamEvent): void {
