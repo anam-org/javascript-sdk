@@ -13,6 +13,7 @@ export class MessageHistoryClient {
   private internalEventEmitter: InternalEventEmitter;
 
   private messages: Message[] = [];
+  private publishedUtterances = new WeakSet<MessageUtterance[]>();
 
   constructor(
     publicEventEmitter: PublicEventEmitter,
@@ -59,12 +60,15 @@ export class MessageHistoryClient {
   // Appends a chunk to the message's per-utterance breakdown. A joining space is prepended
   // to each subsequent utterance so the turn-level content concatenates correctly; remove
   // only that separator while preserving all other leading whitespace.
-  private static appendUtterance(
+  private appendUtterance(
     utterances: MessageUtterance[] | undefined,
     messageEvent: MessageStreamEvent,
   ): MessageUtterance[] | undefined {
     if (!messageEvent.utteranceId) return utterances;
-    const current = utterances ?? [];
+    const current =
+      utterances && this.publishedUtterances.has(utterances)
+        ? utterances.map((utterance) => ({ ...utterance }))
+        : (utterances ?? []);
     const last = current[current.length - 1];
     if (last && last.id === messageEvent.utteranceId) {
       last.content += messageEvent.content;
@@ -91,7 +95,7 @@ export class MessageHistoryClient {
     );
     if (existingMessageIndex !== -1) {
       const existingMessage = this.messages[existingMessageIndex];
-      const utterances = MessageHistoryClient.appendUtterance(
+      const utterances = this.appendUtterance(
         existingMessage.utterances,
         messageEvent,
       );
@@ -103,7 +107,7 @@ export class MessageHistoryClient {
         ...(utterances ? { utterances } : {}),
       };
     } else {
-      const utterances = MessageHistoryClient.appendUtterance(
+      const utterances = this.appendUtterance(
         undefined,
         messageEvent,
       );
@@ -133,6 +137,11 @@ export class MessageHistoryClient {
         break;
     }
     if (messageStreamEvent.endOfSpeech) {
+      this.messages.forEach((message) => {
+        if (message.utterances) {
+          this.publishedUtterances.add(message.utterances);
+        }
+      });
       this.publicEventEmitter.emit(
         AnamEvent.MESSAGE_HISTORY_UPDATED,
         this.messages,

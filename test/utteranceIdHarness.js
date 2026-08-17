@@ -105,6 +105,36 @@ function testHistoryPreservesNonSeparatorWhitespace() {
   ]);
 }
 
+function testPublishedMessageIsNotMutatedByLaterChunks() {
+  const { getHistory, emit } = setup();
+  emit(
+    personaChunk({
+      content: 'Hello',
+      utterance_id: 'uuid-a',
+      end_of_speech: true,
+    }),
+  );
+  const publishedMessage = getHistory()[0];
+
+  emit(
+    personaChunk({
+      content: ' again',
+      content_index: 1,
+      utterance_id: 'uuid-a',
+      end_of_speech: true,
+    }),
+  );
+
+  assert.equal(publishedMessage.content, 'Hello');
+  assert.deepEqual(publishedMessage.utterances, [
+    { id: 'uuid-a', content: 'Hello' },
+  ]);
+  assert.equal(getHistory()[0].content, 'Hello again');
+  assert.deepEqual(getHistory()[0].utterances, [
+    { id: 'uuid-a', content: 'Hello again' },
+  ]);
+}
+
 function testHistoryShapeUnchangedWithoutUtteranceIds() {
   const { getHistory, emit } = setup();
   emit(personaChunk({ content: 'Hello' }));
@@ -125,6 +155,7 @@ function main() {
   testMissingOrEmptyUtteranceIdOmitted();
   testHistorySplitsUtterancesKeepsTurnShape();
   testHistoryPreservesNonSeparatorWhitespace();
+  testPublishedMessageIsNotMutatedByLaterChunks();
   testHistoryShapeUnchangedWithoutUtteranceIds();
   console.log('utteranceIdHarness: all tests passed');
 }
