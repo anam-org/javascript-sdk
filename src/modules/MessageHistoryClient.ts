@@ -65,13 +65,14 @@ export class MessageHistoryClient {
     messageEvent: MessageStreamEvent,
   ): MessageUtterance[] | undefined {
     if (!messageEvent.utteranceId) return utterances;
-    const current =
-      utterances && this.publishedUtterances.has(utterances)
-        ? utterances.map((utterance) => ({ ...utterance }))
-        : (utterances ?? []);
+    const wasPublished =
+      !!utterances && this.publishedUtterances.has(utterances);
+    const current = wasPublished ? [...utterances] : (utterances ?? []);
     const last = current[current.length - 1];
     if (last && last.id === messageEvent.utteranceId) {
-      last.content += messageEvent.content;
+      const updatedLast = wasPublished ? { ...last } : last;
+      updatedLast.content += messageEvent.content;
+      current[current.length - 1] = updatedLast;
       return current;
     }
     const content =
