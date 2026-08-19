@@ -9,6 +9,7 @@ const {
   InternalEventEmitter,
 } = require('../dist/main/modules/InternalEventEmitter');
 const { AnamEvent, InternalEvent } = require('../dist/main/types');
+const { TalkMessageStream } = require('../dist/main/types/TalkMessageStream');
 
 function setup() {
   const publicEmitter = new PublicEventEmitter();
@@ -150,6 +151,27 @@ function testHistoryShapeUnchangedWithoutUtteranceIds() {
   assert.ok(!('utterances' in history[0]));
 }
 
+function testTalkStreamChunkCarriesUtteranceId() {
+  const sent = [];
+  const stream = new TalkMessageStream(
+    'corr-1',
+    new InternalEventEmitter(),
+    { sendTalkMessage: async (payload) => sent.push(payload) },
+  );
+
+  return Promise.resolve()
+    .then(() => stream.streamMessageChunk('Hello', false, 'uuid-a'))
+    .then(() => stream.streamMessageChunk(' again', false))
+    .then(() => stream.streamMessageChunk(' bye', true, 'uuid-b'))
+    .then(() => {
+      assert.equal(sent[0].utteranceId, 'uuid-a');
+      assert.ok(!('utteranceId' in sent[1]));
+      assert.equal(sent[2].utteranceId, 'uuid-b');
+      assert.equal(sent[0].startOfSpeech, true);
+      assert.equal(sent[2].endOfSpeech, true);
+    });
+}
+
 function main() {
   testUtteranceIdExposedOnStreamEvents();
   testMissingOrEmptyUtteranceIdOmitted();
@@ -157,7 +179,9 @@ function main() {
   testHistoryPreservesNonSeparatorWhitespace();
   testPublishedMessageIsNotMutatedByLaterChunks();
   testHistoryShapeUnchangedWithoutUtteranceIds();
-  console.log('utteranceIdHarness: all tests passed');
+  return testTalkStreamChunkCarriesUtteranceId().then(() =>
+    console.log('utteranceIdHarness: all tests passed'),
+  );
 }
 
 main();

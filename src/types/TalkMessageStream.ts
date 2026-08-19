@@ -73,6 +73,7 @@ export class TalkMessageStream {
   public async streamMessageChunk(
     partialMessage: string,
     endOfSpeech: boolean,
+    utteranceId?: string,
   ): Promise<void> {
     if (
       this.state !== TalkMessageStreamState.STREAMING &&
@@ -86,6 +87,7 @@ export class TalkMessageStream {
       startOfSpeech: this.state === TalkMessageStreamState.UNSTARTED,
       endOfSpeech: endOfSpeech,
       correlationId: this.correlationId,
+      ...(utteranceId ? { utteranceId } : {}),
     };
     this.state = endOfSpeech
       ? TalkMessageStreamState.ENDED
