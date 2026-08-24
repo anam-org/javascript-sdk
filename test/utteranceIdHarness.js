@@ -177,12 +177,18 @@ async function testTalkStreamChunkCarriesUtteranceId() {
   assert.equal(sent[2].endOfSpeech, true);
 }
 
-async function testRejectsUtteranceIdThatIsNotUuidV4() {
-  for (const badId of ['', 'utterance-1', 'a8098c1a-f86e-11da-bd1a-00112444be1e']) {
+async function testRejectsUtteranceIdThatIsNotLowercaseUuidV4() {
+  const badIds = [
+    '',
+    'utterance-1',
+    'a8098c1a-f86e-11da-bd1a-00112444be1e', // v1, not v4
+    UTTERANCE_A.toUpperCase(), // the engine only round-trips the lowercase form
+  ];
+  for (const badId of badIds) {
     const { stream, sent } = talkStream();
     await assert.rejects(
       () => stream.streamMessageChunk('Hello', false, badId),
-      /utteranceId must be a UUID v4 string/,
+      /utteranceId must be a lowercase UUID v4 string/,
     );
     assert.equal(sent.length, 0);
   }
@@ -215,7 +221,7 @@ async function main() {
   testPublishedMessageIsNotMutatedByLaterChunks();
   testHistoryShapeUnchangedWithoutUtteranceIds();
   await testTalkStreamChunkCarriesUtteranceId();
-  await testRejectsUtteranceIdThatIsNotUuidV4();
+  await testRejectsUtteranceIdThatIsNotLowercaseUuidV4();
   await testEndMessageReusesLastUtteranceId();
   await testEndMessageOmitsUtteranceIdWhenNeverTagged();
   console.log('utteranceIdHarness: all tests passed');

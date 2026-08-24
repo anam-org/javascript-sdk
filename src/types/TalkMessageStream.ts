@@ -5,8 +5,10 @@ import { TalkStreamInterruptedSignalMessage } from './signalling/TalkStreamInter
 import { InternalEventEmitter } from '../modules/InternalEventEmitter';
 import { SignallingClient } from '../modules/SignallingClient';
 
+// Lowercase only: the engine round-trips the canonical form and replaces anything
+// else with an id of its own, so an uppercase id would never reach caption events.
 const UUID_V4 =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export class TalkMessageStream {
   private internalEventEmitter: InternalEventEmitter;
@@ -88,10 +90,11 @@ export class TalkMessageStream {
    *
    * @param partialMessage The text chunk to speak.
    * @param endOfSpeech Whether this is the final chunk of the speech.
-   * @param utteranceId Optional UUID v4 string identifying the utterance this chunk
+   * @param utteranceId Optional lowercase UUID v4 string identifying the utterance this chunk
    * belongs to. Reuse the same id for consecutive chunks in one utterance; changing it
    * starts a new utterance without ending the speech sequence. The most recent value is
-   * reused for the terminator sent by endMessage. Throws if it is not a UUID v4.
+   * reused for the terminator sent by endMessage. Throws if it is not a lowercase
+   * UUID v4.
    */
   public async streamMessageChunk(
     partialMessage: string,
@@ -107,7 +110,7 @@ export class TalkMessageStream {
     }
     if (utteranceId != null && !UUID_V4.test(utteranceId)) {
       throw new Error(
-        'utteranceId must be a UUID v4 string, got: ' + utteranceId,
+        'utteranceId must be a lowercase UUID v4 string, got: ' + utteranceId,
       );
     }
     const payload: TalkMessageStreamPayload = {
