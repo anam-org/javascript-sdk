@@ -495,7 +495,23 @@ export class StreamingClient {
       }
       this.resetAttemptScopedMilestoneState();
       this.connectionMilestones?.record('connection_start_requested');
-      // start the connection
+      // Pre-gather ICE candidates in parallel with the WebSocket handshake.
+      // Creating the peer connection and local offer now starts ICE gathering
+      // (including any TURN allocation) immediately, instead of waiting for the
+      // socket to open. The offer and trickled candidates are queued by the
+      // SignallingClient's sending buffer and flushed, in order, once the
+      // socket opens - so the connection can proceed as soon as signalling is up.
+      void this.initPeerConnectionAndSendOffer().catch((error) => {
+        console.error(
+          'StreamingClient - startConnection: error preparing peer connection',
+          error,
+        );
+        // If the connection was torn down while the pre-gather task was still
+        // in flight, shutdown() has already set iceRestartStopped and the
+        // rejection is expected - don't surface a spurious WebRTC failure.
+        if (!this.iceRestartStopped) this.handleWebrtcFailure(error);
+      });
+      // Establish the signalling channel concurrently with ICE gathering.
       this.signallingClient.connect();
     } catch (error) {
       console.error('StreamingClient - startConnection: error', error);
