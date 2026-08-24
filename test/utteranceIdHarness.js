@@ -172,16 +172,18 @@ function testTalkStreamChunkCarriesUtteranceId() {
     });
 }
 
-function main() {
+async function main() {
   testUtteranceIdExposedOnStreamEvents();
   testMissingOrEmptyUtteranceIdOmitted();
   testHistorySplitsUtterancesKeepsTurnShape();
   testHistoryPreservesNonSeparatorWhitespace();
   testPublishedMessageIsNotMutatedByLaterChunks();
   testHistoryShapeUnchangedWithoutUtteranceIds();
-  return testTalkStreamChunkCarriesUtteranceId().then(() =>
-    console.log('utteranceIdHarness: all tests passed'),
-  );
+  await testTalkStreamChunkCarriesUtteranceId();
+  console.log('utteranceIdHarness: all tests passed');
 }
 
-main();
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
