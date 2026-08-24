@@ -3,8 +3,8 @@ export interface TalkMessageStreamPayload {
   startOfSpeech: boolean;
   endOfSpeech: boolean;
   correlationId: string;
-  // Optional client-scoped utterance key. Chunks sharing a key form one utterance;
-  // changing it starts a new one. Omitted means "same utterance as before".
-  // A canonical UUIDv4 is echoed back as MessageStreamEvent.utteranceId.
+  // Optional UUID v4 identifying the utterance this chunk belongs to. Chunks sharing
+  // an id form one utterance; a different id starts a new one. Omitted means "same
+  // utterance as before". The id comes back on MessageStreamEvent.utteranceId.
   utteranceId?: string;
 }

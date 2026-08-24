@@ -5,11 +5,15 @@ import { TalkStreamInterruptedSignalMessage } from './signalling/TalkStreamInter
 import { InternalEventEmitter } from '../modules/InternalEventEmitter';
 import { SignallingClient } from '../modules/SignallingClient';
 
+const UUID_V4 =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export class TalkMessageStream {
   private internalEventEmitter: InternalEventEmitter;
   private state = TalkMessageStreamState.UNSTARTED;
   private correlationId: string;
   private signallingClient: SignallingClient;
+  private lastUtteranceId?: string;
 
   constructor(
     correlationId: string,
@@ -46,6 +50,12 @@ export class TalkMessageStream {
     }
   }
 
+  /**
+   * End the stream without sending more content.
+   *
+   * The terminator carries the most recent utteranceId passed to
+   * streamMessageChunk, so it does not start a new untagged utterance.
+   */
   public async endMessage(): Promise<void> {
     if (this.state === TalkMessageStreamState.ENDED) {
       console.warn(
@@ -64,12 +74,25 @@ export class TalkMessageStream {
       startOfSpeech: false,
       endOfSpeech: true,
       correlationId: this.correlationId,
+      ...(this.lastUtteranceId != null
+        ? { utteranceId: this.lastUtteranceId }
+        : {}),
     };
     await this.signallingClient.sendTalkMessage(payload);
     this.state = TalkMessageStreamState.ENDED;
     this.onDeactivate();
   }
 
+  /**
+   * Send a text chunk to be spoken.
+   *
+   * @param partialMessage The text chunk to speak.
+   * @param endOfSpeech Whether this is the final chunk of the speech.
+   * @param utteranceId Optional UUID v4 string identifying the utterance this chunk
+   * belongs to. Reuse the same id for consecutive chunks in one utterance; changing it
+   * starts a new utterance without ending the speech sequence. The most recent value is
+   * reused for the terminator sent by endMessage. Throws if it is not a UUID v4.
+   */
   public async streamMessageChunk(
     partialMessage: string,
     endOfSpeech: boolean,
@@ -82,13 +105,21 @@ export class TalkMessageStream {
       // throw error
       throw new Error('Talk stream is not in an active state: ' + this.state);
     }
+    if (utteranceId != null && !UUID_V4.test(utteranceId)) {
+      throw new Error(
+        'utteranceId must be a UUID v4 string, got: ' + utteranceId,
+      );
+    }
     const payload: TalkMessageStreamPayload = {
       content: partialMessage,
       startOfSpeech: this.state === TalkMessageStreamState.UNSTARTED,
       endOfSpeech: endOfSpeech,
       correlationId: this.correlationId,
-      ...(utteranceId ? { utteranceId } : {}),
+      ...(utteranceId != null ? { utteranceId } : {}),
     };
+    if (utteranceId != null) {
+      this.lastUtteranceId = utteranceId;
+    }
     this.state = endOfSpeech
       ? TalkMessageStreamState.ENDED
       : TalkMessageStreamState.STREAMING;

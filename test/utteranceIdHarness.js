@@ -151,25 +151,60 @@ function testHistoryShapeUnchangedWithoutUtteranceIds() {
   assert.ok(!('utterances' in history[0]));
 }
 
-function testTalkStreamChunkCarriesUtteranceId() {
+const UTTERANCE_A = '68fd86b6-0b3a-4f42-bf92-5866cd84f8ac';
+const UTTERANCE_B = 'd990d82a-29a5-4874-b870-a9f07e024108';
+
+function talkStream() {
   const sent = [];
   const stream = new TalkMessageStream(
     'corr-1',
     new InternalEventEmitter(),
     { sendTalkMessage: async (payload) => sent.push(payload) },
   );
+  return { stream, sent };
+}
 
-  return Promise.resolve()
-    .then(() => stream.streamMessageChunk('Hello', false, 'uuid-a'))
-    .then(() => stream.streamMessageChunk(' again', false))
-    .then(() => stream.streamMessageChunk(' bye', true, 'uuid-b'))
-    .then(() => {
-      assert.equal(sent[0].utteranceId, 'uuid-a');
-      assert.ok(!('utteranceId' in sent[1]));
-      assert.equal(sent[2].utteranceId, 'uuid-b');
-      assert.equal(sent[0].startOfSpeech, true);
-      assert.equal(sent[2].endOfSpeech, true);
-    });
+async function testTalkStreamChunkCarriesUtteranceId() {
+  const { stream, sent } = talkStream();
+  await stream.streamMessageChunk('Hello', false, UTTERANCE_A);
+  await stream.streamMessageChunk(' again', false);
+  await stream.streamMessageChunk(' bye', true, UTTERANCE_B);
+
+  assert.equal(sent[0].utteranceId, UTTERANCE_A);
+  assert.ok(!('utteranceId' in sent[1]));
+  assert.equal(sent[2].utteranceId, UTTERANCE_B);
+  assert.equal(sent[0].startOfSpeech, true);
+  assert.equal(sent[2].endOfSpeech, true);
+}
+
+async function testRejectsUtteranceIdThatIsNotUuidV4() {
+  for (const badId of ['', 'utterance-1', 'a8098c1a-f86e-11da-bd1a-00112444be1e']) {
+    const { stream, sent } = talkStream();
+    await assert.rejects(
+      () => stream.streamMessageChunk('Hello', false, badId),
+      /utteranceId must be a UUID v4 string/,
+    );
+    assert.equal(sent.length, 0);
+  }
+}
+
+async function testEndMessageReusesLastUtteranceId() {
+  const { stream, sent } = talkStream();
+  await stream.streamMessageChunk('Hello', false, UTTERANCE_A);
+  await stream.streamMessageChunk(' world', false, UTTERANCE_B);
+  await stream.endMessage();
+
+  const terminator = sent[sent.length - 1];
+  assert.equal(terminator.endOfSpeech, true);
+  assert.equal(terminator.utteranceId, UTTERANCE_B);
+}
+
+async function testEndMessageOmitsUtteranceIdWhenNeverTagged() {
+  const { stream, sent } = talkStream();
+  await stream.streamMessageChunk('Hello', false);
+  await stream.endMessage();
+
+  assert.ok(!('utteranceId' in sent[sent.length - 1]));
 }
 
 async function main() {
@@ -180,6 +215,9 @@ async function main() {
   testPublishedMessageIsNotMutatedByLaterChunks();
   testHistoryShapeUnchangedWithoutUtteranceIds();
   await testTalkStreamChunkCarriesUtteranceId();
+  await testRejectsUtteranceIdThatIsNotUuidV4();
+  await testEndMessageReusesLastUtteranceId();
+  await testEndMessageOmitsUtteranceIdWhenNeverTagged();
   console.log('utteranceIdHarness: all tests passed');
 }
 
