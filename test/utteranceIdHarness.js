@@ -9,6 +9,7 @@ const {
   InternalEventEmitter,
 } = require('../dist/main/modules/InternalEventEmitter');
 const { AnamEvent, InternalEvent } = require('../dist/main/types');
+const { TalkMessageStream } = require('../dist/main/types/TalkMessageStream');
 
 function setup() {
   const publicEmitter = new PublicEventEmitter();
@@ -150,14 +151,83 @@ function testHistoryShapeUnchangedWithoutUtteranceIds() {
   assert.ok(!('utterances' in history[0]));
 }
 
-function main() {
+const UTTERANCE_A = '68fd86b6-0b3a-4f42-bf92-5866cd84f8ac';
+const UTTERANCE_B = 'd990d82a-29a5-4874-b870-a9f07e024108';
+
+function talkStream() {
+  const sent = [];
+  const stream = new TalkMessageStream(
+    'corr-1',
+    new InternalEventEmitter(),
+    { sendTalkMessage: async (payload) => sent.push(payload) },
+  );
+  return { stream, sent };
+}
+
+async function testTalkStreamChunkCarriesUtteranceId() {
+  const { stream, sent } = talkStream();
+  await stream.streamMessageChunk('Hello', false, UTTERANCE_A);
+  await stream.streamMessageChunk(' again', false);
+  await stream.streamMessageChunk(' bye', true, UTTERANCE_B);
+
+  assert.equal(sent[0].utteranceId, UTTERANCE_A);
+  assert.ok(!('utteranceId' in sent[1]));
+  assert.equal(sent[2].utteranceId, UTTERANCE_B);
+  assert.equal(sent[0].startOfSpeech, true);
+  assert.equal(sent[2].endOfSpeech, true);
+}
+
+async function testRejectsUtteranceIdThatIsNotLowercaseUuidV4() {
+  const badIds = [
+    '',
+    'utterance-1',
+    'a8098c1a-f86e-11da-bd1a-00112444be1e', // v1, not v4
+    UTTERANCE_A.toUpperCase(), // the engine only round-trips the lowercase form
+  ];
+  for (const badId of badIds) {
+    const { stream, sent } = talkStream();
+    await assert.rejects(
+      () => stream.streamMessageChunk('Hello', false, badId),
+      /utteranceId must be a lowercase UUID v4 string/,
+    );
+    assert.equal(sent.length, 0);
+  }
+}
+
+async function testEndMessageReusesLastUtteranceId() {
+  const { stream, sent } = talkStream();
+  await stream.streamMessageChunk('Hello', false, UTTERANCE_A);
+  await stream.streamMessageChunk(' world', false, UTTERANCE_B);
+  await stream.endMessage();
+
+  const terminator = sent[sent.length - 1];
+  assert.equal(terminator.endOfSpeech, true);
+  assert.equal(terminator.utteranceId, UTTERANCE_B);
+}
+
+async function testEndMessageOmitsUtteranceIdWhenNeverTagged() {
+  const { stream, sent } = talkStream();
+  await stream.streamMessageChunk('Hello', false);
+  await stream.endMessage();
+
+  assert.ok(!('utteranceId' in sent[sent.length - 1]));
+}
+
+async function main() {
   testUtteranceIdExposedOnStreamEvents();
   testMissingOrEmptyUtteranceIdOmitted();
   testHistorySplitsUtterancesKeepsTurnShape();
   testHistoryPreservesNonSeparatorWhitespace();
   testPublishedMessageIsNotMutatedByLaterChunks();
   testHistoryShapeUnchangedWithoutUtteranceIds();
+  await testTalkStreamChunkCarriesUtteranceId();
+  await testRejectsUtteranceIdThatIsNotLowercaseUuidV4();
+  await testEndMessageReusesLastUtteranceId();
+  await testEndMessageOmitsUtteranceIdWhenNeverTagged();
   console.log('utteranceIdHarness: all tests passed');
 }
 
-main();
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
