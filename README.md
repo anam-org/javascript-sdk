@@ -111,6 +111,47 @@ Regardless of whether you initialise the client using an API key or session toke
 
 [See here](#starting-a-session-in-production-environments) for an example sequence diagram of starting a session in production environments.
 
+## Talk streams
+
+`createTalkMessageStream` sends text straight to TTS for the persona to speak, one chunk at a time. All chunks in the stream share a correlation id, which is what an interruption correlates against.
+
+```typescript
+const stream = anamClient.createTalkMessageStream();
+for (const chunk of llmChunks) {
+  await stream.streamMessageChunk(chunk.text, chunk.isLast);
+}
+```
+
+### Speech across a tool call
+
+A talk stream can stay open while your application runs a tool. Give the speech before and after the tool call separate utterance ids, and the second waits for the first to finish playing.
+
+> [!IMPORTANT]
+> `utteranceId` marks the start of an utterance, not an individual text chunk. Set it on the first chunk, then omit it from the remaining chunks in that utterance. Set a new id only when the next utterance begins.
+
+```typescript
+const stream = anamClient.createTalkMessageStream();
+
+// Utterance A can begin playing while the tool runs.
+await stream.streamMessageChunk('Let me check ', false, crypto.randomUUID());
+await stream.streamMessageChunk('that for you.', false); // Continues utterance A.
+
+const toolResultText = await runToolCall();
+
+// Utterance B waits for A to finish, then continues with the result.
+await stream.streamMessageChunk(toolResultText, true, crypto.randomUUID());
+```
+
+The same ordering applies when both utterances are ready immediately. Send them with different ids and the second waits for the first to finish playing:
+
+```typescript
+const stream = anamClient.createTalkMessageStream();
+await stream.streamMessageChunk('First utterance.', false, crypto.randomUUID());
+await stream.streamMessageChunk('Second utterance.', true, crypto.randomUUID());
+```
+
+Ids must be lowercase canonical UUID v4 strings, which is what `crypto.randomUUID()` returns; anything else throws. They come back on persona message events as `utteranceId`, so you can match your own ids against what the persona spoke.
+
 ## Director Notes (Cara 4)
 
 On Cara 4 avatars you can add **Director Notes** to guide the avatar's performance. Provide either a built-in `presetStyle` **or** a free-form `customStylePrompt` — the two are mutually exclusive (enforced by the `DirectorNotes` type) — plus an optional `expressivity` value, normalized from `0` to `1`, controlling how expressively the style is played (lower values are steadier; higher values increase style and speech-driven motion together; omit it to use the engine default). Director Notes are forwarded unchanged to session-token creation and are only applied on Cara 4 avatars; on older models the server ignores them and the session proceeds without them.

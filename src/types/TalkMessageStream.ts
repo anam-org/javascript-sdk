@@ -10,6 +10,33 @@ import { SignallingClient } from '../modules/SignallingClient';
 const UUID_V4 =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
+/**
+ * A stream of text chunks for the persona to speak.
+ *
+ * Manages the correlationId internally so callers don't need to track it across chunks.
+ * All chunks in the same speech sequence share one correlationId, which is what
+ * interruptions correlate against. Callers can optionally identify utterances within the
+ * sequence by passing an utteranceId to streamMessageChunk. Set an id on the first chunk
+ * of an utterance, then omit it on continuation chunks. A new id queues the next
+ * utterance after the current one, so the stream can stay open while your application
+ * runs a tool.
+ *
+ * @example
+ * ```typescript
+ * // Streaming LLM output
+ * const stream = anamClient.createTalkMessageStream();
+ * for (const chunk of llmChunks) {
+ *   await stream.streamMessageChunk(chunk.text, chunk.isLast);
+ * }
+ *
+ * // Speech before and after a tool call
+ * const stream = anamClient.createTalkMessageStream();
+ * await stream.streamMessageChunk('Let me ', false, crypto.randomUUID());
+ * await stream.streamMessageChunk('check.', false); // Continues the same utterance.
+ * const toolResultText = await runToolCall();
+ * await stream.streamMessageChunk(toolResultText, true, crypto.randomUUID());
+ * ```
+ */
 export class TalkMessageStream {
   private internalEventEmitter: InternalEventEmitter;
   private state = TalkMessageStreamState.UNSTARTED;
@@ -90,11 +117,12 @@ export class TalkMessageStream {
    *
    * @param partialMessage The text chunk to speak.
    * @param endOfSpeech Whether this is the final chunk of the speech.
-   * @param utteranceId Optional lowercase UUID v4 string identifying the utterance this chunk
-   * belongs to. Reuse the same id for consecutive chunks in one utterance; changing it
-   * starts a new utterance without ending the speech sequence. The most recent value is
-   * reused for the terminator sent by endMessage. Throws if it is not a lowercase
-   * UUID v4.
+   * @param utteranceId Optional lowercase UUID v4 string marking the utterance this chunk
+   * starts. Set it on the first chunk, not on every text chunk; omitting it continues the
+   * current utterance. A new id queues the next utterance after the current one without
+   * ending the speech sequence, which is what allows speech before and after a tool call,
+   * or two ready utterances that must play in order. The most recent value is reused for
+   * the terminator sent by endMessage. Throws if it is not a lowercase UUID v4.
    */
   public async streamMessageChunk(
     partialMessage: string,

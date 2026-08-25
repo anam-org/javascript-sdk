@@ -807,6 +807,16 @@ export default class AnamClient {
     await this.streamingClient.changeAudioInputDevice(deviceId);
   }
 
+  /**
+   * Create a talk message stream for sending text chunks to TTS.
+   *
+   * The stream manages the correlationId internally so you don't need to track it across
+   * chunks. Use this for streaming LLM output, or for speech before and after a tool
+   * call. Set an utteranceId on the first chunk of an utterance, then omit it on
+   * continuation chunks. A new utteranceId queues the next utterance after the current
+   * one while keeping both in the same speech sequence. All chunks in the sequence share
+   * one correlationId for interruption handling.
+   */
   public createTalkMessageStream(correlationId?: string): TalkMessageStream {
     if (!this.streamingClient) {
       throw new Error(
