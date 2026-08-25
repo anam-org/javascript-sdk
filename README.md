@@ -142,6 +142,8 @@ const toolResultText = await runToolCall();
 await stream.streamMessageChunk(toolResultText, true, crypto.randomUUID());
 ```
 
+The tool has to finish quickly. The server closes a talk stream that goes 15 seconds without receiving a chunk that carries text, ends the turn, and rejects anything sent on that correlation id afterwards. Empty chunks do not reset that timer. For a tool that may run longer, let the first utterance end the stream and start a new one when the result arrives.
+
 The same ordering applies when both utterances are ready immediately. Send them with different ids and the second waits for the first to finish playing:
 
 ```typescript
