@@ -122,7 +122,9 @@ export class TalkMessageStream {
    * current utterance. A new id queues the next utterance after the current one without
    * ending the speech sequence, which is what allows speech before and after a tool call,
    * or two ready utterances that must play in order. The most recent value is reused for
-   * the terminator sent by endMessage. Throws if it is not a lowercase UUID v4.
+   * the terminator sent by endMessage. Throws if it is not a lowercase UUID v4. Needs a
+   * Cara 4 avatar: Cara 3 avatars drop the id silently and speak the turn as one
+   * utterance.
    */
   public async streamMessageChunk(
     partialMessage: string,

@@ -126,6 +126,9 @@ for (const chunk of llmChunks) {
 
 A talk stream can stay open while your application runs a tool. Give the speech before and after the tool call separate utterance ids, and the second waits for the first to finish playing.
 
+> [!NOTE]
+> Utterance ids need a Cara 4 avatar. Cara 3 avatars run an older engine that drops the field silently: the text is still spoken, but as one utterance, and persona message events carry no `utteranceId`. Nothing errors or warns, so check whether ids come back rather than waiting for a failure.
+
 > [!IMPORTANT]
 > `utteranceId` marks the start of an utterance, not an individual text chunk. Set it on the first chunk, then omit it from the remaining chunks in that utterance. Set a new id only when the next utterance begins.
 
