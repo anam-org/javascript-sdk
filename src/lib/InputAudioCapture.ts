@@ -113,6 +113,10 @@ export const detectInputAudioBrowser = (
   if (/(Firefox|FxiOS)\//i.test(userAgent)) {
     return 'firefox';
   }
+  // Non-Chrome Chromium derivatives also carry a "Chrome/" token.
+  if (/(OPR|Opera|SamsungBrowser|Vivaldi|Whale|YaBrowser)\//i.test(userAgent)) {
+    return 'other';
+  }
   if (/(Chrome|CriOS)\//i.test(userAgent)) {
     return 'chrome';
   }

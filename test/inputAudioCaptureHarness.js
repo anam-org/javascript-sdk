@@ -124,6 +124,20 @@ async function runHarness() {
     }),
     'safari',
   );
+  assert.equal(
+    detectInputAudioBrowser({
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 OPR/112.0.0.0',
+    }),
+    'other',
+  );
+  assert.equal(
+    detectInputAudioBrowser({
+      userAgent:
+        'Mozilla/5.0 (Linux; Android 14; SAMSUNG SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/25.0 Chrome/121.0.0.0 Mobile Safari/537.36',
+    }),
+    'other',
+  );
   assert.equal(detectInputAudioBrowser(null), 'other');
 
   const capturedMetrics = [];
