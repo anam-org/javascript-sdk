@@ -387,6 +387,7 @@ export class StreamingClient {
         'StreamingClient - changeAudioInputDevice: a non-empty deviceId is required',
       );
     }
+    const normalizedDeviceId = deviceId.trim();
 
     // Store the current mute state to preserve it
     const wasMuted = this.inputAudioState.isMuted;
@@ -400,14 +401,14 @@ export class StreamingClient {
       }
 
       // Request new audio stream with the new device ID
-      const audioConstraints = buildInputAudioConstraints(deviceId);
+      const audioConstraints = buildInputAudioConstraints(normalizedDeviceId);
 
       this.inputAudioStream = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints,
       });
 
       // Update the stored device ID
-      this.audioDeviceId = deviceId;
+      this.audioDeviceId = normalizedDeviceId;
 
       // Replace the audio track in the peer connection
       await this.setupAudioTrack('device_change');
@@ -420,7 +421,7 @@ export class StreamingClient {
       // Emit event to notify that the device has changed
       this.publicEventEmitter.emit(
         AnamEvent.INPUT_AUDIO_DEVICE_CHANGED,
-        deviceId,
+        normalizedDeviceId,
       );
     } catch (error) {
       console.error('Failed to change audio input device:', error);
