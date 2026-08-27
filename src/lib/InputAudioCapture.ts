@@ -29,7 +29,9 @@ export interface AppliedInputAudioSettings {
   noiseSuppression: AppliedBooleanSetting;
   autoGainControl: AppliedBooleanSetting;
   voiceIsolation: AppliedBooleanSetting;
-  channelCount: number | 'unreported';
+  // String like its siblings: the metrics backend assigns field types from
+  // the JSON values it receives, so this key must not alternate types.
+  channelCount: string;
 }
 
 type SendMetrics = (metrics: ClientMetricPayload[]) => Promise<void>;
@@ -130,7 +132,7 @@ export const serializeAppliedInputAudioSettings = (
     channelCount:
       typeof values.channelCount === 'number' &&
       Number.isFinite(values.channelCount)
-        ? values.channelCount
+        ? String(values.channelCount)
         : 'unreported',
   };
 };

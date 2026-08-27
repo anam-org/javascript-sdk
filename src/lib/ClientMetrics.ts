@@ -62,7 +62,7 @@ export interface ClientMetricPayload {
   value: string | number;
   clientTimestamp?: string;
   tags?: Record<string, string | number>;
-  /** Extra InfluxDB fields written on the same point, alongside `value`. */
+  /** Extra fields written on the same metric point, alongside `value`. */
   fields?: Record<string, string | number>;
 }
 

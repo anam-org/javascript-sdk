@@ -47,7 +47,7 @@ async function runHarness() {
       noiseSuppression: 'false',
       autoGainControl: 'true',
       voiceIsolation: 'unreported',
-      channelCount: 1,
+      channelCount: '1',
     },
   );
 
@@ -98,7 +98,8 @@ async function runHarness() {
   );
   assert.equal(
     detectInputAudioBrowser({
-      userAgent: 'Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0',
+      userAgent:
+        'Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0',
     }),
     'firefox',
   );
@@ -155,7 +156,7 @@ async function runHarness() {
         noiseSuppression: 'true',
         autoGainControl: 'false',
         voiceIsolation: 'true',
-        channelCount: 1,
+        channelCount: '1',
       },
     },
   ]);

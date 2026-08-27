@@ -861,7 +861,7 @@ export class StreamingClient {
     this.iceRestartEpisodeStartMs = null;
     this.iceRestartEpisodeTrigger = null;
     // durationMs is the value, not a tag: near-unique tag values explode
-    // InfluxDB series cardinality. Episode count = count of points.
+    // metric-series cardinality. Episode count = count of points.
     sendClientMetric(
       ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_ICE_RESTART,
       durationMs,
