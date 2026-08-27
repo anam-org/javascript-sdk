@@ -47,7 +47,7 @@ async function runHarness() {
       noiseSuppression: 'false',
       autoGainControl: 'true',
       voiceIsolation: 'unreported',
-      channelCount: '1',
+      channelCount: 1,
     },
   );
 
@@ -61,7 +61,7 @@ async function runHarness() {
       noiseSuppression: 'unreported',
       autoGainControl: 'unreported',
       voiceIsolation: 'true',
-      channelCount: 'unreported',
+      channelCount: 0,
     },
   );
 
@@ -156,7 +156,7 @@ async function runHarness() {
         noiseSuppression: 'true',
         autoGainControl: 'false',
         voiceIsolation: 'true',
-        channelCount: '1',
+        channelCount: 1,
       },
     },
   ]);

@@ -29,9 +29,12 @@ export interface AppliedInputAudioSettings {
   noiseSuppression: AppliedBooleanSetting;
   autoGainControl: AppliedBooleanSetting;
   voiceIsolation: AppliedBooleanSetting;
-  // String like its siblings: the metrics backend assigns field types from
-  // the JSON values it receives, so this key must not alternate types.
-  channelCount: string;
+  // Always a number, 0 when the browser does not report it. The metrics
+  // backend types an InfluxDB field from the JSON it receives, so this key
+  // must not alternate between number and string. 0 is not a real channel
+  // count, so it reads as unreported — but it does drag numeric aggregates
+  // down, so query it as `channelCount > 0`.
+  channelCount: number;
 }
 
 type SendMetrics = (metrics: ClientMetricPayload[]) => Promise<void>;
@@ -132,8 +135,8 @@ export const serializeAppliedInputAudioSettings = (
     channelCount:
       typeof values.channelCount === 'number' &&
       Number.isFinite(values.channelCount)
-        ? String(values.channelCount)
-        : 'unreported',
+        ? values.channelCount
+        : 0,
   };
 };
 
