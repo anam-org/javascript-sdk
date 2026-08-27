@@ -5,6 +5,11 @@ import {
 } from '../lib/ClientMetrics';
 import { ClientConnectionMilestoneRecorder } from '../lib/ConnectionMilestones';
 import {
+  buildInputAudioConstraints,
+  InputAudioCapturePath,
+  reportInputAudioSettings,
+} from '../lib/InputAudioCapture';
+import {
   EngineApiRestClient,
   InternalEventEmitter,
   PublicEventEmitter,
@@ -377,9 +382,9 @@ export class StreamingClient {
       );
     }
 
-    if (deviceId === null || deviceId === undefined) {
+    if (!deviceId?.trim()) {
       throw new Error(
-        'StreamingClient - changeAudioInputDevice: deviceId is required',
+        'StreamingClient - changeAudioInputDevice: a non-empty deviceId is required',
       );
     }
 
@@ -395,12 +400,7 @@ export class StreamingClient {
       }
 
       // Request new audio stream with the new device ID
-      const audioConstraints: MediaTrackConstraints = {
-        echoCancellation: true,
-        deviceId: {
-          exact: deviceId,
-        },
-      };
+      const audioConstraints = buildInputAudioConstraints(deviceId);
 
       this.inputAudioStream = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints,
@@ -410,7 +410,7 @@ export class StreamingClient {
       this.audioDeviceId = deviceId;
 
       // Replace the audio track in the peer connection
-      await this.setupAudioTrack();
+      await this.setupAudioTrack('device_change');
 
       // Restore the mute state
       if (wasMuted) {
@@ -602,7 +602,7 @@ export class StreamingClient {
           audioTrackCount: this.inputAudioStream.getAudioTracks().length,
         });
         // User provided an audio stream, set it up immediately
-        await this.setupAudioTrack();
+        await this.setupAudioTrack('user_provided');
       } else {
         // No user stream, start microphone permission request asynchronously
         // Don't await - let it run in parallel with connection setup
@@ -1405,16 +1405,7 @@ export class StreamingClient {
     this.publicEventEmitter.emit(AnamEvent.MIC_PERMISSION_PENDING);
 
     try {
-      const audioConstraints: MediaTrackConstraints = {
-        echoCancellation: true,
-      };
-
-      // If an audio device ID is provided in the options, use it
-      if (this.audioDeviceId) {
-        audioConstraints.deviceId = {
-          exact: this.audioDeviceId,
-        };
-      }
+      const audioConstraints = buildInputAudioConstraints(this.audioDeviceId);
 
       this.inputAudioStream = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints,
@@ -1429,7 +1420,7 @@ export class StreamingClient {
       this.publicEventEmitter.emit(AnamEvent.MIC_PERMISSION_GRANTED);
 
       // Now add the audio track to the existing connection
-      await this.setupAudioTrack();
+      await this.setupAudioTrack('initial');
     } catch (error) {
       console.error('Failed to get microphone permission:', error);
       this.inputAudioState = {
@@ -1452,7 +1443,7 @@ export class StreamingClient {
   /**
    * Set up audio track and add it to the peer connection using replaceTrack
    */
-  private async setupAudioTrack() {
+  private async setupAudioTrack(capturePath: InputAudioCapturePath) {
     if (!this.peerConnection || !this.inputAudioStream) {
       return;
     }
@@ -1493,6 +1484,8 @@ export class StreamingClient {
       // No audio sender found, add track normally
       this.peerConnection.addTrack(audioTrack, this.inputAudioStream);
     }
+
+    reportInputAudioSettings(audioTrack, capturePath);
 
     // pass the stream to the callback
     this.connectionMilestones?.record('input_audio_stream_started', {
