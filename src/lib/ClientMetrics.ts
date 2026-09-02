@@ -13,6 +13,7 @@ export enum ClientMetricMeasurement {
   CLIENT_METRIC_MEASUREMENT_SESSION_ATTEMPT = 'client_session_attempt',
   CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS = 'client_session_success',
   CLIENT_METRIC_MEASUREMENT_ICE_RESTART = 'client_ice_restart',
+  CLIENT_METRIC_MEASUREMENT_INPUT_AUDIO_SETTINGS = 'client_input_audio_settings',
 }
 
 const CLIENT_METRICS_MAX_BATCH_SIZE = 50;
@@ -61,6 +62,8 @@ export interface ClientMetricPayload {
   value: string | number;
   clientTimestamp?: string;
   tags?: Record<string, string | number>;
+  /** Extra fields written on the same metric point, alongside `value`. */
+  fields?: Record<string, string | number>;
 }
 
 export const sendClientMetric = async (

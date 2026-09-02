@@ -67,7 +67,7 @@ export class MessageHistoryClient {
     if (!messageEvent.utteranceId) return utterances;
     const wasPublished =
       !!utterances && this.publishedUtterances.has(utterances);
-    const current = wasPublished ? [...utterances] : (utterances ?? []);
+    const current = wasPublished ? [...utterances] : utterances ?? [];
     const last = current[current.length - 1];
     if (last && last.id === messageEvent.utteranceId) {
       const updatedLast = wasPublished ? { ...last } : last;
@@ -108,10 +108,7 @@ export class MessageHistoryClient {
         ...(utterances ? { utterances } : {}),
       };
     } else {
-      const utterances = this.appendUtterance(
-        undefined,
-        messageEvent,
-      );
+      const utterances = this.appendUtterance(undefined, messageEvent);
       // add the new persona message to the history
       this.messages.push({
         ...personaMessage,

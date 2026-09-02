@@ -44,6 +44,7 @@
     "test:utterance-id": "npm run build:main && npm run test:harness:utterance-id",
     "test:harness:director-notes": "node test/directorNotesHarness.js && tsc --noEmit --strict --target es2015 --moduleResolution node --skipLibCheck test/directorNotesTypes.ts",
     "test:harness:connection-milestones": "node test/connectionMilestonesHarness.js",
+    "test:harness:input-audio-capture": "node test/inputAudioCaptureHarness.js",
     "test:harness:session-regions": "node test/sessionRegionsHarness.js",
     "test:harness:utterance-id": "node test/utteranceIdHarness.js",
     "watch": "nodemon -e ts --watch src --exec \"npm run build\"",
