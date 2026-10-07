@@ -51,7 +51,6 @@ const MAX_ICE_RESTART_ATTEMPTS = 3;
 const ICE_DISCONNECTED_GRACE_MS = 2000;
 const ICE_RESTART_WATCHDOG_MS = 3000;
 const ENSURE_WS_OPEN_TIMEOUT_MS = 5000;
-// Termination reasons for an engine-side media connection failure.
 const MEDIA_FAILURE_REASON_CODES = new Set([
   'user_never_established_webrtc_connection',
   'webrtc_dtls_failed',
@@ -683,12 +682,15 @@ export class StreamingClient {
         break;
       }
       case SignalMessageAction.END_SESSION:
+        const reasonCode = signalMessage.reasonCode;
+        this.connectionMilestones?.record('server_end_session', {
+          reasonCode,
+        });
         if (this.connectionClosedEmitted) {
           break;
         }
         this.connectionClosedEmitted = true;
         const reason = signalMessage.payload as string;
-        const reasonCode = signalMessage.reasonCode;
         // Server-ended session mid-restart counts as aborted; user hang-up doesn't.
         this.sendIceRestartMetric('aborted');
         if (reasonCode && MEDIA_FAILURE_REASON_CODES.has(reasonCode)) {
@@ -1571,6 +1573,16 @@ export class StreamingClient {
   private async shutdown() {
     this.iceRestartStopped = true;
     this.cancelIceRestart();
+    // stop the signalling client
+    try {
+      this.signallingClient.stop();
+    } catch (error) {
+      console.error(
+        'StreamingClient - shutdown: error stopping signallilng',
+        error,
+      );
+    }
+
     const peerConnection = this.peerConnection;
     if (peerConnection) {
       peerConnection.onconnectionstatechange = null;
@@ -1613,16 +1625,6 @@ export class StreamingClient {
     } catch (error) {
       console.error(
         'StreamingClient - shutdown: error stopping input audio stream',
-        error,
-      );
-    }
-
-    // stop the signalling client
-    try {
-      this.signallingClient.stop();
-    } catch (error) {
-      console.error(
-        'StreamingClient - shutdown: error stopping signallilng',
         error,
       );
     }

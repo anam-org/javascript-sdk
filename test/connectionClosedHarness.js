@@ -49,8 +49,11 @@ function createClient({
     closed.push(args);
   });
   const failures = [];
+  const milestones = [];
   const connectionMilestones = {
-    record() {},
+    record(name, tags) {
+      milestones.push([name, tags]);
+    },
     publishFailure(tags) {
       failures.push(tags);
     },
@@ -82,7 +85,7 @@ function createClient({
   const pc = createFakePeerConnection({ connectionState });
   client.peerConnection = pc;
   pc.onconnectionstatechange = client.onConnectionStateChange.bind(client);
-  return { client, pc, closed, failures };
+  return { client, pc, closed, failures, milestones };
 }
 
 function endSession(client, reasonCode) {
@@ -114,7 +117,7 @@ async function testMediaReasonCodesReportWebrtcFailure() {
 }
 
 async function testOtherReasonCodesReportServerClosed() {
-  for (const reasonCode of ['max_session_length_reached', undefined]) {
+  for (const reasonCode of ['MAX_SESSION_LENGTH', undefined]) {
     const { client, closed, failures } = createClient();
     await endSession(client, reasonCode);
     await flushPromises();
@@ -186,7 +189,7 @@ async function testEngineEndSessionFrame() {
       sessionId: 'session-1',
       actionType: 'endsession',
       payload: 'txt',
-      payloadFormat: 'text',
+      payloadFormat: 'unencoded',
       reasonCode: 'webrtc_dtls_failed',
     }),
   });
@@ -197,6 +200,52 @@ async function testEngineEndSessionFrame() {
   ]);
 }
 
+async function testSignallingReconnectDuringStatsReport() {
+  let peerConnectionsCreated = 0;
+  global.RTCPeerConnection = function RTCPeerConnection() {
+    peerConnectionsCreated += 1;
+    throw new Error('unexpected peer connection');
+  };
+  try {
+    const { client, pc, closed } = createClient({
+      showPeerConnectionStatsReport: true,
+    });
+    const socket = {
+      readyState: WebSocket.OPEN,
+      send() {},
+      close() {},
+    };
+    client.signallingClient.socket = socket;
+    const pending = endSession(client, 'webrtc_dtls_failed');
+    await client.signallingClient.onOpen(socket);
+    pc.resolveStats();
+    await pending;
+    await flushPromises();
+    assert.equal(peerConnectionsCreated, 0);
+    assert.deepEqual(closed, [[ConnectionClosedCode.WEBRTC_FAILURE, 'txt']]);
+  } finally {
+    delete global.RTCPeerConnection;
+  }
+}
+
+async function testEndSessionRecordsReasonCode() {
+  const { client, milestones } = createClient();
+  await endSession(client, 'webrtc_connection_lost');
+  assert.deepEqual(
+    milestones.filter(([name]) => name === 'server_end_session'),
+    [['server_end_session', { reasonCode: 'webrtc_connection_lost' }]],
+  );
+
+  const late = createClient();
+  late.client.connectionClosedEmitted = true;
+  await endSession(late.client, 'MAX_SESSION_LENGTH');
+  assert.deepEqual(
+    late.milestones.filter(([name]) => name === 'server_end_session'),
+    [['server_end_session', { reasonCode: 'MAX_SESSION_LENGTH' }]],
+  );
+  assert.deepEqual(late.closed, []);
+}
+
 async function main() {
   setClientMetricsDisabled(true);
   await testMediaReasonCodesReportWebrtcFailure();
@@ -205,6 +254,8 @@ async function main() {
   await testPeerConnectionClosedThenEndSession();
   await testEndSessionThenInFlightWebrtcFailure();
   await testEngineEndSessionFrame();
+  await testSignallingReconnectDuringStatsReport();
+  await testEndSessionRecordsReasonCode();
   console.log('connection closed harness passed');
 }
 
