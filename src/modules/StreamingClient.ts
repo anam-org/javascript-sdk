@@ -4,6 +4,7 @@ import {
   sendClientMetric,
 } from '../lib/ClientMetrics';
 import { ClientConnectionMilestoneRecorder } from '../lib/ConnectionMilestones';
+import { SessionDataChannelNegotiation } from '../lib/sessionDataChannel';
 import {
   buildInputAudioConstraints,
   InputAudioCapturePath,
@@ -86,6 +87,8 @@ export class StreamingClient {
   private iceRestartCandidateBuffer: RTCIceCandidate[] | null = null;
   private inputAudioStream: MediaStream | null = null;
   private dataChannel: RTCDataChannel | null = null;
+  private sessionDataChannelNegotiation: SessionDataChannelNegotiation | null =
+    null;
   private videoElement: HTMLVideoElement | null = null;
   private videoStream: MediaStream | null = null;
   private audioStream: MediaStream | null = null;
@@ -630,6 +633,8 @@ export class StreamingClient {
           // it cannot be applied in a stable state or against a different offer.
           break;
         }
+        // Before setRemoteDescription, so the channel has handlers before it can open.
+        this.resolveSessionDataChannel(signalMessage.payload);
         try {
           await this.peerConnection.setRemoteDescription(answer);
         } catch (err) {
@@ -1077,6 +1082,7 @@ export class StreamingClient {
       }
       await this.signallingClient.sendOffer(
         this.peerConnection.localDescription,
+        this.sessionDataChannelNegotiation?.offerId(),
       );
       this.flushIceRestartCandidateBuffer();
 
@@ -1257,13 +1263,29 @@ export class StreamingClient {
      * Create the data channel for sending and receiving text.
      * There is no input stream for text, instead the sending of data is triggered by a UI interaction.
      */
-    const dataChannel = this.peerConnection.createDataChannel('session', {
-      ordered: true,
-    });
+    this.sessionDataChannelNegotiation = new SessionDataChannelNegotiation(
+      this.peerConnection,
+    );
     this.connectionMilestones?.record('data_channel_created');
+  }
+
+  private resolveSessionDataChannel(answer: unknown) {
+    const resolved = this.sessionDataChannelNegotiation?.resolve(answer);
+    if (resolved) {
+      this.attachSessionDataChannelHandlers(
+        resolved.channel,
+        resolved.negotiated,
+      );
+    }
+  }
+
+  private attachSessionDataChannelHandlers(
+    dataChannel: RTCDataChannel,
+    negotiated: boolean,
+  ) {
     dataChannel.onopen = () => {
       this.dataChannel = dataChannel ?? null;
-      this.connectionMilestones?.record('data_channel_open');
+      this.connectionMilestones?.record('data_channel_open', { negotiated });
       this.publicEventEmitter.emit(AnamEvent.DATA_CHANNEL_OPEN);
     };
     dataChannel.onclose = () => {
@@ -1535,7 +1557,10 @@ export class StreamingClient {
         'StreamingClient - initPeerConnectionAndSendOffer: local description is null',
       );
     }
-    await this.signallingClient.sendOffer(this.peerConnection.localDescription);
+    await this.signallingClient.sendOffer(
+      this.peerConnection.localDescription,
+      this.sessionDataChannelNegotiation?.offerId(),
+    );
     this.connectionMilestones?.record('offer_sent');
   }
 
