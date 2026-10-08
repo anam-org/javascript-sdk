@@ -16,4 +16,5 @@ export interface SignalMessage {
   actionType: SignalMessageAction;
   sessionId: string;
   payload: object | string;
+  reasonCode?: string;
 }

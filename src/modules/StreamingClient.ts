@@ -51,6 +51,11 @@ const MAX_ICE_RESTART_ATTEMPTS = 3;
 const ICE_DISCONNECTED_GRACE_MS = 2000;
 const ICE_RESTART_WATCHDOG_MS = 3000;
 const ENSURE_WS_OPEN_TIMEOUT_MS = 5000;
+const MEDIA_FAILURE_REASON_CODES = new Set([
+  'user_never_established_webrtc_connection',
+  'webrtc_dtls_failed',
+  'webrtc_connection_lost',
+]);
 
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
@@ -63,6 +68,7 @@ export class StreamingClient {
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private peerConnection: RTCPeerConnection | null = null;
   private connectionEstablishedEmitted = false;
+  private connectionClosedEmitted = false;
   private iceRestartInProgress = false;
   private iceRestartAttempts = 0;
   private iceRestartAwaitedAnswer = false;
@@ -495,6 +501,7 @@ export class StreamingClient {
         return;
       }
       this.resetAttemptScopedMilestoneState();
+      this.connectionClosedEmitted = false;
       this.connectionMilestones?.record('connection_start_requested');
       // start the connection
       this.signallingClient.connect();
@@ -675,17 +682,37 @@ export class StreamingClient {
         break;
       }
       case SignalMessageAction.END_SESSION:
+        const reasonCode = signalMessage.reasonCode;
+        this.connectionMilestones?.record('server_end_session', {
+          reasonCode,
+        });
+        if (this.connectionClosedEmitted) {
+          break;
+        }
+        this.connectionClosedEmitted = true;
         const reason = signalMessage.payload as string;
         // Server-ended session mid-restart counts as aborted; user hang-up doesn't.
         this.sendIceRestartMetric('aborted');
-        this.connectionMilestones?.publishFailure({
-          failureStage: 'server_closed_connection',
-        });
-        this.publicEventEmitter.emit(
-          AnamEvent.CONNECTION_CLOSED,
-          ConnectionClosedCode.SERVER_CLOSED_CONNECTION,
-          reason,
-        );
+        if (reasonCode && MEDIA_FAILURE_REASON_CODES.has(reasonCode)) {
+          this.connectionMilestones?.publishFailure({
+            failureStage: 'webrtc',
+            reasonCode,
+          });
+          this.publicEventEmitter.emit(
+            AnamEvent.CONNECTION_CLOSED,
+            ConnectionClosedCode.WEBRTC_FAILURE,
+            reason,
+          );
+        } else {
+          this.connectionMilestones?.publishFailure({
+            failureStage: 'server_closed_connection',
+          });
+          this.publicEventEmitter.emit(
+            AnamEvent.CONNECTION_CLOSED,
+            ConnectionClosedCode.SERVER_CLOSED_CONNECTION,
+            reason,
+          );
+        }
         // close the peer connection
         this.shutdown();
         break;
@@ -1168,22 +1195,35 @@ export class StreamingClient {
   }
 
   private handleWebrtcFailure(err: any) {
-    this.connectionMilestones?.record('webrtc_failure', getErrorTags(err));
-    this.connectionMilestones?.publishFailure({
-      failureStage: 'webrtc',
-      ...getErrorTags(err),
-    });
-    console.error({ message: 'StreamingClient - handleWebrtcFailure: ', err });
-    if (err.name === 'NotAllowedError' && err.message === 'Permission denied') {
-      this.publicEventEmitter.emit(
-        AnamEvent.CONNECTION_CLOSED,
-        ConnectionClosedCode.MICROPHONE_PERMISSION_DENIED,
-      );
-    } else {
-      this.publicEventEmitter.emit(
-        AnamEvent.CONNECTION_CLOSED,
-        ConnectionClosedCode.WEBRTC_FAILURE,
-      );
+    if (this.connectionClosedEmitted) {
+      return;
+    }
+    this.connectionClosedEmitted = true;
+    // The signalling client emits its own CONNECTION_CLOSED when it gives up.
+    if (!this.signallingClient.isPermanentlyClosed()) {
+      this.connectionMilestones?.record('webrtc_failure', getErrorTags(err));
+      this.connectionMilestones?.publishFailure({
+        failureStage: 'webrtc',
+        ...getErrorTags(err),
+      });
+      console.error({
+        message: 'StreamingClient - handleWebrtcFailure: ',
+        err,
+      });
+      if (
+        err.name === 'NotAllowedError' &&
+        err.message === 'Permission denied'
+      ) {
+        this.publicEventEmitter.emit(
+          AnamEvent.CONNECTION_CLOSED,
+          ConnectionClosedCode.MICROPHONE_PERMISSION_DENIED,
+        );
+      } else {
+        this.publicEventEmitter.emit(
+          AnamEvent.CONNECTION_CLOSED,
+          ConnectionClosedCode.WEBRTC_FAILURE,
+        );
+      }
     }
 
     try {
@@ -1542,16 +1582,40 @@ export class StreamingClient {
   private async shutdown() {
     this.iceRestartStopped = true;
     this.cancelIceRestart();
+    // stop the signalling client
+    try {
+      this.signallingClient.stop();
+    } catch (error) {
+      console.error(
+        'StreamingClient - shutdown: error stopping signallilng',
+        error,
+      );
+    }
+
+    const peerConnection = this.peerConnection;
+    if (peerConnection) {
+      peerConnection.onconnectionstatechange = null;
+      peerConnection.oniceconnectionstatechange = null;
+      peerConnection.onicecandidate = null;
+      this.peerConnection = null;
+    }
     if (this.showPeerConnectionStatsReport) {
-      const stats = await this.peerConnection?.getStats();
-      if (stats) {
-        const report = createRTCStatsReport(
-          stats,
-          this.peerConnectionStatsReportOutputFormat,
-        );
-        if (report) {
-          console.log(report, undefined, 2);
+      try {
+        const stats = await peerConnection?.getStats();
+        if (stats) {
+          const report = createRTCStatsReport(
+            stats,
+            this.peerConnectionStatsReportOutputFormat,
+          );
+          if (report) {
+            console.log(report, undefined, 2);
+          }
         }
+      } catch (error) {
+        console.warn(
+          'StreamingClient - shutdown: peer connection stats unavailable',
+          error,
+        );
       }
     }
     // stop stats collection
@@ -1581,25 +1645,10 @@ export class StreamingClient {
       );
     }
 
-    // stop the signalling client
-    try {
-      this.signallingClient.stop();
-    } catch (error) {
-      console.error(
-        'StreamingClient - shutdown: error stopping signallilng',
-        error,
-      );
-    }
-
     // close the peer connection
     try {
-      if (
-        this.peerConnection &&
-        this.peerConnection.connectionState !== 'closed'
-      ) {
-        this.peerConnection.onconnectionstatechange = null;
-        this.peerConnection.close();
-        this.peerConnection = null;
+      if (peerConnection && peerConnection.connectionState !== 'closed') {
+        peerConnection.close();
       }
     } catch (error) {
       console.error(
