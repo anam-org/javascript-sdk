@@ -248,6 +248,82 @@ async function testEndSessionRecordsReasonCode() {
   assert.deepEqual(late.closed, []);
 }
 
+async function testRejectedStatsStillReleasesResources() {
+  const { client, pc } = createClient({ showPeerConnectionStatsReport: true });
+  let closeCalls = 0;
+  const close = pc.close;
+  pc.close = () => {
+    closeCalls += 1;
+    close();
+  };
+  pc.getStats = () => Promise.reject(new Error('stats unavailable'));
+  const track = {
+    stopped: false,
+    stop() {
+      track.stopped = true;
+    },
+  };
+  client.inputAudioStream = { getTracks: () => [track] };
+  client.statsCollectionInterval = setInterval(() => {}, 60_000);
+  client.successMetricPoller = setInterval(() => {}, 60_000);
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  console.error = () => {};
+  console.warn = () => {};
+  try {
+    await client.shutdown().catch(() => {});
+    await client.shutdown().catch(() => {});
+  } finally {
+    console.error = originalError;
+    console.warn = originalWarn;
+  }
+  clearInterval(client.statsCollectionInterval);
+  clearInterval(client.successMetricPoller);
+  assert.equal(closeCalls, 1);
+  assert.equal(track.stopped, true);
+  assert.equal(client.inputAudioStream, null);
+  assert.equal(client.statsCollectionInterval, null);
+  assert.equal(client.successMetricPoller, null);
+  assert.equal(client.peerConnection, null);
+}
+
+async function testSignallingExhaustedDuringInitialAnswer() {
+  const { client, pc, closed } = createClient({ connectionState: 'new' });
+  pc.signalingState = 'have-local-offer';
+  let rejectAnswer;
+  pc.setRemoteDescription = () =>
+    new Promise((_, reject) => {
+      rejectAnswer = reject;
+    });
+  const pending = client.onSignalMessage({
+    actionType: SignalMessageAction.ANSWER,
+    sessionId: 'session-1',
+    payload: { type: 'answer', sdp: '' },
+  });
+  const signalling = client.signallingClient;
+  const socket = { readyState: 3, close() {} };
+  signalling.socket = socket;
+  signalling.wsConnectionAttempts = 1000;
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    await signalling.onClose(socket, {
+      code: 1006,
+      reason: '',
+      wasClean: false,
+    });
+    rejectAnswer(new Error('signalling closed'));
+    await pending;
+    await flushPromises();
+  } finally {
+    console.error = originalError;
+  }
+  assert.deepEqual(closed, [
+    [ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE],
+  ]);
+  assert.equal(pc.connectionState, 'closed');
+}
+
 async function main() {
   setClientMetricsDisabled(true);
   await testMediaReasonCodesReportWebrtcFailure();
@@ -258,6 +334,8 @@ async function main() {
   await testEngineEndSessionFrame();
   await testSignallingReconnectDuringStatsReport();
   await testEndSessionRecordsReasonCode();
+  await testRejectedStatsStillReleasesResources();
+  await testSignallingExhaustedDuringInitialAnswer();
   console.log('connection closed harness passed');
 }
 

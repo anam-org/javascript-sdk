@@ -1199,22 +1199,31 @@ export class StreamingClient {
       return;
     }
     this.connectionClosedEmitted = true;
-    this.connectionMilestones?.record('webrtc_failure', getErrorTags(err));
-    this.connectionMilestones?.publishFailure({
-      failureStage: 'webrtc',
-      ...getErrorTags(err),
-    });
-    console.error({ message: 'StreamingClient - handleWebrtcFailure: ', err });
-    if (err.name === 'NotAllowedError' && err.message === 'Permission denied') {
-      this.publicEventEmitter.emit(
-        AnamEvent.CONNECTION_CLOSED,
-        ConnectionClosedCode.MICROPHONE_PERMISSION_DENIED,
-      );
-    } else {
-      this.publicEventEmitter.emit(
-        AnamEvent.CONNECTION_CLOSED,
-        ConnectionClosedCode.WEBRTC_FAILURE,
-      );
+    // The signalling client emits its own CONNECTION_CLOSED when it gives up.
+    if (!this.signallingClient.isPermanentlyClosed()) {
+      this.connectionMilestones?.record('webrtc_failure', getErrorTags(err));
+      this.connectionMilestones?.publishFailure({
+        failureStage: 'webrtc',
+        ...getErrorTags(err),
+      });
+      console.error({
+        message: 'StreamingClient - handleWebrtcFailure: ',
+        err,
+      });
+      if (
+        err.name === 'NotAllowedError' &&
+        err.message === 'Permission denied'
+      ) {
+        this.publicEventEmitter.emit(
+          AnamEvent.CONNECTION_CLOSED,
+          ConnectionClosedCode.MICROPHONE_PERMISSION_DENIED,
+        );
+      } else {
+        this.publicEventEmitter.emit(
+          AnamEvent.CONNECTION_CLOSED,
+          ConnectionClosedCode.WEBRTC_FAILURE,
+        );
+      }
     }
 
     try {
@@ -1591,15 +1600,22 @@ export class StreamingClient {
       this.peerConnection = null;
     }
     if (this.showPeerConnectionStatsReport) {
-      const stats = await peerConnection?.getStats();
-      if (stats) {
-        const report = createRTCStatsReport(
-          stats,
-          this.peerConnectionStatsReportOutputFormat,
-        );
-        if (report) {
-          console.log(report, undefined, 2);
+      try {
+        const stats = await peerConnection?.getStats();
+        if (stats) {
+          const report = createRTCStatsReport(
+            stats,
+            this.peerConnectionStatsReportOutputFormat,
+          );
+          if (report) {
+            console.log(report, undefined, 2);
+          }
         }
+      } catch (error) {
+        console.warn(
+          'StreamingClient - shutdown: peer connection stats unavailable',
+          error,
+        );
       }
     }
     // stop stats collection
