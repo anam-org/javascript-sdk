@@ -191,10 +191,16 @@ export class SignallingClient {
     return this.permanentlyClosed || this.stopSignal;
   }
 
-  public async sendOffer(localDescription: RTCSessionDescription) {
+  public async sendOffer(
+    localDescription: RTCSessionDescription,
+    negotiatedSessionDataChannelId?: number,
+  ) {
     const offerMessagePayload = {
       connectionDescription: localDescription,
       userUid: this.sessionId, // TODO: this should be renamed to session ID on the server
+      ...(negotiatedSessionDataChannelId !== undefined && {
+        negotiatedSessionDataChannelId,
+      }),
     };
     const offerMessage: SignalMessage = {
       actionType: SignalMessageAction.OFFER,

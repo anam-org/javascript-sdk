@@ -5,6 +5,10 @@ import {
 } from '../lib/ClientMetrics';
 import { ClientConnectionMilestoneRecorder } from '../lib/ConnectionMilestones';
 import {
+  answerAcceptsNegotiatedSessionDataChannel,
+  NEGOTIATED_SESSION_DATA_CHANNEL_ID,
+} from '../lib/sessionDataChannel';
+import {
   buildInputAudioConstraints,
   InputAudioCapturePath,
   reportInputAudioSettings,
@@ -86,6 +90,8 @@ export class StreamingClient {
   private iceRestartCandidateBuffer: RTCIceCandidate[] | null = null;
   private inputAudioStream: MediaStream | null = null;
   private dataChannel: RTCDataChannel | null = null;
+  // Pre-negotiated session channel awaiting the first answer, which says whether the server created its side.
+  private pendingNegotiatedSessionDataChannel: RTCDataChannel | null = null;
   private videoElement: HTMLVideoElement | null = null;
   private videoStream: MediaStream | null = null;
   private audioStream: MediaStream | null = null;
@@ -630,6 +636,8 @@ export class StreamingClient {
           // it cannot be applied in a stable state or against a different offer.
           break;
         }
+        // Before setRemoteDescription, so the channel has handlers before it can open.
+        this.resolveSessionDataChannel(signalMessage.payload);
         try {
           await this.peerConnection.setRemoteDescription(answer);
         } catch (err) {
@@ -1077,6 +1085,7 @@ export class StreamingClient {
       }
       await this.signallingClient.sendOffer(
         this.peerConnection.localDescription,
+        this.pendingNegotiatedSessionDataChannelId(),
       );
       this.flushIceRestartCandidateBuffer();
 
@@ -1257,13 +1266,58 @@ export class StreamingClient {
      * Create the data channel for sending and receiving text.
      * There is no input stream for text, instead the sending of data is triggered by a UI interaction.
      */
-    const dataChannel = this.peerConnection.createDataChannel('session', {
+    this.pendingNegotiatedSessionDataChannel =
+      this.peerConnection.createDataChannel('session', {
+        ordered: true,
+        negotiated: true,
+        id: NEGOTIATED_SESSION_DATA_CHANNEL_ID,
+      });
+    this.connectionMilestones?.record('data_channel_created');
+  }
+
+  /**
+   * Keeps the pre-negotiated session channel if the answer confirms the server
+   * created its side, and otherwise replaces it with an in-band channel. Only the
+   * first answer decides; restart answers find nothing pending.
+   */
+  private resolveSessionDataChannel(answer: unknown) {
+    const negotiatedChannel = this.pendingNegotiatedSessionDataChannel;
+    if (!negotiatedChannel || !this.peerConnection) {
+      return;
+    }
+    this.pendingNegotiatedSessionDataChannel = null;
+    if (
+      answerAcceptsNegotiatedSessionDataChannel(
+        answer,
+        NEGOTIATED_SESSION_DATA_CHANNEL_ID,
+      )
+    ) {
+      this.attachSessionDataChannelHandlers(negotiatedChannel, true);
+      return;
+    }
+    // The offer already has the data m-line, so this needs no renegotiation.
+    const inBandChannel = this.peerConnection.createDataChannel('session', {
       ordered: true,
     });
-    this.connectionMilestones?.record('data_channel_created');
+    negotiatedChannel.close();
+    this.attachSessionDataChannelHandlers(inBandChannel, false);
+  }
+
+  // Sent with every offer until the first answer decides, since a restart offer
+  // may be the first one the server sees.
+  private pendingNegotiatedSessionDataChannelId(): number | undefined {
+    return this.pendingNegotiatedSessionDataChannel
+      ? NEGOTIATED_SESSION_DATA_CHANNEL_ID
+      : undefined;
+  }
+
+  private attachSessionDataChannelHandlers(
+    dataChannel: RTCDataChannel,
+    negotiated: boolean,
+  ) {
     dataChannel.onopen = () => {
       this.dataChannel = dataChannel ?? null;
-      this.connectionMilestones?.record('data_channel_open');
+      this.connectionMilestones?.record('data_channel_open', { negotiated });
       this.publicEventEmitter.emit(AnamEvent.DATA_CHANNEL_OPEN);
     };
     dataChannel.onclose = () => {
@@ -1535,7 +1589,10 @@ export class StreamingClient {
         'StreamingClient - initPeerConnectionAndSendOffer: local description is null',
       );
     }
-    await this.signallingClient.sendOffer(this.peerConnection.localDescription);
+    await this.signallingClient.sendOffer(
+      this.peerConnection.localDescription,
+      this.pendingNegotiatedSessionDataChannelId(),
+    );
     this.connectionMilestones?.record('offer_sent');
   }
 

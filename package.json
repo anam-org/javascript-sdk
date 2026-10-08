@@ -46,6 +46,7 @@
     "test:harness:connection-milestones": "node test/connectionMilestonesHarness.js",
     "test:harness:input-audio-capture": "node test/inputAudioCaptureHarness.js",
     "test:harness:session-regions": "node test/sessionRegionsHarness.js",
+    "test:harness:session-data-channel": "node test/sessionDataChannelHarness.js",
     "test:harness:utterance-id": "node test/utteranceIdHarness.js",
     "watch": "nodemon -e ts --watch src --exec \"npm run build\"",
     "prepare": "npm run build"
