@@ -10,6 +10,8 @@ const { setClientMetricsDisabled } = require('../dist/main/lib/ClientMetrics');
 const { AnamEvent, ConnectionClosedCode } = require('../dist/main/types');
 const { SignalMessageAction } = require('../dist/main/types');
 
+globalThis.WebSocket ??= { OPEN: 1 };
+
 const MEDIA_REASON_CODES = [
   'user_never_established_webrtc_connection',
   'webrtc_dtls_failed',
