@@ -127,6 +127,8 @@ for (const chunk of llmChunks) {
 Talk-stream chunks travel over the session's signalling connection. If that connection drops, the SDK holds unacknowledged chunks, reconnects, and resends them. The engine discards any chunk it already received, so nothing is spoken twice. If the chunks still can't be delivered within about 10 seconds, the SDK drops them, the stream stops accepting chunks, and the client emits `TALK_STREAM_DELIVERY_FAILED` with the stream's correlation id. Fall back to `talk()` with the full text:
 
 ```typescript
+import { AnamEvent } from '@anam-ai/js-sdk';
+
 const stream = anamClient.createTalkMessageStream();
 let answer = '';
 let complete = false;
