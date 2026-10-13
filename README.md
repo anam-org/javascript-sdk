@@ -122,6 +122,34 @@ for (const chunk of llmChunks) {
 }
 ```
 
+### Delivery failures
+
+Talk-stream chunks travel over the session's signalling connection. If that connection drops, the SDK holds unacknowledged chunks, reconnects, and resends them. The engine discards any chunk it already received, so nothing is spoken twice. If the chunks still can't be delivered within about 10 seconds, the SDK drops them, the stream stops accepting chunks, and the client emits `TALK_STREAM_DELIVERY_FAILED` with the stream's correlation id. Fall back to `talk()` with the full text:
+
+```typescript
+const stream = anamClient.createTalkMessageStream();
+let answer = '';
+let complete = false;
+let failed = false;
+
+anamClient.addListener(AnamEvent.TALK_STREAM_DELIVERY_FAILED, (correlationId) => {
+  if (correlationId !== stream.getCorrelationId()) return;
+  failed = true;
+  // If the failure arrives after the answer is complete, speak it now.
+  if (complete) anamClient.talk(answer);
+});
+
+for (const chunk of llmChunks) {
+  answer += chunk.text;
+  // A failed stream rejects further chunks, so keep collecting the answer instead.
+  if (!failed) await stream.streamMessageChunk(chunk.text, chunk.isLast);
+}
+complete = true;
+if (failed) anamClient.talk(answer);
+```
+
+If part of the answer had already been spoken, `talk()` repeats it. Holding and resending needs an engine that acknowledges talk-stream chunks. On older engines, chunks are sent as before and the event never fires.
+
 ### Speech across a tool call
 
 A talk stream can stay open while your application runs a tool. Give the speech before and after the tool call separate utterance ids, and the second waits for the first to finish playing.
