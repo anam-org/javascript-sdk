@@ -21,8 +21,8 @@ const UUID_V4 =
  * utterance after the current one, so the stream can stay open while your application
  * runs a tool.
  *
- * If the signalling connection drops and the engine cannot be reached within a few
- * seconds, the stream moves to DELIVERY_FAILED and the client emits
+ * If the signalling connection drops and the engine cannot be reached within about
+ * 10 seconds, the stream moves to DELIVERY_FAILED and the client emits
  * AnamEvent.TALK_STREAM_DELIVERY_FAILED with this stream's correlationId.
  *
  * @example
@@ -132,8 +132,9 @@ export class TalkMessageStream {
         : {}),
     };
     await this.signallingClient.sendTalkMessage(payload);
+    // An ended stream keeps listening: its final chunk can still fail to deliver,
+    // and the turn can still be interrupted while it plays.
     this.state = TalkMessageStreamState.ENDED;
-    this.onDeactivate();
   }
 
   /**
@@ -181,9 +182,6 @@ export class TalkMessageStream {
     this.state = endOfSpeech
       ? TalkMessageStreamState.ENDED
       : TalkMessageStreamState.STREAMING;
-    if (this.state === TalkMessageStreamState.ENDED) {
-      this.onDeactivate();
-    }
 
     // send message to signalling client
     await this.signallingClient.sendTalkMessage(payload);

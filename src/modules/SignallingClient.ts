@@ -36,6 +36,10 @@ export class SignallingClient {
   private socket: WebSocket | null = null;
   private permanentlyClosed = false;
   private iceRestartReconnectInProgress = false;
+  // Set when a socket is replaced because talk-stream acks stopped. That usually
+  // means a network switch, so the reconnect gets the same retry headroom as an
+  // ICE-restart reconnect until the new socket proves stable.
+  private talkStreamReconnectInProgress = false;
   private heartBeatIntervalRef: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private stableConnectionTimer: ReturnType<typeof setTimeout> | null = null;
@@ -258,7 +262,9 @@ export class SignallingClient {
       sessionId: this.sessionId,
       payload: payload,
     };
-    if (!this.talkStreamDelivery.isEnabled()) {
+    // Once signalling has stopped nothing can be delivered, so there is nothing to
+    // hold; a held chunk would only report a failure after the session has ended.
+    if (!this.talkStreamDelivery.isEnabled() || this.isPermanentlyClosed()) {
       this.sendSignalMessage(chatMessage);
       return;
     }
@@ -288,6 +294,7 @@ export class SignallingClient {
     this.clearReconnectTimer();
     this.clearStableConnectionTimer();
     this.iceRestartReconnectInProgress = false;
+    this.talkStreamReconnectInProgress = false;
     if (this.socket) {
       this.socket.close();
       this.socket = null;
@@ -350,6 +357,7 @@ export class SignallingClient {
       this.stableConnectionTimer = null;
       if (this.socket === socket && socket.readyState === WebSocket.OPEN) {
         this.wsConnectionAttempts = 0;
+        this.talkStreamReconnectInProgress = false;
       }
     }, WEBSOCKET_STABLE_RECONNECTION_RESET_MS);
   }
@@ -394,19 +402,22 @@ export class SignallingClient {
         closeCode: event?.code,
         closeReason: event?.reason,
       });
+      this.iceRestartReconnectInProgress = false;
+      this.talkStreamReconnectInProgress = false;
+      this.permanentlyClosed = true;
       this.talkStreamDelivery.failAll();
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
         ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
       );
-      this.iceRestartReconnectInProgress = false;
-      this.permanentlyClosed = true;
     }
   }
 
   private getMaxReconnectionAttempts(event?: CloseEvent): number {
     if (
-      !this.iceRestartReconnectInProgress ||
+      !(
+        this.iceRestartReconnectInProgress || this.talkStreamReconnectInProgress
+      ) ||
       this.isApiGatewayBackendClose(event)
     ) {
       return this.maxWsReconnectionAttempts;
@@ -483,6 +494,7 @@ export class SignallingClient {
     console.warn(
       'SignallingClient - talk stream chunks were not acknowledged; replacing signalling socket',
     );
+    this.talkStreamReconnectInProgress = true;
     this.replaceSocket();
   }
 
@@ -491,10 +503,19 @@ export class SignallingClient {
       InternalEvent.TALK_STREAM_DELIVERY_FAILED,
       correlationId,
     );
-    this.publicEventEmitter.emit(
-      AnamEvent.TALK_STREAM_DELIVERY_FAILED,
-      correlationId,
-    );
+    // This can run on the path that emits CONNECTION_CLOSED, so a throwing
+    // listener must not stop the session from reporting that it closed.
+    try {
+      this.publicEventEmitter.emit(
+        AnamEvent.TALK_STREAM_DELIVERY_FAILED,
+        correlationId,
+      );
+    } catch (error) {
+      console.error(
+        'SignallingClient - TALK_STREAM_DELIVERY_FAILED listener threw',
+        error,
+      );
+    }
   }
 
   private async onMessage(event: MessageEvent) {

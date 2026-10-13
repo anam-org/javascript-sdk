@@ -13,6 +13,10 @@ const {
   PublicEventEmitter,
 } = require('../dist/main/modules/PublicEventEmitter');
 const { AnamEvent } = require('../dist/main/types');
+const {
+  TALK_STREAM_ACK_TIMEOUT_MS,
+  TALK_STREAM_MAX_HOLD_MS,
+} = require('../dist/main/modules/TalkStreamDeliveryTracker');
 
 class FakeWebSocket {
   static CONNECTING = 0;
@@ -111,36 +115,49 @@ async function testDeliveryFailedMakesActiveStreamTerminal() {
   );
 }
 
-async function testEndedStreamIgnoresDeliveryFailed() {
-  const { stream, internalEmitter } = fakeStream();
-  await stream.streamMessageChunk('a', true);
-  internalEmitter.emit(InternalEvent.TALK_STREAM_DELIVERY_FAILED, 'corr-1');
-  assert.equal(stream.getState(), TalkMessageStreamState.ENDED);
+async function testEndedStreamStillReportsFailureAndInterruption() {
+  // The final chunk can still be lost, and an ended turn can still be interrupted
+  // while it plays.
+  const failed = fakeStream();
+  await failed.stream.streamMessageChunk('a', true);
+  failed.internalEmitter.emit(
+    InternalEvent.TALK_STREAM_DELIVERY_FAILED,
+    'corr-1',
+  );
+  assert.equal(
+    failed.stream.getState(),
+    TalkMessageStreamState.DELIVERY_FAILED,
+  );
+
+  const interrupted = fakeStream();
+  await interrupted.stream.streamMessageChunk('a', true);
+  interrupted.internalEmitter.emit(InternalEvent.SIGNAL_MESSAGE_RECEIVED, {
+    actionType: 'talkinputstreaminterrupted',
+    sessionId: 'session-1',
+    payload: { correlationId: 'corr-1' },
+  });
+  assert.equal(
+    interrupted.stream.getState(),
+    TalkMessageStreamState.INTERRUPTED,
+  );
 }
 
 function listenerCount(emitter, event) {
   return emitter.listeners[event]?.size ?? 0;
 }
 
-async function testDeactivateRemovesListeners() {
+async function testTerminalStatesRemoveListeners() {
   const { stream, internalEmitter } = fakeStream();
-  assert.equal(
-    listenerCount(internalEmitter, InternalEvent.SIGNAL_MESSAGE_RECEIVED),
-    1,
-  );
-  assert.equal(
-    listenerCount(internalEmitter, InternalEvent.TALK_STREAM_DELIVERY_FAILED),
-    1,
-  );
+  const counts = () =>
+    [
+      InternalEvent.SIGNAL_MESSAGE_RECEIVED,
+      InternalEvent.TALK_STREAM_DELIVERY_FAILED,
+    ].map((event) => listenerCount(internalEmitter, event));
+  assert.deepEqual(counts(), [1, 1]);
   await stream.streamMessageChunk('a', true);
-  assert.equal(
-    listenerCount(internalEmitter, InternalEvent.SIGNAL_MESSAGE_RECEIVED),
-    0,
-  );
-  assert.equal(
-    listenerCount(internalEmitter, InternalEvent.TALK_STREAM_DELIVERY_FAILED),
-    0,
-  );
+  assert.deepEqual(counts(), [1, 1]);
+  internalEmitter.emit(InternalEvent.TALK_STREAM_DELIVERY_FAILED, 'corr-1');
+  assert.deepEqual(counts(), [0, 0]);
 }
 
 async function connectedSignalling({ maxWsReconnectionAttempts } = {}) {
@@ -168,7 +185,7 @@ async function connectedSignalling({ maxWsReconnectionAttempts } = {}) {
   currentSocket().open();
   await flushPromises();
   const stream = new TalkMessageStream('corr-1', internalEmitter, signalling);
-  return { signalling, stream, log, signalled };
+  return { signalling, stream, log, signalled, publicEmitter };
 }
 
 function advertiseAcks() {
@@ -196,7 +213,7 @@ async function testNoTrackingWithoutEngineSupport() {
   const { stream } = await connectedSignalling();
   currentSocket().swallow = true;
   await stream.streamMessageChunk('lost', false);
-  mock.timers.tick(20000);
+  mock.timers.tick(TALK_STREAM_MAX_HOLD_MS * 2);
   assert.equal(FakeWebSocket.instances.length, 1);
 }
 
@@ -206,7 +223,7 @@ async function testSessionReadyEnablesTrackingAndIsStillEmitted() {
   assert.deepEqual(signalled, ['sessionready']);
   currentSocket().swallow = true;
   await stream.streamMessageChunk('hello', false);
-  mock.timers.tick(3000);
+  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS);
   assert.equal(FakeWebSocket.instances.length, 2);
   await reopen();
   assert.deepEqual(
@@ -222,7 +239,7 @@ async function testFirstAckEnablesTrackingAndIsNotEmitted() {
   assert.deepEqual(signalled, []);
   currentSocket().swallow = true;
   await stream.streamMessageChunk('two', false);
-  mock.timers.tick(3000);
+  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS);
   await reopen();
   assert.deepEqual(
     talkSent(currentSocket()).map((p) => p.sequence),
@@ -239,7 +256,7 @@ async function testReplaysOnlyUnackedInOrder() {
   ack(1);
   currentSocket().swallow = true;
   await stream.streamMessageChunk('d', false);
-  mock.timers.tick(3000);
+  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS);
   await reopen();
   assert.deepEqual(
     talkSent(currentSocket()).map((p) => [p.sequence, p.content]),
@@ -270,14 +287,14 @@ async function testHoldTimeoutFailsStreamOnce() {
   advertiseAcks();
   currentSocket().swallow = true;
   await stream.streamMessageChunk('lost', false);
-  mock.timers.tick(3000);
-  mock.timers.tick(7000);
+  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS);
+  mock.timers.tick(TALK_STREAM_MAX_HOLD_MS - TALK_STREAM_ACK_TIMEOUT_MS);
   assert.deepEqual(log, [['failed', 'corr-1']]);
   assert.equal(stream.getState(), TalkMessageStreamState.DELIVERY_FAILED);
   await assert.rejects(() => stream.streamMessageChunk('more', false));
   await reopen();
   assert.deepEqual(talkSent(currentSocket()), []);
-  mock.timers.tick(20000);
+  mock.timers.tick(TALK_STREAM_MAX_HOLD_MS * 2);
   assert.deepEqual(log, [['failed', 'corr-1']]);
 }
 
@@ -287,7 +304,7 @@ async function testStopIsSilent() {
   currentSocket().swallow = true;
   await stream.streamMessageChunk('pending', false);
   signalling.stop();
-  mock.timers.tick(20000);
+  mock.timers.tick(TALK_STREAM_MAX_HOLD_MS * 2);
   assert.deepEqual(log, []);
   assert.equal(FakeWebSocket.instances.length, 1);
 }
@@ -323,6 +340,86 @@ async function testIceRestartReconnectReplays() {
   );
 }
 
+async function testChunkAfterStopIsNotHeld() {
+  const { signalling, stream, log } = await connectedSignalling();
+  advertiseAcks();
+  signalling.stop();
+  await stream.streamMessageChunk('late', false);
+  mock.timers.tick(TALK_STREAM_MAX_HOLD_MS * 2);
+  assert.deepEqual(log, []);
+  assert.equal(stream.getState(), TalkMessageStreamState.STREAMING);
+}
+
+async function testChunkAfterTerminalCloseIsNotHeld() {
+  const { stream, log } = await connectedSignalling({
+    maxWsReconnectionAttempts: 1,
+  });
+  advertiseAcks();
+  currentSocket().drop();
+  await flushPromises();
+  mock.timers.tick(100);
+  currentSocket().drop();
+  await flushPromises();
+  await stream.streamMessageChunk('late', false);
+  mock.timers.tick(TALK_STREAM_MAX_HOLD_MS * 2);
+  assert.deepEqual(
+    log.map(([kind]) => kind),
+    ['closed'],
+  );
+}
+
+async function testThrowingFailureListenerDoesNotBlockConnectionClosed() {
+  const { signalling, stream, log, publicEmitter } = await connectedSignalling({
+    maxWsReconnectionAttempts: 1,
+  });
+  publicEmitter.addListener(AnamEvent.TALK_STREAM_DELIVERY_FAILED, () => {
+    throw new Error('listener bug');
+  });
+  advertiseAcks();
+  await stream.streamMessageChunk('pending', false);
+  currentSocket().drop();
+  await flushPromises();
+  mock.timers.tick(100);
+  currentSocket().drop();
+  await flushPromises();
+  assert.deepEqual(
+    log.map(([kind]) => kind),
+    ['failed', 'closed'],
+  );
+  assert.equal(signalling.isPermanentlyClosed(), true);
+}
+
+// Drops the current socket and lets the backoff open the next one, closeCount times.
+async function dropRepeatedly(closeCount) {
+  for (let attempt = 1; attempt <= closeCount; attempt += 1) {
+    currentSocket().drop();
+    await flushPromises();
+    mock.timers.tick(100 * attempt);
+  }
+}
+
+async function testAckTimeoutReplaceGetsExtendedRetryBudgetUntilStable() {
+  const { signalling, stream, log } = await connectedSignalling();
+  advertiseAcks();
+  currentSocket().swallow = true;
+  await stream.streamMessageChunk('hello', false);
+  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS);
+  // The default budget (5) would give up on the 6th close; a network switch needs
+  // the same headroom an ICE-restart reconnect gets.
+  await dropRepeatedly(6);
+  assert.equal(signalling.isPermanentlyClosed(), false);
+  await reopen();
+  ack(0);
+  // Once the replacement has been stable, the default budget applies again.
+  mock.timers.tick(5000);
+  await dropRepeatedly(6);
+  assert.equal(signalling.isPermanentlyClosed(), true);
+  assert.deepEqual(
+    log.map(([kind]) => kind),
+    ['closed'],
+  );
+}
+
 const signallingTests = [
   testNoTrackingWithoutEngineSupport,
   testSessionReadyEnablesTrackingAndIsStillEmitted,
@@ -333,6 +430,10 @@ const signallingTests = [
   testStopIsSilent,
   testTerminalCloseFailsPendingBeforeConnectionClosed,
   testIceRestartReconnectReplays,
+  testChunkAfterStopIsNotHeld,
+  testChunkAfterTerminalCloseIsNotHeld,
+  testThrowingFailureListenerDoesNotBlockConnectionClosed,
+  testAckTimeoutReplaceGetsExtendedRetryBudgetUntilStable,
 ];
 
 async function runSignallingTests() {
@@ -353,8 +454,8 @@ async function main() {
   await testSequenceStampsEveryChunkAndTerminator();
   await testRejectedChunkDoesNotConsumeSequence();
   await testDeliveryFailedMakesActiveStreamTerminal();
-  await testEndedStreamIgnoresDeliveryFailed();
-  await testDeactivateRemovesListeners();
+  await testEndedStreamStillReportsFailureAndInterruption();
+  await testTerminalStatesRemoveListeners();
   await runSignallingTests();
   console.log('talkStreamDeliveryHarness: all tests passed');
 }

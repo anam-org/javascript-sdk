@@ -2,7 +2,8 @@ import { SignalMessage } from '../types';
 import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamPayload';
 
 export const TALK_STREAM_ACK_TIMEOUT_MS = 3000;
-// Under the engine's 15s talk-stream turn timeout, so a replay still lands in an open turn.
+// Under the engine's 15s talk-stream turn timeout (talk_stream_timeout_secs in
+// anam-engine), so a replay still lands in an open turn.
 export const TALK_STREAM_MAX_HOLD_MS = 10000;
 
 export interface TalkStreamDeliveryCallbacks {
@@ -20,6 +21,13 @@ interface TrackedMessage {
   // When the message was last written to a socket; null while it waits for one.
   sentAt: number | null;
 }
+
+const holdDeadline = (entry: TrackedMessage): number =>
+  entry.queuedAt + TALK_STREAM_MAX_HOLD_MS;
+
+// Entries waiting for a socket have no ack deadline.
+const ackDeadline = (entry: TrackedMessage): number =>
+  entry.sentAt === null ? Infinity : entry.sentAt + TALK_STREAM_ACK_TIMEOUT_MS;
 
 /**
  * Holds talk-stream messages until the engine acknowledges them, so they can be
@@ -94,12 +102,7 @@ export class TalkStreamDeliveryTracker {
       return;
     }
     const deadlines = this.queue.map((entry) =>
-      Math.min(
-        entry.queuedAt + TALK_STREAM_MAX_HOLD_MS,
-        entry.sentAt === null
-          ? Infinity
-          : entry.sentAt + TALK_STREAM_ACK_TIMEOUT_MS,
-      ),
+      Math.min(holdDeadline(entry), ackDeadline(entry)),
     );
     const delay = Math.max(0, Math.min(...deadlines) - Date.now());
     this.timer = setTimeout(() => {
@@ -111,18 +114,12 @@ export class TalkStreamDeliveryTracker {
   private onDeadline(): void {
     const now = Date.now();
     const expiredIds = this.correlationIds(
-      this.queue.filter(
-        (entry) => now >= entry.queuedAt + TALK_STREAM_MAX_HOLD_MS,
-      ),
+      this.queue.filter((entry) => now >= holdDeadline(entry)),
     );
     this.queue = this.queue.filter(
       (entry) => !expiredIds.includes(entry.correlationId),
     );
-    const ackTimedOut = this.queue.some(
-      (entry) =>
-        entry.sentAt !== null &&
-        now >= entry.sentAt + TALK_STREAM_ACK_TIMEOUT_MS,
-    );
+    const ackTimedOut = this.queue.some((entry) => now >= ackDeadline(entry));
     if (ackTimedOut) {
       // The socket these were written to is presumed dead; they wait for a replay.
       this.queue.forEach((entry) => {
