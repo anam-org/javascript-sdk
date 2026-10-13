@@ -140,6 +140,22 @@ function testClearIsSilent() {
   assert.deepEqual(tracker.pending(), []);
 }
 
+function testDropIsSilentAndPerCorrelationId() {
+  const { tracker, failed, ackTimeouts } = setup();
+  tracker.track(message('a', 0), true);
+  tracker.track(message('a', 1), true);
+  tracker.track(message('b', 0), false);
+  tracker.drop('a');
+  assert.deepEqual(
+    tracker.pending().map((m) => m.payload.correlationId),
+    ['b'],
+  );
+  tracker.drop('b');
+  mock.timers.tick(TALK_STREAM_MAX_HOLD_MS * 2);
+  assert.deepEqual(failed, []);
+  assert.equal(ackTimeouts.length, 0);
+}
+
 const tests = [
   testCumulativeAckRemovesUpToSequence,
   testAckIsPerCorrelationId,
@@ -150,6 +166,7 @@ const tests = [
   testHoldDeadlineDropsWholeCorrelationId,
   testFailAllReportsEachIdOnceAndClears,
   testClearIsSilent,
+  testDropIsSilentAndPerCorrelationId,
 ];
 
 for (const test of tests) {

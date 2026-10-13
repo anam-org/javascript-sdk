@@ -72,6 +72,14 @@ export class TalkStreamDeliveryTracker {
     this.schedule();
   }
 
+  // Forget a correlationId's chunks without reporting a failure.
+  public drop(correlationId: string): void {
+    this.queue = this.queue.filter(
+      (entry) => entry.correlationId !== correlationId,
+    );
+    this.schedule();
+  }
+
   public pending(): SignalMessage[] {
     return this.queue.map((entry) => entry.message);
   }

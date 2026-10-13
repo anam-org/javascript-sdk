@@ -148,7 +148,7 @@ complete = true;
 if (failed) anamClient.talk(answer);
 ```
 
-If part of the answer had already been spoken, `talk()` repeats it.
+If part of the answer had already been spoken, `talk()` repeats it. Once the client has received `TALK_STREAM_INTERRUPTED` for a stream, it does not emit `TALK_STREAM_DELIVERY_FAILED` for it. An interruption sent while the connection was down can be missed, though, so the fallback can still repeat an answer the user cut off.
 
 ### Speech across a tool call
 

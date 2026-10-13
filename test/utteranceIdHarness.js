@@ -156,11 +156,9 @@ const UTTERANCE_B = 'd990d82a-29a5-4874-b870-a9f07e024108';
 
 function talkStream() {
   const sent = [];
-  const stream = new TalkMessageStream(
-    'corr-1',
-    new InternalEventEmitter(),
-    { sendTalkMessage: async (payload) => sent.push(payload) },
-  );
+  const stream = new TalkMessageStream('corr-1', {
+    sendTalkMessage: async (payload) => sent.push(payload),
+  });
   return { stream, sent };
 }
 

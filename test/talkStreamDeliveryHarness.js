@@ -5,6 +5,9 @@ const {
 const { InternalEvent } = require('../dist/main/types');
 const { TalkMessageStream } = require('../dist/main/types/TalkMessageStream');
 const {
+  TalkMessageStreamRegistry,
+} = require('../dist/main/modules/TalkMessageStreamRegistry');
+const {
   TalkMessageStreamState,
 } = require('../dist/main/types/TalkMessageStreamState');
 const { mock } = require('node:test');
@@ -73,11 +76,21 @@ const talkSent = (socket) =>
 
 function fakeStream(correlationId = 'corr-1') {
   const internalEmitter = new InternalEventEmitter();
+  const registry = new TalkMessageStreamRegistry(internalEmitter);
   const sent = [];
-  const stream = new TalkMessageStream(correlationId, internalEmitter, {
+  const stream = new TalkMessageStream(correlationId, {
     sendTalkMessage: async (payload) => sent.push(payload),
   });
-  return { stream, sent, internalEmitter };
+  registry.register(stream);
+  return { stream, sent, internalEmitter, registry };
+}
+
+function interrupt(emitter, correlationId = 'corr-1') {
+  emitter.emit(InternalEvent.SIGNAL_MESSAGE_RECEIVED, {
+    actionType: 'talkinputstreaminterrupted',
+    sessionId: 'session-1',
+    payload: { correlationId },
+  });
 }
 
 async function testSequenceStampsEveryChunkAndTerminator() {
@@ -146,18 +159,75 @@ function listenerCount(emitter, event) {
   return emitter.listeners[event]?.size ?? 0;
 }
 
-async function testTerminalStatesRemoveListeners() {
-  const { stream, internalEmitter } = fakeStream();
-  const counts = () =>
+async function testStreamsShareOneListenerPerEvent() {
+  const internalEmitter = new InternalEventEmitter();
+  const registry = new TalkMessageStreamRegistry(internalEmitter);
+  const streams = ['a', 'b', 'c'].map((id) => {
+    const stream = new TalkMessageStream(id, {
+      sendTalkMessage: async () => {},
+    });
+    registry.register(stream);
+    return stream;
+  });
+  for (const stream of streams) {
+    await stream.streamMessageChunk('x', true);
+  }
+  assert.equal(
+    listenerCount(internalEmitter, InternalEvent.SIGNAL_MESSAGE_RECEIVED),
+    1,
+  );
+  assert.equal(
+    listenerCount(internalEmitter, InternalEvent.TALK_STREAM_DELIVERY_FAILED),
+    1,
+  );
+  interrupt(internalEmitter, 'b');
+  assert.deepEqual(
+    streams.map((stream) => stream.getState()),
     [
-      InternalEvent.SIGNAL_MESSAGE_RECEIVED,
-      InternalEvent.TALK_STREAM_DELIVERY_FAILED,
-    ].map((event) => listenerCount(internalEmitter, event));
-  assert.deepEqual(counts(), [1, 1]);
-  await stream.streamMessageChunk('a', true);
-  assert.deepEqual(counts(), [1, 1]);
-  internalEmitter.emit(InternalEvent.TALK_STREAM_DELIVERY_FAILED, 'corr-1');
-  assert.deepEqual(counts(), [0, 0]);
+      TalkMessageStreamState.ENDED,
+      TalkMessageStreamState.INTERRUPTED,
+      TalkMessageStreamState.ENDED,
+    ],
+  );
+}
+
+async function testTerminalStreamsLeaveRegistry() {
+  const { internalEmitter, registry } = fakeStream();
+  assert.equal(registry.streams.size, 1);
+  interrupt(internalEmitter);
+  assert.equal(registry.streams.size, 0);
+
+  const failed = fakeStream();
+  failed.internalEmitter.emit(
+    InternalEvent.TALK_STREAM_DELIVERY_FAILED,
+    'corr-1',
+  );
+  assert.equal(failed.registry.streams.size, 0);
+  // A terminal state is not overwritten by a later signal for the same id.
+  interrupt(failed.internalEmitter);
+  assert.equal(
+    failed.stream.getState(),
+    TalkMessageStreamState.DELIVERY_FAILED,
+  );
+}
+
+async function testDroppedStreamIsPruned() {
+  const internalEmitter = new InternalEventEmitter();
+  const registry = new TalkMessageStreamRegistry(internalEmitter);
+  (() => {
+    registry.register(
+      new TalkMessageStream('dropped', { sendTalkMessage: async () => {} }),
+    );
+  })();
+  // A WeakRef target survives until the current job ends, so collect on a later turn.
+  await flushPromises();
+  global.gc();
+  await flushPromises();
+  const kept = new TalkMessageStream('kept', {
+    sendTalkMessage: async () => {},
+  });
+  registry.register(kept);
+  assert.deepEqual([...registry.streams.keys()], ['kept']);
 }
 
 async function connectedSignalling({ maxWsReconnectionAttempts } = {}) {
@@ -184,7 +254,9 @@ async function connectedSignalling({ maxWsReconnectionAttempts } = {}) {
   signalling.connect();
   currentSocket().open();
   await flushPromises();
-  const stream = new TalkMessageStream('corr-1', internalEmitter, signalling);
+  const registry = new TalkMessageStreamRegistry(internalEmitter);
+  const stream = new TalkMessageStream('corr-1', signalling);
+  registry.register(stream);
   return { signalling, stream, log, signalled, publicEmitter };
 }
 
@@ -275,6 +347,22 @@ async function testHoldTimeoutFailsStreamOnce() {
   assert.deepEqual(talkSent(currentSocket()), []);
   mock.timers.tick(TALK_STREAM_MAX_HOLD_MS * 2);
   assert.deepEqual(log, [['failed', 'corr-1']]);
+}
+
+async function testInterruptionDropsHeldChunksSilently() {
+  const { stream, log } = await connectedSignalling();
+  currentSocket().swallow = true;
+  await stream.streamMessageChunk('a', true);
+  currentSocket().receive({
+    actionType: 'talkinputstreaminterrupted',
+    sessionId: 'session-1',
+    payload: { correlationId: 'corr-1' },
+  });
+  await flushPromises();
+  assert.equal(stream.getState(), TalkMessageStreamState.INTERRUPTED);
+  mock.timers.tick(TALK_STREAM_MAX_HOLD_MS * 2);
+  assert.deepEqual(log, []);
+  assert.equal(FakeWebSocket.instances.length, 1);
 }
 
 async function testStopIsSilent() {
@@ -399,6 +487,7 @@ const signallingTests = [
   testChunkSentWhileReconnectingIsReplayedOnce,
   testHoldTimeoutFailsStreamOnce,
   testStopIsSilent,
+  testInterruptionDropsHeldChunksSilently,
   testTerminalCloseFailsPendingBeforeConnectionClosed,
   testIceRestartReconnectReplays,
   testChunkAfterStopIsNotHeld,
@@ -426,7 +515,9 @@ async function main() {
   await testRejectedChunkDoesNotConsumeSequence();
   await testDeliveryFailedMakesActiveStreamTerminal();
   await testEndedStreamStillReportsFailureAndInterruption();
-  await testTerminalStatesRemoveListeners();
+  await testStreamsShareOneListenerPerEvent();
+  await testTerminalStreamsLeaveRegistry();
+  await testDroppedStreamIsPruned();
   await runSignallingTests();
   console.log('talkStreamDeliveryHarness: all tests passed');
 }

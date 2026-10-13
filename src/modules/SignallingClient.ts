@@ -13,6 +13,7 @@ import {
 import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamPayload';
 import { TalkStreamDeliveryTracker } from './TalkStreamDeliveryTracker';
 import { TalkStreamAckPayload } from '../types/signalling/TalkStreamAckPayload';
+import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 5;
 const DEFAULT_WS_RECONNECTION_ATTEMPTS = 5;
@@ -240,7 +241,10 @@ export class SignallingClient {
     }
   }
 
-  // Returns false only when there is no open socket to write to.
+  // Returns false only when there is no open socket to write to. OPEN is the
+  // browser's readyState, not proof the engine is reachable: a half-open socket
+  // reports OPEN and accepts writes that never arrive. That is why talk-stream
+  // chunks are also held until the engine acks them.
   private sendIfOpen(message: SignalMessage): boolean {
     if (this.socket?.readyState !== WebSocket.OPEN) {
       return false;
@@ -249,7 +253,7 @@ export class SignallingClient {
       this.socket.send(JSON.stringify(message));
     } catch (error) {
       console.error(
-        'SignallingClient - sendSignalMessage: error sending message',
+        'SignallingClient - sendIfOpen: error sending message',
         error,
       );
     }
@@ -517,6 +521,13 @@ export class SignallingClient {
         message.payload as TalkStreamAckPayload;
       this.talkStreamDelivery.ack(correlationId, sequence);
       return;
+    }
+    if (message.actionType === SignalMessageAction.TALK_STREAM_INTERRUPTED) {
+      // The engine discards an interrupted stream, so its held chunks must not
+      // be replayed or reported as failed.
+      const { correlationId } =
+        message.payload as TalkStreamInterruptedSignalMessage;
+      this.talkStreamDelivery.drop(correlationId);
     }
     this.internalEventEmitter.emit(
       InternalEvent.SIGNAL_MESSAGE_RECEIVED,

@@ -1,8 +1,5 @@
-import { InternalEvent, SignalMessage, SignalMessageAction } from '.';
 import { TalkMessageStreamState } from './TalkMessageStreamState';
 import { TalkMessageStreamPayload } from './signalling/TalkMessageStreamPayload';
-import { TalkStreamInterruptedSignalMessage } from './signalling/TalkStreamInterruptedSignalMessage';
-import { InternalEventEmitter } from '../modules/InternalEventEmitter';
 import { SignallingClient } from '../modules/SignallingClient';
 
 // Lowercase only: the engine round-trips the canonical form and replaces anything
@@ -42,64 +39,25 @@ const UUID_V4 =
  * ```
  */
 export class TalkMessageStream {
-  private internalEventEmitter: InternalEventEmitter;
   private state = TalkMessageStreamState.UNSTARTED;
   private correlationId: string;
   private signallingClient: SignallingClient;
   private lastUtteranceId?: string;
   private sequence = 0;
-  // Bound once so onDeactivate removes the same functions that were added.
-  private readonly signalMessageHandler = this.onSignalMessage.bind(this);
-  private readonly deliveryFailedHandler = this.onDeliveryFailed.bind(this);
 
-  constructor(
-    correlationId: string,
-    internalEventEmitter: InternalEventEmitter,
-    signallingClient: SignallingClient,
-  ) {
+  constructor(correlationId: string, signallingClient: SignallingClient) {
     this.correlationId = correlationId;
-    this.internalEventEmitter = internalEventEmitter;
     this.signallingClient = signallingClient;
-
-    this.internalEventEmitter.addListener(
-      InternalEvent.SIGNAL_MESSAGE_RECEIVED,
-      this.signalMessageHandler,
-    );
-    this.internalEventEmitter.addListener(
-      InternalEvent.TALK_STREAM_DELIVERY_FAILED,
-      this.deliveryFailedHandler,
-    );
   }
 
-  private onDeactivate() {
-    this.internalEventEmitter.removeListener(
-      InternalEvent.SIGNAL_MESSAGE_RECEIVED,
-      this.signalMessageHandler,
-    );
-    this.internalEventEmitter.removeListener(
-      InternalEvent.TALK_STREAM_DELIVERY_FAILED,
-      this.deliveryFailedHandler,
-    );
+  /** @internal Called by TalkMessageStreamRegistry. */
+  public markInterrupted(): void {
+    this.state = TalkMessageStreamState.INTERRUPTED;
   }
 
-  private onDeliveryFailed(correlationId: string) {
-    if (correlationId === this.correlationId) {
-      this.state = TalkMessageStreamState.DELIVERY_FAILED;
-      this.onDeactivate();
-    }
-  }
-
-  private async onSignalMessage(signalMessage: SignalMessage) {
-    if (
-      signalMessage.actionType === SignalMessageAction.TALK_STREAM_INTERRUPTED
-    ) {
-      const message =
-        signalMessage.payload as TalkStreamInterruptedSignalMessage;
-      if (message.correlationId === this.correlationId) {
-        this.state = TalkMessageStreamState.INTERRUPTED;
-        this.onDeactivate();
-      }
-    }
+  /** @internal Called by TalkMessageStreamRegistry. */
+  public markDeliveryFailed(): void {
+    this.state = TalkMessageStreamState.DELIVERY_FAILED;
   }
 
   /**
@@ -132,8 +90,8 @@ export class TalkMessageStream {
         : {}),
     };
     await this.signallingClient.sendTalkMessage(payload);
-    // An ended stream keeps listening: its final chunk can still fail to deliver,
-    // and the turn can still be interrupted while it plays.
+    // ENDED is not final: the final chunk can still fail to deliver, and the turn
+    // can still be interrupted while it plays.
     this.state = TalkMessageStreamState.ENDED;
   }
 
