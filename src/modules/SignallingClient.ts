@@ -11,6 +11,8 @@ import {
   AgentAudioInputPayload,
 } from '../types';
 import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamPayload';
+import { TalkStreamDeliveryTracker } from './TalkStreamDeliveryTracker';
+import { TalkStreamAckPayload } from '../types/signalling/TalkStreamAckPayload';
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 5;
 const DEFAULT_WS_RECONNECTION_ATTEMPTS = 5;
@@ -39,6 +41,11 @@ export class SignallingClient {
   private stableConnectionTimer: ReturnType<typeof setTimeout> | null = null;
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private connectionMilestones: ClientConnectionMilestoneRecorder | undefined;
+  private talkStreamDelivery = new TalkStreamDeliveryTracker({
+    onAckTimeout: () => this.onTalkStreamAckTimeout(),
+    onDeliveryFailed: (correlationId) =>
+      this.onTalkStreamDeliveryFailed(correlationId),
+  });
 
   constructor(
     sessionId: string,
@@ -115,6 +122,7 @@ export class SignallingClient {
 
   public stop() {
     this.stopSignal = true;
+    this.talkStreamDelivery.clear();
     this.closeSocket();
   }
 
@@ -151,6 +159,17 @@ export class SignallingClient {
     if (this.isPermanentlyClosed()) {
       return;
     }
+    this.wsConnectionAttempts = 0;
+    this.iceRestartReconnectInProgress = true;
+    this.replaceSocket();
+  }
+
+  /**
+   * Drop the current socket without letting its eventual close drive the reconnect
+   * backoff, and open a new one. Used when the socket may be half-open: readyState
+   * stays OPEN with no 'close' event, so writes on it are silently lost.
+   */
+  private replaceSocket(): void {
     this.clearReconnectTimer();
     if (this.socket) {
       this.socket.onopen = null;
@@ -162,15 +181,13 @@ export class SignallingClient {
       } catch (err) {
         // A half-open socket may throw on close; the reconnect proceeds regardless.
         console.warn(
-          'SignallingClient - reconnectForIceRestart: error closing stale socket',
+          'SignallingClient - replaceSocket: error closing stale socket',
           err,
         );
       }
       this.socket = null;
     }
     this.clearHeartbeatInterval();
-    this.wsConnectionAttempts = 0;
-    this.iceRestartReconnectInProgress = true;
     this.connect();
   }
 
@@ -214,18 +231,25 @@ export class SignallingClient {
   }
 
   private sendSignalMessage(message: SignalMessage) {
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      try {
-        this.socket.send(JSON.stringify(message));
-      } catch (error) {
-        console.error(
-          'SignallingClient - sendSignalMessage: error sending message',
-          error,
-        );
-      }
-    } else {
+    if (!this.sendIfOpen(message)) {
       this.sendingBuffer.push(message);
     }
+  }
+
+  // Returns false only when there is no open socket to write to.
+  private sendIfOpen(message: SignalMessage): boolean {
+    if (this.socket?.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    try {
+      this.socket.send(JSON.stringify(message));
+    } catch (error) {
+      console.error(
+        'SignallingClient - sendSignalMessage: error sending message',
+        error,
+      );
+    }
+    return true;
   }
 
   public async sendTalkMessage(payload: TalkMessageStreamPayload) {
@@ -234,7 +258,12 @@ export class SignallingClient {
       sessionId: this.sessionId,
       payload: payload,
     };
-    this.sendSignalMessage(chatMessage);
+    if (!this.talkStreamDelivery.isEnabled()) {
+      this.sendSignalMessage(chatMessage);
+      return;
+    }
+    // Held until acked, and replayed on the next socket instead of via sendingBuffer.
+    this.talkStreamDelivery.track(chatMessage, this.sendIfOpen(chatMessage));
   }
 
   public sendAgentAudioInput(payload: AgentAudioInputPayload): void {
@@ -278,12 +307,14 @@ export class SignallingClient {
       // StreamingClient ends the episode: a socket that opens briefly and drops
       // again mid-restart must not fall back to the short default budget.
       this.scheduleStableConnectionReset(socket);
+      this.replayUnackedTalkMessages();
       this.flushSendingBuffer();
       socket.onmessage = this.onMessage.bind(this);
       this.startSendingHeartBeats();
       this.internalEventEmitter.emit(InternalEvent.WEB_SOCKET_OPEN);
     } catch (e) {
       console.error('SignallingClient - onOpen: error in onOpen', e);
+      this.talkStreamDelivery.failAll();
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
         ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
@@ -363,6 +394,7 @@ export class SignallingClient {
         closeCode: event?.code,
         closeReason: event?.reason,
       });
+      this.talkStreamDelivery.failAll();
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
         ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
@@ -425,8 +457,61 @@ export class SignallingClient {
     this.sendingBuffer = newBuffer;
   }
 
+  private advertisesTalkStreamAcks(payload: SignalMessage['payload']): boolean {
+    return (
+      typeof payload === 'object' &&
+      payload !== null &&
+      (payload as { talkStreamAcks?: unknown }).talkStreamAcks === true
+    );
+  }
+
+  private replayUnackedTalkMessages() {
+    const pending = this.talkStreamDelivery.pending();
+    if (pending.length === 0) {
+      return;
+    }
+    pending.forEach((message) => this.sendIfOpen(message));
+    this.talkStreamDelivery.markAllSent();
+  }
+
+  private onTalkStreamAckTimeout() {
+    // A socket that is already reconnecting replays on open; only an OPEN socket
+    // that swallowed the chunks needs replacing.
+    if (this.isPermanentlyClosed() || !this.isConnected()) {
+      return;
+    }
+    console.warn(
+      'SignallingClient - talk stream chunks were not acknowledged; replacing signalling socket',
+    );
+    this.replaceSocket();
+  }
+
+  private onTalkStreamDeliveryFailed(correlationId: string) {
+    this.internalEventEmitter.emit(
+      InternalEvent.TALK_STREAM_DELIVERY_FAILED,
+      correlationId,
+    );
+    this.publicEventEmitter.emit(
+      AnamEvent.TALK_STREAM_DELIVERY_FAILED,
+      correlationId,
+    );
+  }
+
   private async onMessage(event: MessageEvent) {
     const message: SignalMessage = JSON.parse(event.data);
+    if (message.actionType === SignalMessageAction.TALK_STREAM_ACK) {
+      const { correlationId, sequence } =
+        message.payload as TalkStreamAckPayload;
+      this.talkStreamDelivery.enable();
+      this.talkStreamDelivery.ack(correlationId, sequence);
+      return;
+    }
+    if (
+      message.actionType === SignalMessageAction.SESSION_READY &&
+      this.advertisesTalkStreamAcks(message.payload)
+    ) {
+      this.talkStreamDelivery.enable();
+    }
     this.internalEventEmitter.emit(
       InternalEvent.SIGNAL_MESSAGE_RECEIVED,
       message,

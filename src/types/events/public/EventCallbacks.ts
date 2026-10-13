@@ -29,6 +29,7 @@ export type EventCallbacks = {
   [AnamEvent.VIDEO_PLAY_STARTED]: () => void;
   [AnamEvent.AUDIO_STREAM_STARTED]: (audioStream: MediaStream) => void;
   [AnamEvent.TALK_STREAM_INTERRUPTED]: (correlationId: string) => void;
+  [AnamEvent.TALK_STREAM_DELIVERY_FAILED]: (correlationId: string) => void;
   [AnamEvent.SESSION_READY]: (sessionId: string) => void;
   [AnamEvent.SERVER_WARNING]: (message: string) => void;
   [AnamEvent.MIC_PERMISSION_PENDING]: () => void;
