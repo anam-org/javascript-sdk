@@ -103,6 +103,7 @@ export class TalkMessageStream {
       startOfSpeech: false,
       endOfSpeech: true,
       correlationId: this.correlationId,
+      sequence: 0,
       ...(this.lastUtteranceId != null
         ? { utteranceId: this.lastUtteranceId }
         : {}),
@@ -148,6 +149,7 @@ export class TalkMessageStream {
       startOfSpeech: this.state === TalkMessageStreamState.UNSTARTED,
       endOfSpeech: endOfSpeech,
       correlationId: this.correlationId,
+      sequence: 0,
       ...(utteranceId != null ? { utteranceId } : {}),
     };
     if (utteranceId != null) {
