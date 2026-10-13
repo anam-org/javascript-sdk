@@ -188,14 +188,6 @@ async function connectedSignalling({ maxWsReconnectionAttempts } = {}) {
   return { signalling, stream, log, signalled, publicEmitter };
 }
 
-function advertiseAcks() {
-  currentSocket().receive({
-    actionType: 'sessionready',
-    sessionId: 'session-1',
-    payload: { talkStreamAcks: true },
-  });
-}
-
 function ack(sequence, correlationId = 'corr-1') {
   currentSocket().receive({
     actionType: 'talkstreamack',
@@ -209,18 +201,8 @@ async function reopen() {
   await flushPromises();
 }
 
-async function testNoTrackingWithoutEngineSupport() {
+async function testHeldFromTheFirstChunk() {
   const { stream } = await connectedSignalling();
-  currentSocket().swallow = true;
-  await stream.streamMessageChunk('lost', false);
-  mock.timers.tick(TALK_STREAM_MAX_HOLD_MS * 2);
-  assert.equal(FakeWebSocket.instances.length, 1);
-}
-
-async function testSessionReadyEnablesTrackingAndIsStillEmitted() {
-  const { stream, signalled } = await connectedSignalling();
-  advertiseAcks();
-  assert.deepEqual(signalled, ['sessionready']);
   currentSocket().swallow = true;
   await stream.streamMessageChunk('hello', false);
   mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS);
@@ -232,7 +214,7 @@ async function testSessionReadyEnablesTrackingAndIsStillEmitted() {
   );
 }
 
-async function testFirstAckEnablesTrackingAndIsNotEmitted() {
+async function testAckIsConsumedNotEmitted() {
   const { stream, signalled } = await connectedSignalling();
   await stream.streamMessageChunk('one', false);
   ack(0);
@@ -249,7 +231,6 @@ async function testFirstAckEnablesTrackingAndIsNotEmitted() {
 
 async function testReplaysOnlyUnackedInOrder() {
   const { stream } = await connectedSignalling();
-  advertiseAcks();
   await stream.streamMessageChunk('a', false);
   await stream.streamMessageChunk('b', false);
   await stream.streamMessageChunk('c', false);
@@ -269,7 +250,6 @@ async function testReplaysOnlyUnackedInOrder() {
 
 async function testChunkSentWhileReconnectingIsReplayedOnce() {
   const { stream } = await connectedSignalling();
-  advertiseAcks();
   currentSocket().drop();
   await flushPromises();
   await stream.streamMessageChunk('queued', false);
@@ -284,7 +264,6 @@ async function testChunkSentWhileReconnectingIsReplayedOnce() {
 
 async function testHoldTimeoutFailsStreamOnce() {
   const { stream, log } = await connectedSignalling();
-  advertiseAcks();
   currentSocket().swallow = true;
   await stream.streamMessageChunk('lost', false);
   mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS);
@@ -300,7 +279,6 @@ async function testHoldTimeoutFailsStreamOnce() {
 
 async function testStopIsSilent() {
   const { signalling, stream, log } = await connectedSignalling();
-  advertiseAcks();
   currentSocket().swallow = true;
   await stream.streamMessageChunk('pending', false);
   signalling.stop();
@@ -313,7 +291,6 @@ async function testTerminalCloseFailsPendingBeforeConnectionClosed() {
   const { stream, log } = await connectedSignalling({
     maxWsReconnectionAttempts: 1,
   });
-  advertiseAcks();
   await stream.streamMessageChunk('pending', false);
   currentSocket().drop();
   await flushPromises();
@@ -328,7 +305,6 @@ async function testTerminalCloseFailsPendingBeforeConnectionClosed() {
 
 async function testIceRestartReconnectReplays() {
   const { signalling, stream } = await connectedSignalling();
-  advertiseAcks();
   currentSocket().swallow = true;
   await stream.streamMessageChunk('hello', false);
   signalling.reconnectForIceRestart();
@@ -342,7 +318,6 @@ async function testIceRestartReconnectReplays() {
 
 async function testChunkAfterStopIsNotHeld() {
   const { signalling, stream, log } = await connectedSignalling();
-  advertiseAcks();
   signalling.stop();
   await stream.streamMessageChunk('late', false);
   mock.timers.tick(TALK_STREAM_MAX_HOLD_MS * 2);
@@ -354,7 +329,6 @@ async function testChunkAfterTerminalCloseIsNotHeld() {
   const { stream, log } = await connectedSignalling({
     maxWsReconnectionAttempts: 1,
   });
-  advertiseAcks();
   currentSocket().drop();
   await flushPromises();
   mock.timers.tick(100);
@@ -375,7 +349,6 @@ async function testThrowingFailureListenerDoesNotBlockConnectionClosed() {
   publicEmitter.addListener(AnamEvent.TALK_STREAM_DELIVERY_FAILED, () => {
     throw new Error('listener bug');
   });
-  advertiseAcks();
   await stream.streamMessageChunk('pending', false);
   currentSocket().drop();
   await flushPromises();
@@ -400,7 +373,6 @@ async function dropRepeatedly(closeCount) {
 
 async function testAckTimeoutReplaceGetsExtendedRetryBudgetUntilStable() {
   const { signalling, stream, log } = await connectedSignalling();
-  advertiseAcks();
   currentSocket().swallow = true;
   await stream.streamMessageChunk('hello', false);
   mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS);
@@ -421,9 +393,8 @@ async function testAckTimeoutReplaceGetsExtendedRetryBudgetUntilStable() {
 }
 
 const signallingTests = [
-  testNoTrackingWithoutEngineSupport,
-  testSessionReadyEnablesTrackingAndIsStillEmitted,
-  testFirstAckEnablesTrackingAndIsNotEmitted,
+  testHeldFromTheFirstChunk,
+  testAckIsConsumedNotEmitted,
   testReplaysOnlyUnackedInOrder,
   testChunkSentWhileReconnectingIsReplayedOnce,
   testHoldTimeoutFailsStreamOnce,

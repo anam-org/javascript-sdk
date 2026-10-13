@@ -35,21 +35,12 @@ const ackDeadline = (entry: TrackedMessage): number =>
  * writes without error, so a send alone does not mean the engine received anything.
  */
 export class TalkStreamDeliveryTracker {
-  private enabled = false;
   private queue: TrackedMessage[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
   private callbacks: TalkStreamDeliveryCallbacks;
 
   constructor(callbacks: TalkStreamDeliveryCallbacks) {
     this.callbacks = callbacks;
-  }
-
-  public enable(): void {
-    this.enabled = true;
-  }
-
-  public isEnabled(): boolean {
-    return this.enabled;
   }
 
   public track(message: SignalMessage, sentNow: boolean): void {

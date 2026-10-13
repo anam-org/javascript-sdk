@@ -27,21 +27,10 @@ function setup() {
     onAckTimeout: () => ackTimeouts.push(Date.now()),
     onDeliveryFailed: (correlationId) => failed.push(correlationId),
   });
-  tracker.enable();
   return { tracker, ackTimeouts, failed };
 }
 
 const sequences = (tracker) => tracker.pending().map((m) => m.payload.sequence);
-
-function testDisabledByDefault() {
-  const tracker = new TalkStreamDeliveryTracker({
-    onAckTimeout() {},
-    onDeliveryFailed() {},
-  });
-  assert.equal(tracker.isEnabled(), false);
-  tracker.enable();
-  assert.equal(tracker.isEnabled(), true);
-}
 
 function testCumulativeAckRemovesUpToSequence() {
   const { tracker } = setup();
@@ -152,7 +141,6 @@ function testClearIsSilent() {
 }
 
 const tests = [
-  testDisabledByDefault,
   testCumulativeAckRemovesUpToSequence,
   testAckIsPerCorrelationId,
   testAckTimeoutFiresForUnackedSentChunk,

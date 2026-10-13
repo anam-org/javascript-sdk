@@ -264,7 +264,7 @@ export class SignallingClient {
     };
     // Once signalling has stopped nothing can be delivered, so there is nothing to
     // hold; a held chunk would only report a failure after the session has ended.
-    if (!this.talkStreamDelivery.isEnabled() || this.isPermanentlyClosed()) {
+    if (this.isPermanentlyClosed()) {
       this.sendSignalMessage(chatMessage);
       return;
     }
@@ -468,14 +468,6 @@ export class SignallingClient {
     this.sendingBuffer = newBuffer;
   }
 
-  private advertisesTalkStreamAcks(payload: SignalMessage['payload']): boolean {
-    return (
-      typeof payload === 'object' &&
-      payload !== null &&
-      (payload as { talkStreamAcks?: unknown }).talkStreamAcks === true
-    );
-  }
-
   private replayUnackedTalkMessages() {
     const pending = this.talkStreamDelivery.pending();
     if (pending.length === 0) {
@@ -523,15 +515,8 @@ export class SignallingClient {
     if (message.actionType === SignalMessageAction.TALK_STREAM_ACK) {
       const { correlationId, sequence } =
         message.payload as TalkStreamAckPayload;
-      this.talkStreamDelivery.enable();
       this.talkStreamDelivery.ack(correlationId, sequence);
       return;
-    }
-    if (
-      message.actionType === SignalMessageAction.SESSION_READY &&
-      this.advertisesTalkStreamAcks(message.payload)
-    ) {
-      this.talkStreamDelivery.enable();
     }
     this.internalEventEmitter.emit(
       InternalEvent.SIGNAL_MESSAGE_RECEIVED,

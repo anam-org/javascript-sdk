@@ -148,7 +148,7 @@ complete = true;
 if (failed) anamClient.talk(answer);
 ```
 
-If part of the answer had already been spoken, `talk()` repeats it. Holding and resending needs an engine that acknowledges talk-stream chunks. On older engines, chunks are sent as before and the event never fires.
+If part of the answer had already been spoken, `talk()` repeats it.
 
 ### Speech across a tool call
 
