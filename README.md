@@ -136,7 +136,7 @@ anamClient.addListener(AnamEvent.TALK_STREAM_DELIVERY_FAILED, (correlationId) =>
   if (correlationId !== stream.getCorrelationId()) return;
   failed = true;
   // If the failure arrives after the answer is complete, speak it now.
-  if (complete) anamClient.talk(answer);
+  if (complete) anamClient.talk(answer).catch(console.error);
 });
 
 for (const chunk of llmChunks) {
@@ -145,7 +145,7 @@ for (const chunk of llmChunks) {
   if (!failed) await stream.streamMessageChunk(chunk.text, chunk.isLast);
 }
 complete = true;
-if (failed) anamClient.talk(answer);
+if (failed) await anamClient.talk(answer);
 ```
 
 If part of the answer had already been spoken, `talk()` repeats it. Once the client has received `TALK_STREAM_INTERRUPTED` for a stream, it does not emit `TALK_STREAM_DELIVERY_FAILED` for it. An interruption sent while the connection was down can be missed, though, so the fallback can still repeat an answer the user cut off.
