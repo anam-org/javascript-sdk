@@ -21,6 +21,10 @@ const UUID_V4 =
  * utterance after the current one, so the stream can stay open while your application
  * runs a tool.
  *
+ * If the signalling connection drops and the engine cannot be reached within a few
+ * seconds, the stream moves to DELIVERY_FAILED and the client emits
+ * AnamEvent.TALK_STREAM_DELIVERY_FAILED with this stream's correlationId.
+ *
  * @example
  * ```typescript
  * // Streaming LLM output
@@ -43,6 +47,10 @@ export class TalkMessageStream {
   private correlationId: string;
   private signallingClient: SignallingClient;
   private lastUtteranceId?: string;
+  private sequence = 0;
+  // Bound once so onDeactivate removes the same functions that were added.
+  private readonly signalMessageHandler = this.onSignalMessage.bind(this);
+  private readonly deliveryFailedHandler = this.onDeliveryFailed.bind(this);
 
   constructor(
     correlationId: string,
@@ -55,15 +63,30 @@ export class TalkMessageStream {
 
     this.internalEventEmitter.addListener(
       InternalEvent.SIGNAL_MESSAGE_RECEIVED,
-      this.onSignalMessage.bind(this),
+      this.signalMessageHandler,
+    );
+    this.internalEventEmitter.addListener(
+      InternalEvent.TALK_STREAM_DELIVERY_FAILED,
+      this.deliveryFailedHandler,
     );
   }
 
   private onDeactivate() {
     this.internalEventEmitter.removeListener(
       InternalEvent.SIGNAL_MESSAGE_RECEIVED,
-      this.onSignalMessage.bind(this),
+      this.signalMessageHandler,
     );
+    this.internalEventEmitter.removeListener(
+      InternalEvent.TALK_STREAM_DELIVERY_FAILED,
+      this.deliveryFailedHandler,
+    );
+  }
+
+  private onDeliveryFailed(correlationId: string) {
+    if (correlationId === this.correlationId) {
+      this.state = TalkMessageStreamState.DELIVERY_FAILED;
+      this.onDeactivate();
+    }
   }
 
   private async onSignalMessage(signalMessage: SignalMessage) {
@@ -103,7 +126,7 @@ export class TalkMessageStream {
       startOfSpeech: false,
       endOfSpeech: true,
       correlationId: this.correlationId,
-      sequence: 0,
+      sequence: this.sequence++,
       ...(this.lastUtteranceId != null
         ? { utteranceId: this.lastUtteranceId }
         : {}),
@@ -149,7 +172,7 @@ export class TalkMessageStream {
       startOfSpeech: this.state === TalkMessageStreamState.UNSTARTED,
       endOfSpeech: endOfSpeech,
       correlationId: this.correlationId,
-      sequence: 0,
+      sequence: this.sequence++,
       ...(utteranceId != null ? { utteranceId } : {}),
     };
     if (utteranceId != null) {
