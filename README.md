@@ -150,6 +150,8 @@ if (failed) anamClient.talk(answer);
 
 If part of the answer had already been spoken, `talk()` repeats it. Once the client has received `TALK_STREAM_INTERRUPTED` for a stream, it does not emit `TALK_STREAM_DELIVERY_FAILED` for it. An interruption sent while the connection was down can be missed, though, so the fallback can still repeat an answer the user cut off.
 
+Holding and resending needs an engine that acknowledges talk-stream chunks. Engines that do say so when the session becomes ready. On an older engine, the SDK stops holding chunks once the session is ready, sends them as before, and never emits `TALK_STREAM_DELIVERY_FAILED`.
+
 ### Speech across a tool call
 
 A talk stream can stay open while your application runs a tool. Give the speech before and after the tool call separate utterance ids, and the second waits for the first to finish playing.

@@ -7,3 +7,4 @@ export { SignalMessageAction } from './SignalMessage';
 export type { AgentAudioInputPayload } from './AgentAudioInputPayload';
 export type { AgentAudioInputConfig } from './AgentAudioInputConfig';
 export type { TalkStreamAckPayload } from './TalkStreamAckPayload';
+export type { SessionReadyPayload } from './SessionReadyPayload';

@@ -13,6 +13,7 @@ import {
 import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamPayload';
 import { TalkStreamDeliveryTracker } from './TalkStreamDeliveryTracker';
 import { TalkStreamAckPayload } from '../types/signalling/TalkStreamAckPayload';
+import { SessionReadyPayload } from '../types/signalling/SessionReadyPayload';
 import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 5;
@@ -41,6 +42,9 @@ export class SignallingClient {
   // means a network switch, so the reconnect gets the same retry headroom as an
   // ICE-restart reconnect until the new socket proves stable.
   private talkStreamReconnectInProgress = false;
+  // Assumed until sessionready says otherwise. That can arrive after the first
+  // chunks, and on an engine that acks, those chunks need holding too.
+  private engineSendsTalkStreamAcks = true;
   private heartBeatIntervalRef: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private stableConnectionTimer: ReturnType<typeof setTimeout> | null = null;
@@ -268,7 +272,8 @@ export class SignallingClient {
     };
     // Once signalling has stopped nothing can be delivered, so there is nothing to
     // hold; a held chunk would only report a failure after the session has ended.
-    if (this.isPermanentlyClosed()) {
+    // An engine that never acks would fail every held chunk.
+    if (!this.engineSendsTalkStreamAcks || this.isPermanentlyClosed()) {
       this.sendSignalMessage(chatMessage);
       return;
     }
@@ -514,6 +519,18 @@ export class SignallingClient {
     }
   }
 
+  private onSessionReady(payload: SignalMessage['payload']) {
+    this.engineSendsTalkStreamAcks =
+      typeof payload === 'object' &&
+      payload !== null &&
+      (payload as SessionReadyPayload).sendsTalkStreamAcks === true;
+    if (!this.engineSendsTalkStreamAcks) {
+      // These chunks were sent but will never be acked; holding them would only
+      // replace a healthy socket and report false delivery failures.
+      this.talkStreamDelivery.clear();
+    }
+  }
+
   private async onMessage(event: MessageEvent) {
     const message: SignalMessage = JSON.parse(event.data);
     if (message.actionType === SignalMessageAction.TALK_STREAM_ACK) {
@@ -528,6 +545,9 @@ export class SignallingClient {
       const { correlationId } =
         message.payload as TalkStreamInterruptedSignalMessage;
       this.talkStreamDelivery.drop(correlationId);
+    }
+    if (message.actionType === SignalMessageAction.SESSION_READY) {
+      this.onSessionReady(message.payload);
     }
     this.internalEventEmitter.emit(
       InternalEvent.SIGNAL_MESSAGE_RECEIVED,

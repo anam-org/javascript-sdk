@@ -268,6 +268,14 @@ function ack(sequence, correlationId = 'corr-1') {
   });
 }
 
+function sessionReady(payload) {
+  currentSocket().receive({
+    actionType: 'sessionready',
+    sessionId: 'session-1',
+    payload,
+  });
+}
+
 async function reopen() {
   currentSocket().open();
   await flushPromises();
@@ -363,6 +371,34 @@ async function testInterruptionDropsHeldChunksSilently() {
   mock.timers.tick(TALK_STREAM_MAX_HOLD_MS * 2);
   assert.deepEqual(log, []);
   assert.equal(FakeWebSocket.instances.length, 1);
+}
+
+async function testEngineWithoutAcksStopsHolding() {
+  const { stream, log, signalled } = await connectedSignalling();
+  currentSocket().swallow = true;
+  await stream.streamMessageChunk('before', false);
+  // An older engine's sessionready has no flag.
+  sessionReady({});
+  assert.deepEqual(signalled, ['sessionready']);
+  await stream.streamMessageChunk('after', true);
+  mock.timers.tick(TALK_STREAM_MAX_HOLD_MS * 2);
+  assert.deepEqual(log, []);
+  assert.equal(FakeWebSocket.instances.length, 1);
+  assert.equal(stream.getState(), TalkMessageStreamState.ENDED);
+}
+
+async function testEngineWithAcksKeepsHolding() {
+  const { stream } = await connectedSignalling();
+  sessionReady({ sendsTalkStreamAcks: true });
+  currentSocket().swallow = true;
+  await stream.streamMessageChunk('held', false);
+  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS);
+  assert.equal(FakeWebSocket.instances.length, 2);
+  await reopen();
+  assert.deepEqual(
+    talkSent(currentSocket()).map((p) => p.content),
+    ['held'],
+  );
 }
 
 async function testStopIsSilent() {
@@ -487,6 +523,8 @@ const signallingTests = [
   testChunkSentWhileReconnectingIsReplayedOnce,
   testHoldTimeoutFailsStreamOnce,
   testStopIsSilent,
+  testEngineWithoutAcksStopsHolding,
+  testEngineWithAcksKeepsHolding,
   testInterruptionDropsHeldChunksSilently,
   testTerminalCloseFailsPendingBeforeConnectionClosed,
   testIceRestartReconnectReplays,
