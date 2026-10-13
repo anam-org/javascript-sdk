@@ -270,10 +270,13 @@ export class SignallingClient {
       sessionId: this.sessionId,
       payload: payload,
     };
-    // Once signalling has stopped nothing can be delivered, so there is nothing to
-    // hold; a held chunk would only report a failure after the session has ended.
+    // Once signalling has stopped nothing can be delivered, and no socket will
+    // flush sendingBuffer again, so the chunk is dropped.
+    if (this.isPermanentlyClosed()) {
+      return;
+    }
     // An engine that never acks would fail every held chunk.
-    if (!this.engineSendsTalkStreamAcks || this.isPermanentlyClosed()) {
+    if (!this.engineSendsTalkStreamAcks) {
       this.sendSignalMessage(chatMessage);
       return;
     }

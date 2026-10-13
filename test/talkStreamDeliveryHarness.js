@@ -447,6 +447,8 @@ async function testChunkAfterStopIsNotHeld() {
   mock.timers.tick(TALK_STREAM_MAX_HOLD_MS * 2);
   assert.deepEqual(log, []);
   assert.equal(stream.getState(), TalkMessageStreamState.STREAMING);
+  // Dropped, not left in a buffer no socket will flush.
+  assert.deepEqual(signalling.sendingBuffer, []);
 }
 
 async function testChunkAfterTerminalCloseIsNotHeld() {
