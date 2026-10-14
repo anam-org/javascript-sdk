@@ -13,7 +13,11 @@ permissions: {}
 
 jobs:
   auto-approve:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'low-risk') || contains(github.event.pull_request.labels.*.name, 'hot-fix')
+    # Fork PRs don't receive secrets on pull_request; skip them instead of failing.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      (contains(github.event.pull_request.labels.*.name, 'low-risk') || contains(github.event.pull_request.labels.*.name, 'hot-fix')))
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
