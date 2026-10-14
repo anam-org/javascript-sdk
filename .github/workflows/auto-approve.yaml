@@ -1,5 +1,7 @@
 name: Auto approve low risk and hot fix PRs
 
+# Inlined copy of anam-org/github-actions/.github/actions/auto-approve@v1.8.0.
+# This repo is public and cannot use actions from that private repo; keep in sync.
 on:
   pull_request:
     types: [labeled, synchronize, opened, reopened]
@@ -22,7 +24,63 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: anam-org/github-actions/.github/actions/auto-approve@v1.8.0
+      - id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app_private_key: ${{ secrets.ANAM_PUSH_BOT_PRIVATE_KEY }}
-          pr_number: ${{ inputs.pr_number }}
+          client-id: '1095332' # anam-push-bot
+          private-key: ${{ secrets.ANAM_PUSH_BOT_PRIVATE_KEY }}
+
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const isManual = context.eventName === 'workflow_dispatch';
+            const pullNumber = isManual
+              ? Number(process.env.PR_NUMBER.trim())
+              : context.issue.number;
+
+            if (!Number.isInteger(pullNumber) || pullNumber <= 0) {
+              core.setFailed('A valid pr_number input is required for workflow_dispatch');
+              return;
+            }
+
+            const pullRequest = isManual
+              ? (await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pullNumber,
+                })).data
+              : context.payload.pull_request;
+
+            const triggerLabels = (pullRequest.labels || [])
+              .map(label => label.name)
+              .filter(name => ['hot-fix', 'low-risk'].includes(name));
+
+            if (triggerLabels.length === 0) {
+              core.notice(`PR #${pullNumber} does not have a low-risk or hot-fix label; skipping auto-approval`);
+              return;
+            }
+
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pullNumber,
+              per_page: 100,
+            });
+
+            if (reviews.some(review => review.state === 'APPROVED')) {
+              core.info(`PR #${pullNumber} is already approved, skipping auto-approval`);
+              return;
+            }
+
+            const labelText = `with label(s): ${triggerLabels.join(', ')}`;
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pullNumber,
+              event: 'APPROVE',
+              body: `✅ Auto‑approved ${labelText}`,
+            });
+            core.info(`PR #${pullNumber} auto-approved successfully ${labelText}`);
