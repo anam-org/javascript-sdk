@@ -74,6 +74,20 @@ function testOnlyALaterHeartbeatConfirmsAChunk() {
   assert.deepEqual(timeouts, []);
 }
 
+function testUnknownAnswerConfirmsNothing() {
+  const { monitor, sent, timeouts, failed, roundTrips } = setup();
+  monitor.trackChunk('a');
+  mock.timers.tick(0);
+  assert.deepEqual(sent, [0]);
+  // Seq 9 was never sent, so its answer must not confirm chunk a.
+  monitor.onAck(9);
+  monitor.onAck(Number.NaN);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS);
+  assert.deepEqual(failed, ['a']);
+  assert.deepEqual(timeouts, [true]);
+  assert.deepEqual(roundTrips, []);
+}
+
 function testTimeoutFailsEveryUnconfirmedIdOnce() {
   const { monitor, timeouts, failed } = setup();
   monitor.trackChunk('a');
@@ -192,6 +206,7 @@ const tests = [
   testChunksShareOneProbe,
   testProbeWaitsOutCoalescingWindow,
   testOnlyALaterHeartbeatConfirmsAChunk,
+  testUnknownAnswerConfirmsNothing,
   testTimeoutFailsEveryUnconfirmedIdOnce,
   testIdleTimeoutReportsNoChunks,
   testDeadlineFollowsOldestUnansweredHeartbeat,

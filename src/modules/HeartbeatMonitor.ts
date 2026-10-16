@@ -74,10 +74,13 @@ export class HeartbeatMonitor {
   }
 
   public onAck(seq: number): void {
+    // Only an answer to a heartbeat still waiting for one counts. Any other seq was
+    // never sent on this socket or is already covered, and must confirm nothing.
     const answered = this.pending.find((heartbeat) => heartbeat.seq === seq);
-    if (answered) {
-      this.callbacks.onRoundTrip?.(Date.now() - answered.sentAt);
+    if (!answered) {
+      return;
     }
+    this.callbacks.onRoundTrip?.(Date.now() - answered.sentAt);
     this.pending = this.pending.filter((heartbeat) => heartbeat.seq > seq);
     this.unconfirmed = this.unconfirmed.filter(
       (chunk) => chunk.confirmedBy > seq,
