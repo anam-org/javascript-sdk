@@ -21,16 +21,32 @@ const refTo = (stream: TalkMessageStream): StreamRef =>
  */
 export class TalkMessageStreamRegistry {
   private streams = new Map<string, StreamRef>();
+  private internalEventEmitter: InternalEventEmitter;
 
   constructor(internalEventEmitter: InternalEventEmitter) {
+    this.internalEventEmitter = internalEventEmitter;
     internalEventEmitter.addListener(
       InternalEvent.SIGNAL_MESSAGE_RECEIVED,
-      (signalMessage) => this.onSignalMessage(signalMessage),
+      this.onSignalMessage,
     );
     internalEventEmitter.addListener(
       InternalEvent.TALK_STREAM_DELIVERY_FAILED,
-      (correlationId) => this.take(correlationId)?.markDeliveryFailed(),
+      this.onDeliveryFailed,
     );
+  }
+
+  // The emitter belongs to the client and outlives the session, so the registry
+  // must unsubscribe when its session ends.
+  public dispose(): void {
+    this.internalEventEmitter.removeListener(
+      InternalEvent.SIGNAL_MESSAGE_RECEIVED,
+      this.onSignalMessage,
+    );
+    this.internalEventEmitter.removeListener(
+      InternalEvent.TALK_STREAM_DELIVERY_FAILED,
+      this.onDeliveryFailed,
+    );
+    this.streams.clear();
   }
 
   public register(stream: TalkMessageStream): void {
@@ -38,7 +54,7 @@ export class TalkMessageStreamRegistry {
     this.streams.set(stream.getCorrelationId(), refTo(stream));
   }
 
-  private onSignalMessage(signalMessage: SignalMessage) {
+  private onSignalMessage = (signalMessage: SignalMessage) => {
     if (
       signalMessage.actionType === SignalMessageAction.TALK_STREAM_INTERRUPTED
     ) {
@@ -46,7 +62,11 @@ export class TalkMessageStreamRegistry {
         signalMessage.payload as TalkStreamInterruptedSignalMessage;
       this.take(correlationId)?.markInterrupted();
     }
-  }
+  };
+
+  private onDeliveryFailed = (correlationId: string) => {
+    this.take(correlationId)?.markDeliveryFailed();
+  };
 
   // Both outcomes are terminal, so the stream needs no further routing.
   private take(correlationId: string): TalkMessageStream | undefined {

@@ -173,6 +173,23 @@ async function testStreamsShareOneListenerPerEvent() {
   );
 }
 
+async function testDisposeUnsubscribesRegistry() {
+  const { stream, internalEmitter, registry } = fakeStream();
+  await stream.streamMessageChunk('a', false);
+  registry.dispose();
+  assert.equal(
+    listenerCount(internalEmitter, InternalEvent.SIGNAL_MESSAGE_RECEIVED),
+    0,
+  );
+  assert.equal(
+    listenerCount(internalEmitter, InternalEvent.TALK_STREAM_DELIVERY_FAILED),
+    0,
+  );
+  assert.equal(registry.streams.size, 0);
+  interrupt(internalEmitter);
+  assert.equal(stream.getState(), TalkMessageStreamState.STREAMING);
+}
+
 async function testTerminalStreamsLeaveRegistry() {
   const { internalEmitter, registry } = fakeStream();
   assert.equal(registry.streams.size, 1);
@@ -713,6 +730,7 @@ async function main() {
   await testEndedStreamStillReportsFailureAndInterruption();
   await testStreamsShareOneListenerPerEvent();
   await testTerminalStreamsLeaveRegistry();
+  await testDisposeUnsubscribesRegistry();
   await testDroppedStreamIsPruned();
   await runSignallingTests();
   console.log('talkStreamDeliveryHarness: all tests passed');

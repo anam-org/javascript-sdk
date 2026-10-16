@@ -1619,6 +1619,7 @@ export class StreamingClient {
         error,
       );
     }
+    this.talkStreams.dispose();
 
     const peerConnection = this.peerConnection;
     if (peerConnection) {
