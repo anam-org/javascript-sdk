@@ -18,10 +18,10 @@ const UUID_V4 =
  * utterance after the current one, so the stream can stay open while your application
  * runs a tool.
  *
- * If a chunk cannot be sent, or the engine does not confirm it within about
- * 3 seconds, the stream moves to DELIVERY_FAILED and the client emits
- * AnamEvent.MESSAGE_DELIVERY_FAILED with this stream's correlationId. Chunks are
- * not resent.
+ * On engines that answer heartbeats, if a chunk cannot be sent, or the engine
+ * does not confirm it within about 3 seconds, the stream moves to DELIVERY_FAILED
+ * and the client emits AnamEvent.MESSAGE_DELIVERY_FAILED with this stream's
+ * correlationId. Chunks are not resent. See the README for older engines.
  *
  * @example
  * ```typescript
