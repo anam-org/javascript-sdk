@@ -11,6 +11,11 @@ import {
   AgentAudioInputPayload,
 } from '../types';
 import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamPayload';
+import { HeartbeatMonitor } from './HeartbeatMonitor';
+import { HeartbeatStats } from '../lib/HeartbeatStats';
+import { HeartbeatPayload } from '../types/signalling/HeartbeatPayload';
+import { SessionReadyPayload } from '../types/signalling/SessionReadyPayload';
+import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
 
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 5;
 const DEFAULT_WS_RECONNECTION_ATTEMPTS = 5;
@@ -34,11 +39,26 @@ export class SignallingClient {
   private socket: WebSocket | null = null;
   private permanentlyClosed = false;
   private iceRestartReconnectInProgress = false;
+  // Set when a socket is replaced because a heartbeat went unanswered. That usually
+  // means a network switch, so the reconnect gets the same retry headroom as an
+  // ICE-restart reconnect until the new socket proves stable.
+  private heartbeatReconnectInProgress = false;
+  // Unknown until sessionready. Chunks sent before it are still tracked, since on an
+  // engine that answers heartbeats they need confirming too.
+  private engineSendsHeartbeatAcks: boolean | undefined = undefined;
   private heartBeatIntervalRef: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private stableConnectionTimer: ReturnType<typeof setTimeout> | null = null;
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private connectionMilestones: ClientConnectionMilestoneRecorder | undefined;
+  private heartbeatStats = new HeartbeatStats();
+  private heartbeat = new HeartbeatMonitor({
+    sendHeartbeat: (seq) => this.sendHeartbeat(seq),
+    onAckTimeout: (failedChunks) => this.onHeartbeatAckTimeout(failedChunks),
+    onDeliveryFailed: (correlationId) =>
+      this.onTalkStreamDeliveryFailed(correlationId),
+    onRoundTrip: (ms) => this.heartbeatStats.recordRoundTrip(ms),
+  });
 
   constructor(
     sessionId: string,
@@ -115,6 +135,8 @@ export class SignallingClient {
 
   public stop() {
     this.stopSignal = true;
+    this.heartbeat.clear();
+    this.heartbeatStats.stop();
     this.closeSocket();
   }
 
@@ -151,6 +173,17 @@ export class SignallingClient {
     if (this.isPermanentlyClosed()) {
       return;
     }
+    this.wsConnectionAttempts = 0;
+    this.iceRestartReconnectInProgress = true;
+    this.replaceSocket();
+  }
+
+  /**
+   * Drop the current socket without letting its eventual close drive the reconnect
+   * backoff, and open a new one. Used when the socket may be half-open: readyState
+   * stays OPEN with no 'close' event, so writes on it are silently lost.
+   */
+  private replaceSocket(): void {
     this.clearReconnectTimer();
     if (this.socket) {
       this.socket.onopen = null;
@@ -162,15 +195,15 @@ export class SignallingClient {
       } catch (err) {
         // A half-open socket may throw on close; the reconnect proceeds regardless.
         console.warn(
-          'SignallingClient - reconnectForIceRestart: error closing stale socket',
+          'SignallingClient - replaceSocket: error closing stale socket',
           err,
         );
       }
       this.socket = null;
     }
     this.clearHeartbeatInterval();
-    this.wsConnectionAttempts = 0;
-    this.iceRestartReconnectInProgress = true;
+    // Chunks written to the old socket can no longer be confirmed.
+    this.heartbeat.reset();
     this.connect();
   }
 
@@ -220,18 +253,28 @@ export class SignallingClient {
   }
 
   private sendSignalMessage(message: SignalMessage) {
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      try {
-        this.socket.send(JSON.stringify(message));
-      } catch (error) {
-        console.error(
-          'SignallingClient - sendSignalMessage: error sending message',
-          error,
-        );
-      }
-    } else {
+    if (!this.sendIfOpen(message)) {
       this.sendingBuffer.push(message);
     }
+  }
+
+  // Returns false only when there is no open socket to write to. OPEN is the
+  // browser's readyState, not proof the engine is reachable: a half-open socket
+  // reports OPEN and accepts writes that never arrive. That is why talk-stream
+  // chunks are also tracked until a heartbeat answer confirms them.
+  private sendIfOpen(message: SignalMessage): boolean {
+    if (this.socket?.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    try {
+      this.socket.send(JSON.stringify(message));
+    } catch (error) {
+      console.error(
+        'SignallingClient - sendIfOpen: error sending message',
+        error,
+      );
+    }
+    return true;
   }
 
   public async sendTalkMessage(payload: TalkMessageStreamPayload) {
@@ -240,7 +283,31 @@ export class SignallingClient {
       sessionId: this.sessionId,
       payload: payload,
     };
-    this.sendSignalMessage(chatMessage);
+    // The session was stopped on purpose, so there is nothing to report.
+    if (this.stopSignal) {
+      return;
+    }
+    // An engine that never answers heartbeats would fail every tracked chunk, so
+    // chunks go out as before. No socket flushes sendingBuffer after a terminal close.
+    if (this.engineSendsHeartbeatAcks === false) {
+      if (!this.permanentlyClosed) {
+        this.sendSignalMessage(chatMessage);
+      }
+      return;
+    }
+    // Never buffered or resent. A chunk fails its stream at once when there is no
+    // open socket, or when the socket has an overdue heartbeat and is probably dead.
+    // Otherwise it is tracked until a heartbeat answer confirms it.
+    const suspect =
+      this.engineSendsHeartbeatAcks === true && this.heartbeat.isSuspect();
+    if (!suspect && this.sendIfOpen(chatMessage)) {
+      this.heartbeat.trackChunk(payload.correlationId);
+    } else {
+      if (suspect) {
+        this.heartbeatStats.recordRefusedChunk();
+      }
+      this.onTalkStreamDeliveryFailed(payload.correlationId);
+    }
   }
 
   public sendAgentAudioInput(payload: AgentAudioInputPayload): void {
@@ -265,6 +332,7 @@ export class SignallingClient {
     this.clearReconnectTimer();
     this.clearStableConnectionTimer();
     this.iceRestartReconnectInProgress = false;
+    this.heartbeatReconnectInProgress = false;
     if (this.socket) {
       this.socket.close();
       this.socket = null;
@@ -284,12 +352,14 @@ export class SignallingClient {
       // StreamingClient ends the episode: a socket that opens briefly and drops
       // again mid-restart must not fall back to the short default budget.
       this.scheduleStableConnectionReset(socket);
+      this.heartbeatStats.start();
       this.flushSendingBuffer();
       socket.onmessage = this.onMessage.bind(this);
       this.startSendingHeartBeats();
       this.internalEventEmitter.emit(InternalEvent.WEB_SOCKET_OPEN);
     } catch (e) {
       console.error('SignallingClient - onOpen: error in onOpen', e);
+      this.heartbeat.reset();
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
         ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
@@ -325,6 +395,7 @@ export class SignallingClient {
       this.stableConnectionTimer = null;
       if (this.socket === socket && socket.readyState === WebSocket.OPEN) {
         this.wsConnectionAttempts = 0;
+        this.heartbeatReconnectInProgress = false;
       }
     }, WEBSOCKET_STABLE_RECONNECTION_RESET_MS);
   }
@@ -345,6 +416,8 @@ export class SignallingClient {
     if (this.stopSignal) {
       return;
     }
+    // Chunks written to this socket can no longer be confirmed.
+    this.heartbeat.reset();
     const maxReconnectionAttempts = this.getMaxReconnectionAttempts(event);
     if (
       this.shouldRetryCloseEvent(event) &&
@@ -369,18 +442,22 @@ export class SignallingClient {
         closeCode: event?.code,
         closeReason: event?.reason,
       });
+      this.iceRestartReconnectInProgress = false;
+      this.heartbeatReconnectInProgress = false;
+      this.permanentlyClosed = true;
+      this.heartbeatStats.stop();
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
         ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
       );
-      this.iceRestartReconnectInProgress = false;
-      this.permanentlyClosed = true;
     }
   }
 
   private getMaxReconnectionAttempts(event?: CloseEvent): number {
     if (
-      !this.iceRestartReconnectInProgress ||
+      !(
+        this.iceRestartReconnectInProgress || this.heartbeatReconnectInProgress
+      ) ||
       this.isApiGatewayBackendClose(event)
     ) {
       return this.maxWsReconnectionAttempts;
@@ -431,8 +508,86 @@ export class SignallingClient {
     this.sendingBuffer = newBuffer;
   }
 
+  private sendHeartbeat(seq: number): boolean {
+    const payload: HeartbeatPayload = { seq };
+    return this.sendIfOpen({
+      actionType: SignalMessageAction.HEARTBEAT,
+      sessionId: this.sessionId,
+      payload,
+    });
+  }
+
+  private onHeartbeatAckTimeout(failedChunks: boolean) {
+    // Before sessionready the engine may be an older one that never answers, so a
+    // missing answer only justifies a new socket when chunks were waiting on it.
+    if (this.engineSendsHeartbeatAcks === undefined && !failedChunks) {
+      return;
+    }
+    // Only an OPEN socket that swallowed the heartbeat needs replacing; one that is
+    // not OPEN is already closing, and its close opens the next socket.
+    if (this.isPermanentlyClosed() || !this.isConnected()) {
+      return;
+    }
+    console.warn(
+      'SignallingClient - heartbeat was not answered; replacing signalling socket',
+    );
+    this.heartbeatStats.recordHeartbeatTimeout();
+    this.heartbeatReconnectInProgress = true;
+    this.replaceSocket();
+  }
+
+  private onTalkStreamDeliveryFailed(correlationId: string) {
+    this.heartbeatStats.recordFailedStream();
+    this.internalEventEmitter.emit(
+      InternalEvent.TALK_STREAM_DELIVERY_FAILED,
+      correlationId,
+    );
+    // This can run on the path that emits CONNECTION_CLOSED, so a throwing
+    // listener must not stop the session from reporting that it closed.
+    try {
+      this.publicEventEmitter.emit(AnamEvent.MESSAGE_DELIVERY_FAILED, {
+        messageType: 'talkStream',
+        correlationId,
+      });
+    } catch (error) {
+      console.error(
+        'SignallingClient - MESSAGE_DELIVERY_FAILED listener threw',
+        error,
+      );
+    }
+  }
+
+  private onSessionReady(payload: SignalMessage['payload']) {
+    this.engineSendsHeartbeatAcks =
+      typeof payload === 'object' &&
+      payload !== null &&
+      (payload as SessionReadyPayload).sendsHeartbeatAcks === true;
+    if (!this.engineSendsHeartbeatAcks) {
+      // Heartbeats will never be answered; waiting on them would only replace a
+      // healthy socket and report false delivery failures.
+      this.heartbeat.disable();
+    }
+  }
+
   private async onMessage(event: MessageEvent) {
     const message: SignalMessage = JSON.parse(event.data);
+    if (
+      message.actionType === SignalMessageAction.HEARTBEAT &&
+      typeof (message.payload as HeartbeatPayload)?.seq === 'number'
+    ) {
+      this.heartbeat.onAck((message.payload as HeartbeatPayload).seq);
+      return;
+    }
+    if (message.actionType === SignalMessageAction.TALK_STREAM_INTERRUPTED) {
+      // The engine discards an interrupted stream, so its chunks must not be
+      // reported as failed.
+      const { correlationId } =
+        message.payload as TalkStreamInterruptedSignalMessage;
+      this.heartbeat.drop(correlationId);
+    }
+    if (message.actionType === SignalMessageAction.SESSION_READY) {
+      this.onSessionReady(message.payload);
+    }
     this.internalEventEmitter.emit(
       InternalEvent.SIGNAL_MESSAGE_RECEIVED,
       message,
@@ -452,19 +607,11 @@ export class SignallingClient {
     }
     // send a heartbeat message every heartbeatIntervalSeconds
     const heartbeatInterval = this.heartbeatIntervalSeconds * 1000;
-    const heartbeatMessage: SignalMessage = {
-      actionType: SignalMessageAction.HEARTBEAT,
-      sessionId: this.sessionId,
-      payload: '',
-    };
-    const heartbeatMessageJson = JSON.stringify(heartbeatMessage);
     this.heartBeatIntervalRef = setInterval(() => {
       if (this.stopSignal) {
         return;
       }
-      if (this.socket?.readyState === WebSocket.OPEN) {
-        this.socket.send(heartbeatMessageJson);
-      }
+      this.heartbeat.beat();
     }, heartbeatInterval);
   }
 }

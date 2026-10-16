@@ -122,6 +122,38 @@ for (const chunk of llmChunks) {
 }
 ```
 
+### Delivery failures
+
+Talk-stream chunks travel over the session's signalling connection. The SDK checks that connection with heartbeats the engine answers, and the answer to a heartbeat sent after a chunk confirms the chunk arrived. The SDK does not resend chunks. If a chunk can't be sent because the connection is down or has stopped answering, or it isn't confirmed within about 3 seconds, the stream stops accepting chunks and the client emits `MESSAGE_DELIVERY_FAILED` with the stream's correlation id. The SDK reconnects on its own; deciding what to do with the answer is up to you. One option is to fall back to `talk()` with the full text:
+
+```typescript
+import { AnamEvent } from '@anam-ai/js-sdk';
+
+const stream = anamClient.createTalkMessageStream();
+let answer = '';
+let complete = false;
+let failed = false;
+
+anamClient.addListener(AnamEvent.MESSAGE_DELIVERY_FAILED, (failure) => {
+  if (failure.correlationId !== stream.getCorrelationId()) return;
+  failed = true;
+  // If the failure arrives after the answer is complete, speak it now.
+  if (complete) anamClient.talk(answer).catch(console.error);
+});
+
+for (const chunk of llmChunks) {
+  answer += chunk.text;
+  // A failed stream rejects further chunks, so keep collecting the answer instead.
+  if (!failed) await stream.streamMessageChunk(chunk.text, chunk.isLast);
+}
+complete = true;
+if (failed) await anamClient.talk(answer);
+```
+
+A failure means the engine did not confirm the chunks, not that it never received them. Some of the answer may already have been spoken, and `talk()` repeats it. Once the client has received `TALK_STREAM_INTERRUPTED` for a stream, it does not emit `MESSAGE_DELIVERY_FAILED` for it. An interruption sent while the connection was down can be missed, though, so the fallback can still repeat an answer the user cut off.
+
+Confirming chunks needs an engine that answers heartbeats. Engines that do say so when the session becomes ready. On an older engine, the SDK stops tracking chunks once the session is ready, sends them as before, and never emits `MESSAGE_DELIVERY_FAILED`.
+
 ### Speech across a tool call
 
 A talk stream can stay open while your application runs a tool. Give the speech before and after the tool call separate utterance ids, and the second waits for the first to finish playing.
