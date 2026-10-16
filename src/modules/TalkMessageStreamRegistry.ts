@@ -4,15 +4,6 @@ import { TalkMessageStream } from '../types/TalkMessageStream';
 import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
 import { InternalEventEmitter } from './InternalEventEmitter';
 
-interface StreamRef {
-  deref(): TalkMessageStream | undefined;
-}
-
-// Weak where the runtime supports it: once the caller drops a stream, nothing can
-// observe its state, so it can be collected. Older runtimes hold it strongly.
-const refTo = (stream: TalkMessageStream): StreamRef =>
-  typeof WeakRef === 'function' ? new WeakRef(stream) : { deref: () => stream };
-
 /**
  * Routes interruptions and delivery failures to the talk stream they belong to.
  * A stream can be interrupted long after it ends, while it plays, and no signal
@@ -22,7 +13,7 @@ const refTo = (stream: TalkMessageStream): StreamRef =>
 export class TalkMessageStreamRegistry {
   // A caller can reuse a correlationId; every stream with it gets the outcome, as
   // when each stream listened for itself.
-  private streams = new Map<string, StreamRef[]>();
+  private streams = new Map<string, WeakRef<TalkMessageStream>[]>();
   private internalEventEmitter: InternalEventEmitter;
 
   constructor(internalEventEmitter: InternalEventEmitter) {
@@ -56,7 +47,9 @@ export class TalkMessageStreamRegistry {
     const correlationId = stream.getCorrelationId();
     this.streams.set(correlationId, [
       ...(this.streams.get(correlationId) ?? []),
-      refTo(stream),
+      // Weak: once the caller drops a stream, nothing can observe its state, so it
+      // can be collected.
+      new WeakRef(stream),
     ]);
   }
 
