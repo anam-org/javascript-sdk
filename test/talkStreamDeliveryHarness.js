@@ -413,6 +413,33 @@ async function testChunkWhileReconnectingFailsImmediately() {
   assert.deepEqual(signalling.sendingBuffer, []);
 }
 
+async function testChunkBeforeFirstOpenFails() {
+  FakeWebSocket.instances = [];
+  const publicEmitter = new PublicEventEmitter();
+  const internalEmitter = new InternalEventEmitter();
+  const failures = [];
+  publicEmitter.addListener(AnamEvent.MESSAGE_DELIVERY_FAILED, (failure) =>
+    failures.push(failure.correlationId),
+  );
+  const signalling = new SignallingClient(
+    'session-1',
+    { url: { baseUrl: 'engine.test' } },
+    publicEmitter,
+    internalEmitter,
+  );
+  const registry = new TalkMessageStreamRegistry(internalEmitter);
+  const stream = new TalkMessageStream('corr-1', signalling);
+  registry.register(stream);
+  signalling.connect();
+  // The first socket is still CONNECTING: the chunk is not queued for it.
+  await stream.streamMessageChunk('early', false);
+  assert.deepEqual(failures, ['corr-1']);
+  assert.equal(stream.getState(), TalkMessageStreamState.DELIVERY_FAILED);
+  await reopen();
+  assert.deepEqual(talkSent(currentSocket()), []);
+  assert.deepEqual(signalling.sendingBuffer, []);
+}
+
 async function testEndMessageKeepsImmediateFailure() {
   const { stream, log } = await connectedSignalling();
   await sendChunk(stream, 'a');
@@ -783,6 +810,7 @@ const signallingTests = [
   testChunkNeedsAHeartbeatSentAfterIt,
   testOldAnswerOnNewSocketConfirmsNothing,
   testChunkWhileReconnectingFailsImmediately,
+  testChunkBeforeFirstOpenFails,
   testEndMessageKeepsImmediateFailure,
   testSocketCloseFailsUnconfirmedChunksAtOnce,
   testOverdueHeartbeatFailsChunkWithoutWritingIt,
