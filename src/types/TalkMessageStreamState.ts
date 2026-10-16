@@ -3,4 +3,5 @@ export enum TalkMessageStreamState {
   STREAMING,
   INTERRUPTED,
   ENDED,
+  DELIVERY_FAILED,
 }

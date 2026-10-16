@@ -1,4 +1,5 @@
 import { ConnectionClosedCode } from './ConnectionClosedCodes';
+import { MessageDeliveryFailure } from './MessageDeliveryFailure';
 import {
   Message,
   MessageStreamEvent,
@@ -29,6 +30,9 @@ export type EventCallbacks = {
   [AnamEvent.VIDEO_PLAY_STARTED]: () => void;
   [AnamEvent.AUDIO_STREAM_STARTED]: (audioStream: MediaStream) => void;
   [AnamEvent.TALK_STREAM_INTERRUPTED]: (correlationId: string) => void;
+  [AnamEvent.MESSAGE_DELIVERY_FAILED]: (
+    failure: MessageDeliveryFailure,
+  ) => void;
   [AnamEvent.SESSION_READY]: (sessionId: string) => void;
   [AnamEvent.SERVER_WARNING]: (message: string) => void;
   [AnamEvent.MIC_PERMISSION_PENDING]: () => void;

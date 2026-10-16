@@ -832,6 +832,13 @@ export default class AnamClient {
     return this.streamingClient.startTalkMessageStream(correlationId);
   }
 
+  /**
+   * Create a stream for sending PCM audio for the persona to speak.
+   *
+   * Unlike talk streams, audio chunks are not confirmed: a signalling connection that
+   * stops working without closing can lose them, and no MESSAGE_DELIVERY_FAILED is
+   * emitted.
+   */
   public createAgentAudioInputStream(
     config: AgentAudioInputConfig,
   ): AgentAudioInputStream {

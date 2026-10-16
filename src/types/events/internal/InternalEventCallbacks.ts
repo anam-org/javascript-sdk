@@ -38,4 +38,5 @@ export type InternalEventCallbacks = {
   [InternalEvent.TOOL_CALL_RESULT_READY]: (
     payload: ToolCallResultReceivedPayload,
   ) => void;
+  [InternalEvent.TALK_STREAM_DELIVERY_FAILED]: (correlationId: string) => void;
 };
