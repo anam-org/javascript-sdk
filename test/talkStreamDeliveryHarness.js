@@ -173,6 +173,37 @@ async function testStreamsShareOneListenerPerEvent() {
   );
 }
 
+async function testReusedCorrelationIdReachesEveryStream() {
+  const internalEmitter = new InternalEventEmitter();
+  const registry = new TalkMessageStreamRegistry(internalEmitter);
+  const newStream = () => {
+    const stream = new TalkMessageStream('same', {
+      sendTalkMessage: async () => {},
+    });
+    registry.register(stream);
+    return stream;
+  };
+  const interrupted = [newStream(), newStream()];
+  for (const stream of interrupted) {
+    await stream.streamMessageChunk('x', false);
+  }
+  interrupt(internalEmitter, 'same');
+  assert.deepEqual(
+    interrupted.map((stream) => stream.getState()),
+    [TalkMessageStreamState.INTERRUPTED, TalkMessageStreamState.INTERRUPTED],
+  );
+
+  const failed = [newStream(), newStream()];
+  internalEmitter.emit(InternalEvent.TALK_STREAM_DELIVERY_FAILED, 'same');
+  assert.deepEqual(
+    failed.map((stream) => stream.getState()),
+    [
+      TalkMessageStreamState.DELIVERY_FAILED,
+      TalkMessageStreamState.DELIVERY_FAILED,
+    ],
+  );
+}
+
 async function testDisposeUnsubscribesRegistry() {
   const { stream, internalEmitter, registry } = fakeStream();
   await stream.streamMessageChunk('a', false);
@@ -731,6 +762,7 @@ async function main() {
   await testStreamsShareOneListenerPerEvent();
   await testTerminalStreamsLeaveRegistry();
   await testDisposeUnsubscribesRegistry();
+  await testReusedCorrelationIdReachesEveryStream();
   await testDroppedStreamIsPruned();
   await runSignallingTests();
   console.log('talkStreamDeliveryHarness: all tests passed');

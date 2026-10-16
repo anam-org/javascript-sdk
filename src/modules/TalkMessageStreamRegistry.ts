@@ -20,7 +20,9 @@ const refTo = (stream: TalkMessageStream): StreamRef =>
  * listener here replaces a listener per stream that lived for the whole session.
  */
 export class TalkMessageStreamRegistry {
-  private streams = new Map<string, StreamRef>();
+  // A caller can reuse a correlationId; every stream with it gets the outcome, as
+  // when each stream listened for itself.
+  private streams = new Map<string, StreamRef[]>();
   private internalEventEmitter: InternalEventEmitter;
 
   constructor(internalEventEmitter: InternalEventEmitter) {
@@ -51,7 +53,11 @@ export class TalkMessageStreamRegistry {
 
   public register(stream: TalkMessageStream): void {
     this.prune();
-    this.streams.set(stream.getCorrelationId(), refTo(stream));
+    const correlationId = stream.getCorrelationId();
+    this.streams.set(correlationId, [
+      ...(this.streams.get(correlationId) ?? []),
+      refTo(stream),
+    ]);
   }
 
   private onSignalMessage = (signalMessage: SignalMessage) => {
@@ -60,25 +66,30 @@ export class TalkMessageStreamRegistry {
     ) {
       const { correlationId } =
         signalMessage.payload as TalkStreamInterruptedSignalMessage;
-      this.take(correlationId)?.markInterrupted();
+      this.take(correlationId).forEach((stream) => stream.markInterrupted());
     }
   };
 
   private onDeliveryFailed = (correlationId: string) => {
-    this.take(correlationId)?.markDeliveryFailed();
+    this.take(correlationId).forEach((stream) => stream.markDeliveryFailed());
   };
 
   // Both outcomes are terminal, so the stream needs no further routing.
-  private take(correlationId: string): TalkMessageStream | undefined {
-    const stream = this.streams.get(correlationId)?.deref();
+  private take(correlationId: string): TalkMessageStream[] {
+    const streams = (this.streams.get(correlationId) ?? [])
+      .map((ref) => ref.deref())
+      .filter((stream): stream is TalkMessageStream => stream !== undefined);
     this.streams.delete(correlationId);
-    return stream;
+    return streams;
   }
 
   private prune() {
-    this.streams.forEach((ref, correlationId) => {
-      if (!ref.deref()) {
+    this.streams.forEach((refs, correlationId) => {
+      const live = refs.filter((ref) => ref.deref());
+      if (live.length === 0) {
         this.streams.delete(correlationId);
+      } else {
+        this.streams.set(correlationId, live);
       }
     });
   }
