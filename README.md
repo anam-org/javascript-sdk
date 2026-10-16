@@ -124,7 +124,7 @@ for (const chunk of llmChunks) {
 
 ### Delivery failures
 
-Talk-stream chunks travel over the session's signalling connection. The SDK checks that connection with heartbeats the engine answers, and the answer to a heartbeat sent after a chunk confirms the chunk arrived. The SDK does not resend chunks. If a chunk can't be sent because the connection is down or has stopped answering, or it isn't confirmed within about 3 seconds, the stream stops accepting chunks, `stream.getState()` returns `TalkMessageStreamState.DELIVERY_FAILED`, and the client emits `MESSAGE_DELIVERY_FAILED` with the stream's correlation id. The SDK reconnects on its own; deciding what to do with the answer is up to you. One option is to fall back to `talk()` with the full text:
+Talk-stream chunks travel over the session's signalling connection. On engines that answer heartbeats (see [older engines](#older-engines) below), the SDK checks that connection with heartbeats, and the answer to a heartbeat sent after a chunk confirms the chunk arrived. The SDK does not resend chunks. If a chunk can't be sent because the connection is down or has stopped answering, or it isn't confirmed within about 3 seconds, the stream stops accepting chunks, `stream.getState()` returns `TalkMessageStreamState.DELIVERY_FAILED`, and the client emits `MESSAGE_DELIVERY_FAILED` with the stream's correlation id. The SDK reconnects on its own; deciding what to do with the answer is up to you. One option is to fall back to `talk()` with the full text:
 
 ```typescript
 import { AnamEvent } from '@anam-ai/js-sdk';
@@ -151,6 +151,8 @@ if (failed) await anamClient.talk(answer);
 ```
 
 A failure means the engine did not confirm the chunks, not that it never received them. Some of the answer may already have been spoken, and `talk()` repeats it. Once the client has received `TALK_STREAM_INTERRUPTED` for a stream, it does not emit `MESSAGE_DELIVERY_FAILED` for it. An interruption sent while the connection was down can be missed, though, so the fallback can still repeat an answer the user cut off.
+
+#### Older engines
 
 Confirming chunks needs an engine that answers heartbeats. Engines that do say so when the session becomes ready. On an older engine, the SDK stops tracking chunks once the session is ready and sends them as before. It emits `MESSAGE_DELIVERY_FAILED` only for chunks sent after the connection has closed for good.
 
