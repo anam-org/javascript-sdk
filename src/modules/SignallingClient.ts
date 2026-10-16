@@ -360,6 +360,7 @@ export class SignallingClient {
     } catch (e) {
       console.error('SignallingClient - onOpen: error in onOpen', e);
       this.heartbeat.reset();
+      this.heartbeatStats.stop();
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
         ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,

@@ -714,7 +714,27 @@ async function testStopReportsHeartbeatStats() {
   }
 }
 
+async function testFailedOpenStopsHeartbeatStats() {
+  FakeWebSocket.instances = [];
+  const internalEmitter = new InternalEventEmitter();
+  internalEmitter.addListener(InternalEvent.WEB_SOCKET_OPEN, () => {
+    throw new Error('listener bug');
+  });
+  const signalling = new SignallingClient(
+    'session-1',
+    { url: { baseUrl: 'engine.test' } },
+    new PublicEventEmitter(),
+    internalEmitter,
+  );
+  signalling.connect();
+  currentSocket().open();
+  await flushPromises();
+  assert.equal(signalling.isPermanentlyClosed(), true);
+  assert.equal(signalling.heartbeatStats.timer, null);
+}
+
 const signallingTests = [
+  testFailedOpenStopsHeartbeatStats,
   testStopReportsHeartbeatStats,
   testUnconfirmedChunkFailsStreamAndReplacesSocket,
   testAnsweredHeartbeatConfirmsChunks,
