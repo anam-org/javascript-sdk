@@ -172,6 +172,8 @@ async function speak(llmChunks: AsyncIterable<{ text: string; isLast: boolean }>
 
 A failure means the engine did not confirm the chunks, not that it never received them. Some of the answer may already have been spoken, and `talk()` repeats it. Once the client has received `TALK_STREAM_INTERRUPTED` for a stream, it does not emit `MESSAGE_DELIVERY_FAILED` for it. An interruption sent while the connection was down can be missed, though, so the fallback can still repeat an answer the user cut off.
 
+Only talk streams are confirmed. Audio sent through `createAgentAudioInputStream()` is not, so a connection that stops working without closing can lose it without any event.
+
 #### Older engines
 
 Confirming chunks needs an engine that answers heartbeats. Engines that do say so when the session becomes ready, with `sendsHeartbeatAcks: true` in the `sessionready` message. On an older engine, the SDK stops tracking chunks once the session is ready and sends them as before, queuing them while the connection reconnects. It still emits `MESSAGE_DELIVERY_FAILED` in three cases:
