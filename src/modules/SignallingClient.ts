@@ -138,6 +138,8 @@ export class SignallingClient {
 
   public stop() {
     this.stopSignal = true;
+    // Nothing sends these after a stop.
+    this.sendingBuffer = [];
     this.heartbeat.clear();
     this.heartbeatStats.stop();
     this.closeSocket();

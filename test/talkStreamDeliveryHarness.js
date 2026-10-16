@@ -477,6 +477,14 @@ async function testChunkBeforeFirstOpenStillNeedsConfirming() {
   assert.deepEqual(log, [['failed', 'corr-1']]);
 }
 
+async function testStopClearsBufferedChunks() {
+  const { signalling, stream, log } = unopenedSignalling();
+  await stream.streamMessageChunk('early', false);
+  signalling.stop();
+  assert.deepEqual(signalling.sendingBuffer, []);
+  assert.deepEqual(log, []);
+}
+
 async function testTerminalCloseBeforeFirstOpenFailsBufferedChunks() {
   const { signalling, stream, log } = unopenedSignalling({
     maxWsReconnectionAttempts: 1,
@@ -923,6 +931,7 @@ const signallingTests = [
   testChunkBeforeFirstOpenIsSentOnOpen,
   testChunkBeforeFirstOpenStillNeedsConfirming,
   testTerminalCloseBeforeFirstOpenFailsBufferedChunks,
+  testStopClearsBufferedChunks,
   testEndMessageKeepsImmediateFailure,
   testSocketCloseFailsUnconfirmedChunksAtOnce,
   testOverdueHeartbeatFailsChunkWithoutWritingIt,
