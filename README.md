@@ -122,18 +122,11 @@ for (const chunk of llmChunks) {
 }
 ```
 
-Send the first chunk after `AnamEvent.SESSION_READY`. `streamToVideoElement()` resolves before the signalling connection has opened, and a chunk sent before it opens is not queued: it fails the stream with `MESSAGE_DELIVERY_FAILED`.
-
-```typescript
-anamClient.addListener(AnamEvent.SESSION_READY, () => {
-  // Safe to start talk streams.
-});
-await anamClient.streamToVideoElement('video-element-id');
-```
+You can start a talk stream as soon as `streamToVideoElement()` resolves. Chunks sent before the signalling connection first opens are queued and sent when it does.
 
 ### Delivery failures
 
-Talk-stream chunks travel over the session's signalling connection. On engines that answer heartbeats (see [older engines](#older-engines) below), the SDK checks that connection with heartbeats, and the answer to a heartbeat sent after a chunk confirms the chunk arrived. The SDK does not resend chunks. If a chunk can't be sent because the connection is down or has stopped answering, or it isn't confirmed within about 3 seconds, the stream stops accepting chunks, `stream.getState()` returns `TalkMessageStreamState.DELIVERY_FAILED`, and the client emits `MESSAGE_DELIVERY_FAILED` with the stream's correlation id. The SDK reconnects on its own; deciding what to do with the answer is up to you. One option is to fall back to `talk()` with the full text:
+Talk-stream chunks travel over the session's signalling connection. On engines that answer heartbeats (see [older engines](#older-engines) below), the SDK checks that connection with heartbeats, and the answer to a heartbeat sent after a chunk confirms the chunk arrived. The SDK does not resend chunks. If a chunk can't be sent because the connection has dropped or stopped answering, or it isn't confirmed within about 3 seconds, the stream stops accepting chunks, `stream.getState()` returns `TalkMessageStreamState.DELIVERY_FAILED`, and the client emits `MESSAGE_DELIVERY_FAILED` with the stream's correlation id. The SDK reconnects on its own; deciding what to do with the answer is up to you. One option is to fall back to `talk()` with the full text:
 
 ```typescript
 import { AnamEvent } from '@anam-ai/js-sdk';

@@ -38,6 +38,9 @@ export class SignallingClient {
   private wsConnectionAttempts = 0;
   private socket: WebSocket | null = null;
   private permanentlyClosed = false;
+  // Until the first socket opens, talk chunks wait in sendingBuffer: the client can
+  // resolve streamToVideoElement() before then, and nothing has been lost yet.
+  private hasOpened = false;
   private iceRestartReconnectInProgress = false;
   // Set when a socket is replaced because a heartbeat went unanswered. That usually
   // means a network switch, so the reconnect gets the same retry headroom as an
@@ -302,9 +305,14 @@ export class SignallingClient {
       this.sendSignalMessage(chatMessage);
       return;
     }
-    // Never buffered or resent. A chunk fails its stream at once when there is no
-    // open socket, or when the socket has an overdue heartbeat and is probably dead.
-    // Otherwise it is tracked until a heartbeat answer confirms it.
+    // Sent and tracked when the first socket opens.
+    if (!this.hasOpened) {
+      this.sendingBuffer.push(chatMessage);
+      return;
+    }
+    // Never resent. Once a socket has opened, a chunk fails its stream at once when
+    // there is no open socket, or when the socket has an overdue heartbeat and is
+    // probably dead. Otherwise it is tracked until a heartbeat answer confirms it.
     const suspect =
       this.engineSendsHeartbeatAcks === true && this.heartbeat.isSuspect();
     if (!suspect && this.sendIfOpen(chatMessage)) {
@@ -360,6 +368,7 @@ export class SignallingClient {
       // again mid-restart must not fall back to the short default budget.
       this.scheduleStableConnectionReset(socket);
       this.heartbeatStats.start();
+      this.hasOpened = true;
       this.flushSendingBuffer();
       socket.onmessage = this.onMessage.bind(this);
       this.startSendingHeartBeats();
@@ -367,6 +376,7 @@ export class SignallingClient {
     } catch (e) {
       console.error('SignallingClient - onOpen: error in onOpen', e);
       this.heartbeat.reset();
+      this.failBufferedTalkChunks();
       this.heartbeatStats.stop();
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
@@ -457,6 +467,7 @@ export class SignallingClient {
       this.iceRestartReconnectInProgress = false;
       this.heartbeatReconnectInProgress = false;
       this.permanentlyClosed = true;
+      this.failBufferedTalkChunks();
       this.heartbeatStats.stop();
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
@@ -512,12 +523,34 @@ export class SignallingClient {
       this.sendingBuffer.forEach((message: SignalMessage) => {
         if (this.socket?.readyState === WebSocket.OPEN) {
           this.socket.send(JSON.stringify(message));
+          if (message.actionType === SignalMessageAction.TALK_STREAM_INPUT) {
+            this.heartbeat.trackChunk(
+              (message.payload as TalkMessageStreamPayload).correlationId,
+            );
+          }
         } else {
           newBuffer.push(message);
         }
       });
     }
     this.sendingBuffer = newBuffer;
+  }
+
+  // No socket will open to send them, so their streams fail.
+  private failBufferedTalkChunks() {
+    const correlationIds = new Set<string>();
+    this.sendingBuffer = this.sendingBuffer.filter((message) => {
+      if (message.actionType !== SignalMessageAction.TALK_STREAM_INPUT) {
+        return true;
+      }
+      correlationIds.add(
+        (message.payload as TalkMessageStreamPayload).correlationId,
+      );
+      return false;
+    });
+    correlationIds.forEach((correlationId) =>
+      this.onTalkStreamDeliveryFailed(correlationId),
+    );
   }
 
   private sendHeartbeat(seq: number): boolean {

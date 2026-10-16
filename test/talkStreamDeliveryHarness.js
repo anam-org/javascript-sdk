@@ -413,17 +413,25 @@ async function testChunkWhileReconnectingFailsImmediately() {
   assert.deepEqual(signalling.sendingBuffer, []);
 }
 
-async function testChunkBeforeFirstOpenFails() {
+// A client and stream whose first socket has not opened yet.
+function unopenedSignalling({ maxWsReconnectionAttempts } = {}) {
   FakeWebSocket.instances = [];
   const publicEmitter = new PublicEventEmitter();
   const internalEmitter = new InternalEventEmitter();
-  const failures = [];
+  const log = [];
   publicEmitter.addListener(AnamEvent.MESSAGE_DELIVERY_FAILED, (failure) =>
-    failures.push(failure.correlationId),
+    log.push(['failed', failure.correlationId]),
+  );
+  publicEmitter.addListener(AnamEvent.CONNECTION_CLOSED, (code) =>
+    log.push(['closed', code]),
   );
   const signalling = new SignallingClient(
     'session-1',
-    { url: { baseUrl: 'engine.test' } },
+    {
+      url: { baseUrl: 'engine.test' },
+      maxWsReconnectionAttempts,
+      heartbeatIntervalSeconds: 600,
+    },
     publicEmitter,
     internalEmitter,
   );
@@ -431,12 +439,56 @@ async function testChunkBeforeFirstOpenFails() {
   const stream = new TalkMessageStream('corr-1', signalling);
   registry.register(stream);
   signalling.connect();
-  // The first socket is still CONNECTING: the chunk is not queued for it.
+  return { signalling, stream, log };
+}
+
+async function testChunkBeforeFirstOpenIsSentOnOpen() {
+  const { signalling, stream, log } = unopenedSignalling();
+  // streamToVideoElement() resolves while the first socket is still CONNECTING.
   await stream.streamMessageChunk('early', false);
-  assert.deepEqual(failures, ['corr-1']);
-  assert.equal(stream.getState(), TalkMessageStreamState.DELIVERY_FAILED);
+  await stream.streamMessageChunk('later', true);
+  assert.deepEqual(log, []);
   await reopen();
-  assert.deepEqual(talkSent(currentSocket()), []);
+  assert.deepEqual(
+    talkSent(currentSocket()).map((p) => p.content),
+    ['early', 'later'],
+  );
+  assert.deepEqual(signalling.sendingBuffer, []);
+  // Tracked like any other chunk: the next heartbeat's answer confirms them.
+  mock.timers.tick(0);
+  answer();
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS * 2);
+  assert.deepEqual(log, []);
+  assert.equal(stream.getState(), TalkMessageStreamState.ENDED);
+}
+
+async function testChunkBeforeFirstOpenStillNeedsConfirming() {
+  const { stream, log } = unopenedSignalling();
+  await stream.streamMessageChunk('early', false);
+  await reopen();
+  currentSocket().swallow = true;
+  mock.timers.tick(0);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS);
+  assert.deepEqual(log, [['failed', 'corr-1']]);
+}
+
+async function testTerminalCloseBeforeFirstOpenFailsBufferedChunks() {
+  const { signalling, stream, log } = unopenedSignalling({
+    maxWsReconnectionAttempts: 1,
+  });
+  await stream.streamMessageChunk('early', false);
+  await stream.streamMessageChunk('more', false);
+  currentSocket().drop();
+  await flushPromises();
+  mock.timers.tick(100);
+  currentSocket().drop();
+  await flushPromises();
+  // One failure per stream, before the connection is reported closed.
+  assert.deepEqual(
+    log.map(([kind]) => kind),
+    ['failed', 'closed'],
+  );
+  assert.equal(stream.getState(), TalkMessageStreamState.DELIVERY_FAILED);
   assert.deepEqual(signalling.sendingBuffer, []);
 }
 
@@ -810,7 +862,9 @@ const signallingTests = [
   testChunkNeedsAHeartbeatSentAfterIt,
   testOldAnswerOnNewSocketConfirmsNothing,
   testChunkWhileReconnectingFailsImmediately,
-  testChunkBeforeFirstOpenFails,
+  testChunkBeforeFirstOpenIsSentOnOpen,
+  testChunkBeforeFirstOpenStillNeedsConfirming,
+  testTerminalCloseBeforeFirstOpenFailsBufferedChunks,
   testEndMessageKeepsImmediateFailure,
   testSocketCloseFailsUnconfirmedChunksAtOnce,
   testOverdueHeartbeatFailsChunkWithoutWritingIt,
