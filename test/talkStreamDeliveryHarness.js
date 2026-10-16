@@ -17,8 +17,10 @@ const {
 } = require('../dist/main/modules/PublicEventEmitter');
 const { AnamEvent } = require('../dist/main/types');
 const {
-  TALK_STREAM_ACK_TIMEOUT_MS,
-} = require('../dist/main/modules/TalkStreamDeliveryTracker');
+  HEARTBEAT_ACK_TIMEOUT_MS,
+  HEARTBEAT_SUSPECT_MS,
+  HEARTBEAT_PROBE_COALESCE_MS,
+} = require('../dist/main/modules/HeartbeatMonitor');
 
 class FakeWebSocket {
   static CONNECTING = 0;
@@ -90,27 +92,6 @@ function interrupt(emitter, correlationId = 'corr-1') {
     sessionId: 'session-1',
     payload: { correlationId },
   });
-}
-
-async function testSequenceStampsEveryChunkAndTerminator() {
-  const { stream, sent } = fakeStream();
-  await stream.streamMessageChunk('a', false);
-  await stream.streamMessageChunk('b', false);
-  await stream.endMessage();
-  assert.deepEqual(
-    sent.map((p) => p.sequence),
-    [0, 1, 2],
-  );
-}
-
-async function testRejectedChunkDoesNotConsumeSequence() {
-  const { stream, sent } = fakeStream();
-  await assert.rejects(() => stream.streamMessageChunk('a', false, 'bad-id'));
-  await stream.streamMessageChunk('a', true);
-  assert.deepEqual(
-    sent.map((p) => p.sequence),
-    [0],
-  );
 }
 
 async function testDeliveryFailedMakesActiveStreamTerminal() {
@@ -229,7 +210,11 @@ async function testDroppedStreamIsPruned() {
   assert.deepEqual([...registry.streams.keys()], ['kept']);
 }
 
-async function connectedSignalling({ maxWsReconnectionAttempts } = {}) {
+// A long default interval keeps scheduled heartbeats out of tests that don't want them.
+async function connectedSignalling({
+  maxWsReconnectionAttempts,
+  heartbeatIntervalSeconds = 600,
+} = {}) {
   FakeWebSocket.instances = [];
   const publicEmitter = new PublicEventEmitter();
   const internalEmitter = new InternalEventEmitter();
@@ -247,7 +232,11 @@ async function connectedSignalling({ maxWsReconnectionAttempts } = {}) {
   );
   const signalling = new SignallingClient(
     'session-1',
-    { url: { baseUrl: 'engine.test' }, maxWsReconnectionAttempts },
+    {
+      url: { baseUrl: 'engine.test' },
+      maxWsReconnectionAttempts,
+      heartbeatIntervalSeconds,
+    },
     publicEmitter,
     internalEmitter,
   );
@@ -260,11 +249,17 @@ async function connectedSignalling({ maxWsReconnectionAttempts } = {}) {
   return { signalling, stream, log, signalled, publicEmitter, registry };
 }
 
-function ack(sequence, correlationId = 'corr-1') {
+const heartbeatSeqs = (socket = currentSocket()) =>
+  socket.sent
+    .filter((m) => m.actionType === 'heartbeat')
+    .map((m) => m.payload.seq);
+
+// Answers like the engine: echoes the seq of the latest heartbeat by default.
+function answer(seq = heartbeatSeqs().at(-1)) {
   currentSocket().receive({
-    actionType: 'talkstreamack',
+    actionType: 'heartbeat',
     sessionId: 'session-1',
-    payload: { correlationId, sequence },
+    payload: { seq },
   });
 }
 
@@ -281,11 +276,21 @@ async function reopen() {
   await flushPromises();
 }
 
-async function testUnackedChunkFailsStreamAndReplacesSocket() {
+// Mock timers run a due timer with the clock already at the end of the tick, so a
+// zero-delay heartbeat needs its own tick(0) to go out at the right time.
+
+// Sends a chunk and lets the heartbeat that confirms it go out.
+async function sendChunk(stream, text, endOfSpeech = false) {
+  await stream.streamMessageChunk(text, endOfSpeech);
+  mock.timers.tick(HEARTBEAT_PROBE_COALESCE_MS);
+}
+
+async function testUnconfirmedChunkFailsStreamAndReplacesSocket() {
   const { stream, log } = await connectedSignalling();
   currentSocket().swallow = true;
   await stream.streamMessageChunk('hello', false);
-  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS - 1);
+  mock.timers.tick(0);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS - 1);
   assert.deepEqual(log, []);
   mock.timers.tick(1);
   assert.deepEqual(log, [['failed', 'corr-1']]);
@@ -295,23 +300,54 @@ async function testUnackedChunkFailsStreamAndReplacesSocket() {
   await reopen();
   // Never resent.
   assert.deepEqual(talkSent(currentSocket()), []);
-  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS * 2);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS * 2);
   assert.deepEqual(log, [['failed', 'corr-1']]);
   assert.equal(FakeWebSocket.instances.length, 2);
 }
 
-async function testAckedChunksDoNotFail() {
+async function testAnsweredHeartbeatConfirmsChunks() {
   const { stream, log, signalled } = await connectedSignalling();
   await stream.streamMessageChunk('a', false);
   await stream.streamMessageChunk('b', false);
   await stream.streamMessageChunk('c', true);
-  // Acks are cumulative and consumed, not emitted.
-  ack(2);
+  mock.timers.tick(0);
+  // One heartbeat covers the burst.
+  assert.deepEqual(heartbeatSeqs(), [0]);
+  answer();
+  // Answers are consumed, not emitted.
   assert.deepEqual(signalled, []);
-  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS * 2);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS * 2);
   assert.deepEqual(log, []);
   assert.equal(FakeWebSocket.instances.length, 1);
   assert.equal(stream.getState(), TalkMessageStreamState.ENDED);
+}
+
+async function testChunkNeedsAHeartbeatSentAfterIt() {
+  const { stream, log } = await connectedSignalling();
+  await sendChunk(stream, 'a');
+  await sendChunk(stream, 'b');
+  assert.deepEqual(heartbeatSeqs(), [0, 1]);
+  // Heartbeat 0 went out before chunk b, so its answer does not confirm b.
+  answer(0);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS);
+  assert.deepEqual(log, [['failed', 'corr-1']]);
+}
+
+async function testOldAnswerOnNewSocketConfirmsNothing() {
+  const { signalling, stream, log, registry } = await connectedSignalling();
+  await sendChunk(stream, 'a', true);
+  answer();
+  currentSocket().drop();
+  await flushPromises();
+  mock.timers.tick(100);
+  await reopen();
+  const next = new TalkMessageStream('corr-2', signalling);
+  registry.register(next);
+  await sendChunk(next, 'b', true);
+  // A late answer to heartbeat 0 arriving on the new socket proves nothing about b.
+  answer(0);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS);
+  assert.deepEqual(log, [['failed', 'corr-2']]);
 }
 
 async function testChunkWhileReconnectingFailsImmediately() {
@@ -327,32 +363,92 @@ async function testChunkWhileReconnectingFailsImmediately() {
   assert.deepEqual(signalling.sendingBuffer, []);
 }
 
-async function testSocketCloseFailsUnackedChunksAtOnce() {
+async function testSocketCloseFailsUnconfirmedChunksAtOnce() {
   const { stream, log } = await connectedSignalling();
-  await stream.streamMessageChunk('sent', false);
+  await sendChunk(stream, 'sent');
   currentSocket().drop();
   await flushPromises();
   assert.deepEqual(log, [['failed', 'corr-1']]);
   mock.timers.tick(100);
   await reopen();
-  // The failed chunk's deadline must not replace the new, healthy socket.
-  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS * 2);
+  // The old socket's heartbeat must not time out and replace the new, healthy socket.
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS * 2);
   assert.equal(FakeWebSocket.instances.length, 2);
   assert.deepEqual(log, [['failed', 'corr-1']]);
   assert.deepEqual(talkSent(currentSocket()), []);
+}
+
+async function testOverdueHeartbeatFailsChunkWithoutWritingIt() {
+  const { stream, log } = await connectedSignalling();
+  sessionReady({ sendsHeartbeatAcks: true });
+  await sendChunk(stream, 'a');
+  mock.timers.tick(HEARTBEAT_SUSPECT_MS);
+  // The socket has not answered for 1.5s: the next chunk fails instead of going out.
+  await stream.streamMessageChunk('b', false);
+  assert.deepEqual(log, [['failed', 'corr-1']]);
+  assert.deepEqual(
+    talkSent(currentSocket()).map((p) => p.content),
+    ['a'],
+  );
+}
+
+async function testOverdueHeartbeatDoesNotGuardBeforeSessionReady() {
+  const { signalling, stream, log, registry } = await connectedSignalling();
+  await sendChunk(stream, 'a', true);
+  mock.timers.tick(HEARTBEAT_SUSPECT_MS);
+  // An older engine may not answer at all, so without sessionready the chunk still goes out.
+  const next = new TalkMessageStream('corr-2', signalling);
+  registry.register(next);
+  await next.streamMessageChunk('b', true);
+  assert.deepEqual(
+    talkSent(currentSocket()).map((p) => p.content),
+    ['a', 'b'],
+  );
+  assert.deepEqual(log, []);
+}
+
+async function testIdleUnansweredHeartbeatReplacesSocket() {
+  const { log } = await connectedSignalling({ heartbeatIntervalSeconds: 1 });
+  sessionReady({ sendsHeartbeatAcks: true });
+  currentSocket().swallow = true;
+  mock.timers.tick(1000);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS - 1);
+  assert.equal(FakeWebSocket.instances.length, 1);
+  mock.timers.tick(1);
+  assert.equal(FakeWebSocket.instances.length, 2);
+  assert.deepEqual(log, []);
+}
+
+async function testIdleAnsweredHeartbeatsKeepSocket() {
+  await connectedSignalling({ heartbeatIntervalSeconds: 1 });
+  sessionReady({ sendsHeartbeatAcks: true });
+  for (let beat = 0; beat < 5; beat += 1) {
+    mock.timers.tick(1000);
+    answer();
+  }
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS - 1);
+  assert.equal(FakeWebSocket.instances.length, 1);
+  assert.deepEqual(heartbeatSeqs(), [0, 1, 2, 3, 4, 5, 6]);
+}
+
+async function testIdleUnansweredHeartbeatBeforeSessionReadyIsIgnored() {
+  await connectedSignalling({ heartbeatIntervalSeconds: 1 });
+  mock.timers.tick(1000 + HEARTBEAT_ACK_TIMEOUT_MS * 2);
+  assert.equal(FakeWebSocket.instances.length, 1);
 }
 
 async function testNewStreamWorksAfterFailure() {
   const { signalling, stream, log, registry } = await connectedSignalling();
   currentSocket().swallow = true;
   await stream.streamMessageChunk('lost', false);
-  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS);
+  mock.timers.tick(0);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS);
   await reopen();
   const next = new TalkMessageStream('corr-2', signalling);
   registry.register(next);
-  await next.streamMessageChunk('fresh', true);
-  ack(0, 'corr-2');
-  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS * 2);
+  await sendChunk(next, 'fresh', true);
+  answer();
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS * 2);
   assert.deepEqual(
     talkSent(currentSocket()).map((p) => [p.correlationId, p.content]),
     [['corr-2', 'fresh']],
@@ -363,7 +459,6 @@ async function testNewStreamWorksAfterFailure() {
 
 async function testInterruptionDropsTrackedChunksSilently() {
   const { stream, log } = await connectedSignalling();
-  currentSocket().swallow = true;
   await stream.streamMessageChunk('a', true);
   currentSocket().receive({
     actionType: 'talkinputstreaminterrupted',
@@ -372,33 +467,46 @@ async function testInterruptionDropsTrackedChunksSilently() {
   });
   await flushPromises();
   assert.equal(stream.getState(), TalkMessageStreamState.INTERRUPTED);
-  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS * 2);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS * 2);
   assert.deepEqual(log, []);
-  assert.equal(FakeWebSocket.instances.length, 1);
 }
 
-async function testEngineWithoutAcksStopsTracking() {
-  const { stream, log, signalled } = await connectedSignalling();
+async function testEngineWithoutHeartbeatAcksStopsTracking() {
+  const { stream, log, signalled } = await connectedSignalling({
+    heartbeatIntervalSeconds: 1,
+  });
   currentSocket().swallow = true;
   await stream.streamMessageChunk('before', false);
   // An older engine's sessionready has no flag.
   sessionReady({});
   assert.deepEqual(signalled, ['sessionready']);
   await stream.streamMessageChunk('after', true);
-  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS * 2);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS * 4);
   assert.deepEqual(log, []);
   assert.equal(FakeWebSocket.instances.length, 1);
   assert.equal(stream.getState(), TalkMessageStreamState.ENDED);
 }
 
-async function testEngineWithAcksKeepsTracking() {
+async function testEngineWithHeartbeatAcksKeepsTracking() {
   const { stream, log } = await connectedSignalling();
-  sessionReady({ sendsTalkStreamAcks: true });
+  sessionReady({ sendsHeartbeatAcks: true });
   currentSocket().swallow = true;
   await stream.streamMessageChunk('tracked', false);
-  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS);
+  mock.timers.tick(0);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS);
   assert.deepEqual(log, [['failed', 'corr-1']]);
   assert.equal(FakeWebSocket.instances.length, 2);
+}
+
+async function testOldEngineHeartbeatIsStillEmitted() {
+  const { signalled } = await connectedSignalling();
+  // Engine-initiated heartbeats carry no seq and are passed on as before.
+  currentSocket().receive({
+    actionType: 'heartbeat',
+    sessionId: 'session-1',
+    payload: {},
+  });
+  assert.deepEqual(signalled, ['heartbeat']);
 }
 
 async function testStopIsSilent() {
@@ -406,7 +514,7 @@ async function testStopIsSilent() {
   currentSocket().swallow = true;
   await stream.streamMessageChunk('pending', false);
   signalling.stop();
-  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS * 2);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS * 2);
   assert.deepEqual(log, []);
   assert.equal(FakeWebSocket.instances.length, 1);
 }
@@ -427,10 +535,11 @@ async function testTerminalCloseFailsPendingBeforeConnectionClosed() {
   );
 }
 
-async function testIceRestartReconnectFailsUnackedChunks() {
+async function testIceRestartReconnectFailsUnconfirmedChunks() {
   const { signalling, stream, log } = await connectedSignalling();
   currentSocket().swallow = true;
   await stream.streamMessageChunk('hello', false);
+  mock.timers.tick(0);
   signalling.reconnectForIceRestart();
   assert.deepEqual(log, [['failed', 'corr-1']]);
   assert.equal(FakeWebSocket.instances.length, 2);
@@ -442,7 +551,7 @@ async function testChunkAfterStopIsSilent() {
   const { signalling, stream, log } = await connectedSignalling();
   signalling.stop();
   await stream.streamMessageChunk('late', false);
-  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS * 2);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS * 2);
   assert.deepEqual(log, []);
   assert.equal(stream.getState(), TalkMessageStreamState.STREAMING);
   assert.deepEqual(signalling.sendingBuffer, []);
@@ -495,11 +604,12 @@ async function dropRepeatedly(closeCount) {
   }
 }
 
-async function testAckTimeoutReplaceGetsExtendedRetryBudgetUntilStable() {
+async function testHeartbeatReplaceGetsExtendedRetryBudgetUntilStable() {
   const { signalling, stream, log } = await connectedSignalling();
   currentSocket().swallow = true;
   await stream.streamMessageChunk('hello', false);
-  mock.timers.tick(TALK_STREAM_ACK_TIMEOUT_MS);
+  mock.timers.tick(0);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS);
   // The default budget (5) would give up on the 6th close; a network switch needs
   // the same headroom an ICE-restart reconnect gets.
   await dropRepeatedly(6);
@@ -516,21 +626,29 @@ async function testAckTimeoutReplaceGetsExtendedRetryBudgetUntilStable() {
 }
 
 const signallingTests = [
-  testUnackedChunkFailsStreamAndReplacesSocket,
-  testAckedChunksDoNotFail,
+  testUnconfirmedChunkFailsStreamAndReplacesSocket,
+  testAnsweredHeartbeatConfirmsChunks,
+  testChunkNeedsAHeartbeatSentAfterIt,
+  testOldAnswerOnNewSocketConfirmsNothing,
   testChunkWhileReconnectingFailsImmediately,
-  testSocketCloseFailsUnackedChunksAtOnce,
+  testSocketCloseFailsUnconfirmedChunksAtOnce,
+  testOverdueHeartbeatFailsChunkWithoutWritingIt,
+  testOverdueHeartbeatDoesNotGuardBeforeSessionReady,
+  testIdleUnansweredHeartbeatReplacesSocket,
+  testIdleAnsweredHeartbeatsKeepSocket,
+  testIdleUnansweredHeartbeatBeforeSessionReadyIsIgnored,
   testNewStreamWorksAfterFailure,
   testInterruptionDropsTrackedChunksSilently,
-  testEngineWithoutAcksStopsTracking,
-  testEngineWithAcksKeepsTracking,
+  testEngineWithoutHeartbeatAcksStopsTracking,
+  testEngineWithHeartbeatAcksKeepsTracking,
+  testOldEngineHeartbeatIsStillEmitted,
   testStopIsSilent,
   testTerminalCloseFailsPendingBeforeConnectionClosed,
-  testIceRestartReconnectFailsUnackedChunks,
+  testIceRestartReconnectFailsUnconfirmedChunks,
   testChunkAfterStopIsSilent,
   testChunkAfterTerminalCloseFails,
   testThrowingFailureListenerDoesNotBlockConnectionClosed,
-  testAckTimeoutReplaceGetsExtendedRetryBudgetUntilStable,
+  testHeartbeatReplaceGetsExtendedRetryBudgetUntilStable,
 ];
 
 async function runSignallingTests() {
@@ -548,8 +666,6 @@ async function runSignallingTests() {
 }
 
 async function main() {
-  await testSequenceStampsEveryChunkAndTerminator();
-  await testRejectedChunkDoesNotConsumeSequence();
   await testDeliveryFailedMakesActiveStreamTerminal();
   await testEndedStreamStillReportsFailureAndInterruption();
   await testStreamsShareOneListenerPerEvent();

@@ -6,5 +6,5 @@ export type { SignalMessage } from './SignalMessage';
 export { SignalMessageAction } from './SignalMessage';
 export type { AgentAudioInputPayload } from './AgentAudioInputPayload';
 export type { AgentAudioInputConfig } from './AgentAudioInputConfig';
-export type { TalkStreamAckPayload } from './TalkStreamAckPayload';
+export type { HeartbeatPayload } from './HeartbeatPayload';
 export type { SessionReadyPayload } from './SessionReadyPayload';

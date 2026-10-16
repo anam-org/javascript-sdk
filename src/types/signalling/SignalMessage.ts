@@ -7,7 +7,6 @@ export enum SignalMessageAction {
   WARNING = 'warning',
   TALK_STREAM_INTERRUPTED = 'talkinputstreaminterrupted',
   TALK_STREAM_INPUT = 'talkstream',
-  TALK_STREAM_ACK = 'talkstreamack',
   SESSION_READY = 'sessionready',
   AGENT_AUDIO_INPUT = 'agentaudioinput',
   AGENT_AUDIO_INPUT_END = 'agentaudioinputend',
