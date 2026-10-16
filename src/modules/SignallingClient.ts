@@ -61,7 +61,7 @@ export class SignallingClient {
   private stableConnectionTimer: ReturnType<typeof setTimeout> | null = null;
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private connectionMilestones: ClientConnectionMilestoneRecorder | undefined;
-  private heartbeatStats = new HeartbeatStats();
+  private heartbeatStats: HeartbeatStats;
   private heartbeat = new HeartbeatMonitor({
     sendHeartbeat: (seq) => this.sendHeartbeat(seq),
     onAckTimeout: (failedChunks) => this.onHeartbeatAckTimeout(failedChunks),
@@ -90,6 +90,7 @@ export class SignallingClient {
       throw new Error('Signalling Client: sessionId is required');
     }
     this.sessionId = sessionId;
+    this.heartbeatStats = new HeartbeatStats(sessionId);
 
     const { heartbeatIntervalSeconds, maxWsReconnectionAttempts, url } =
       options;

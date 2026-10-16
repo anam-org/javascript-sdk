@@ -8,6 +8,7 @@ const {
 function setup({ sampled = true } = {}) {
   const sent = [];
   const stats = new HeartbeatStats(
+    'session-1',
     async (metrics) => {
       sent.push(...metrics);
     },
@@ -32,6 +33,8 @@ function testFlushReportsPercentilesAndCounts() {
   assert.equal(sent.length, 1);
   assert.equal(sent[0].name, 'client_heartbeat');
   assert.equal(sent[0].value, 102);
+  // The session's own id, not the process-wide context another client can change.
+  assert.deepEqual(sent[0].tags, { sessionId: 'session-1' });
   assert.deepEqual(sent[0].fields, {
     answers: 102,
     heartbeatTimeouts: 1,
@@ -120,6 +123,7 @@ function testSamplingIsDecidedOncePerSession() {
   let calls = 0;
   const sent = [];
   const stats = new HeartbeatStats(
+    'session-1',
     async (metrics) => {
       sent.push(...metrics);
     },
@@ -138,6 +142,7 @@ function testSamplingIsDecidedOncePerSession() {
 
 function testFailingSendDoesNotThrow() {
   const stats = new HeartbeatStats(
+    'session-1',
     () => {
       throw new Error('send failed');
     },
@@ -146,6 +151,7 @@ function testFailingSendDoesNotThrow() {
   stats.recordRoundTrip(10);
   stats.flush();
   const rejecting = new HeartbeatStats(
+    'session-1',
     () => Promise.reject(new Error('no')),
     () => 0,
   );

@@ -35,8 +35,16 @@ export class HeartbeatStats {
   private timer: ReturnType<typeof setInterval> | null = null;
   private send: (metrics: ClientMetricPayload[]) => Promise<void>;
   private readonly sampled: boolean;
+  // Tagged here rather than from the process-wide metrics context, which another
+  // client on the same page can overwrite.
+  private readonly sessionId: string;
 
-  constructor(send = sendClientMetrics, random = Math.random) {
+  constructor(
+    sessionId: string,
+    send = sendClientMetrics,
+    random = Math.random,
+  ) {
+    this.sessionId = sessionId;
     this.send = send;
     this.sampled = random() < HEARTBEAT_STATS_SAMPLE_RATIO;
   }
@@ -116,6 +124,7 @@ export class HeartbeatStats {
         {
           name: ClientMetricMeasurement.CLIENT_METRIC_MEASUREMENT_HEARTBEAT,
           value: answers,
+          tags: { sessionId: this.sessionId },
           fields,
         },
       ]).catch(() => {
