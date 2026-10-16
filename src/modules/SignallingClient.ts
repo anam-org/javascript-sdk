@@ -582,6 +582,8 @@ export class SignallingClient {
   }
 
   private onTalkStreamDeliveryFailed(correlationId: string) {
+    // The stream has failed, so its earlier chunks must not fail it again later.
+    this.heartbeat.drop(correlationId);
     this.heartbeatStats.recordFailedStream();
     this.internalEventEmitter.emit(
       InternalEvent.TALK_STREAM_DELIVERY_FAILED,

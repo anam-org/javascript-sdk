@@ -533,6 +533,18 @@ async function testOverdueHeartbeatFailsChunkWithoutWritingIt() {
   );
 }
 
+async function testRefusedChunkThenTimeoutFailsStreamOnce() {
+  const { stream, log } = await connectedSignalling();
+  sessionReady({ sendsHeartbeatAcks: true });
+  await sendChunk(stream, 'a');
+  mock.timers.tick(HEARTBEAT_SUSPECT_MS);
+  // Refused: fails the stream.
+  await stream.streamMessageChunk('b', false);
+  // The timeout must not fail it again for chunk a.
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS);
+  assert.deepEqual(log, [['failed', 'corr-1']]);
+}
+
 async function testOverdueHeartbeatDoesNotGuardBeforeSessionReady() {
   const { signalling, stream, log, registry } = await connectedSignalling();
   await sendChunk(stream, 'a', true);
@@ -868,6 +880,7 @@ const signallingTests = [
   testEndMessageKeepsImmediateFailure,
   testSocketCloseFailsUnconfirmedChunksAtOnce,
   testOverdueHeartbeatFailsChunkWithoutWritingIt,
+  testRefusedChunkThenTimeoutFailsStreamOnce,
   testOverdueHeartbeatDoesNotGuardBeforeSessionReady,
   testIdleUnansweredHeartbeatReplacesSocket,
   testIdleAnsweredHeartbeatsKeepSocket,
