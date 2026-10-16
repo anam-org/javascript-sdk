@@ -14,6 +14,7 @@ export enum ClientMetricMeasurement {
   CLIENT_METRIC_MEASUREMENT_SESSION_SUCCESS = 'client_session_success',
   CLIENT_METRIC_MEASUREMENT_ICE_RESTART = 'client_ice_restart',
   CLIENT_METRIC_MEASUREMENT_INPUT_AUDIO_SETTINGS = 'client_input_audio_settings',
+  CLIENT_METRIC_MEASUREMENT_HEARTBEAT = 'client_heartbeat',
 }
 
 const CLIENT_METRICS_MAX_BATCH_SIZE = 50;

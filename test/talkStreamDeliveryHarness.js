@@ -67,6 +67,8 @@ class FakeWebSocket {
   }
 }
 globalThis.WebSocket = FakeWebSocket;
+// Heartbeat stats are reported through fetch; tests that check them replace this.
+global.fetch = async () => {};
 
 const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 const currentSocket = () => FakeWebSocket.instances.at(-1);
@@ -625,7 +627,31 @@ async function testHeartbeatReplaceGetsExtendedRetryBudgetUntilStable() {
   );
 }
 
+async function testStopReportsHeartbeatStats() {
+  const requests = [];
+  const previousFetch = global.fetch;
+  global.fetch = async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+  };
+  try {
+    const { signalling, stream } = await connectedSignalling();
+    await stream.streamMessageChunk('a', true);
+    mock.timers.tick(0);
+    mock.timers.tick(25);
+    answer();
+    signalling.stop();
+    await flushPromises();
+    const heartbeat = requests.filter((m) => m.name === 'client_heartbeat');
+    assert.equal(heartbeat.length, 1);
+    assert.equal(heartbeat[0].fields.answers, 1);
+    assert.equal(heartbeat[0].fields.p50Ms, 25);
+  } finally {
+    global.fetch = previousFetch;
+  }
+}
+
 const signallingTests = [
+  testStopReportsHeartbeatStats,
   testUnconfirmedChunkFailsStreamAndReplacesSocket,
   testAnsweredHeartbeatConfirmsChunks,
   testChunkNeedsAHeartbeatSentAfterIt,

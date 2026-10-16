@@ -11,6 +11,7 @@ function setup({ socketOpen = true } = {}) {
   const sent = [];
   const timeouts = [];
   const failed = [];
+  const roundTrips = [];
   const monitor = new HeartbeatMonitor({
     sendHeartbeat: (seq) => {
       if (socketOpen) {
@@ -20,8 +21,9 @@ function setup({ socketOpen = true } = {}) {
     },
     onAckTimeout: (failedChunks) => timeouts.push(failedChunks),
     onDeliveryFailed: (correlationId) => failed.push(correlationId),
+    onRoundTrip: (ms) => roundTrips.push(ms),
   });
-  return { monitor, sent, timeouts, failed };
+  return { monitor, sent, timeouts, failed, roundTrips };
 }
 
 function testBeatsCarryIncreasingSeqAndAnswersClearThem() {
@@ -170,7 +172,22 @@ function testDisabledMonitorStillBeatsButTracksNothing() {
   assert.equal(monitor.isSuspect(), false);
 }
 
+function testRoundTripIsMeasuredPerAnsweredHeartbeat() {
+  const { monitor, roundTrips } = setup();
+  monitor.beat();
+  mock.timers.tick(30);
+  monitor.beat();
+  mock.timers.tick(50);
+  monitor.onAck(0);
+  monitor.onAck(1);
+  // A repeated or unknown answer has nothing left to measure.
+  monitor.onAck(1);
+  monitor.onAck(9);
+  assert.deepEqual(roundTrips, [80, 50]);
+}
+
 const tests = [
+  testRoundTripIsMeasuredPerAnsweredHeartbeat,
   testBeatsCarryIncreasingSeqAndAnswersClearThem,
   testChunksShareOneProbe,
   testProbeWaitsOutCoalescingWindow,

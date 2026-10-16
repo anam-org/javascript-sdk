@@ -13,6 +13,8 @@ export interface HeartbeatMonitorCallbacks {
   onAckTimeout: (failedChunks: boolean) => void;
   // A correlationId's chunks could not be confirmed.
   onDeliveryFailed: (correlationId: string) => void;
+  // Time from writing a heartbeat to receiving its answer.
+  onRoundTrip?: (ms: number) => void;
 }
 
 interface PendingHeartbeat {
@@ -72,6 +74,10 @@ export class HeartbeatMonitor {
   }
 
   public onAck(seq: number): void {
+    const answered = this.pending.find((heartbeat) => heartbeat.seq === seq);
+    if (answered) {
+      this.callbacks.onRoundTrip?.(Date.now() - answered.sentAt);
+    }
     this.pending = this.pending.filter((heartbeat) => heartbeat.seq > seq);
     this.unconfirmed = this.unconfirmed.filter(
       (chunk) => chunk.confirmedBy > seq,

@@ -12,6 +12,7 @@ import {
 } from '../types';
 import { TalkMessageStreamPayload } from '../types/signalling/TalkMessageStreamPayload';
 import { HeartbeatMonitor } from './HeartbeatMonitor';
+import { HeartbeatStats } from '../lib/HeartbeatStats';
 import { HeartbeatPayload } from '../types/signalling/HeartbeatPayload';
 import { SessionReadyPayload } from '../types/signalling/SessionReadyPayload';
 import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
@@ -50,11 +51,13 @@ export class SignallingClient {
   private stableConnectionTimer: ReturnType<typeof setTimeout> | null = null;
   private apiGatewayConfig: ApiGatewayConfig | undefined;
   private connectionMilestones: ClientConnectionMilestoneRecorder | undefined;
+  private heartbeatStats = new HeartbeatStats();
   private heartbeat = new HeartbeatMonitor({
     sendHeartbeat: (seq) => this.sendHeartbeat(seq),
     onAckTimeout: (failedChunks) => this.onHeartbeatAckTimeout(failedChunks),
     onDeliveryFailed: (correlationId) =>
       this.onTalkStreamDeliveryFailed(correlationId),
+    onRoundTrip: (ms) => this.heartbeatStats.recordRoundTrip(ms),
   });
 
   constructor(
@@ -133,6 +136,7 @@ export class SignallingClient {
   public stop() {
     this.stopSignal = true;
     this.heartbeat.clear();
+    this.heartbeatStats.stop();
     this.closeSocket();
   }
 
@@ -293,6 +297,9 @@ export class SignallingClient {
     if (!suspect && this.sendIfOpen(chatMessage)) {
       this.heartbeat.trackChunk(payload.correlationId);
     } else {
+      if (suspect) {
+        this.heartbeatStats.recordRefusedChunk();
+      }
       this.onTalkStreamDeliveryFailed(payload.correlationId);
     }
   }
@@ -339,6 +346,7 @@ export class SignallingClient {
       // StreamingClient ends the episode: a socket that opens briefly and drops
       // again mid-restart must not fall back to the short default budget.
       this.scheduleStableConnectionReset(socket);
+      this.heartbeatStats.start();
       this.flushSendingBuffer();
       socket.onmessage = this.onMessage.bind(this);
       this.startSendingHeartBeats();
@@ -431,6 +439,7 @@ export class SignallingClient {
       this.iceRestartReconnectInProgress = false;
       this.heartbeatReconnectInProgress = false;
       this.permanentlyClosed = true;
+      this.heartbeatStats.stop();
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
         ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
@@ -516,11 +525,13 @@ export class SignallingClient {
     console.warn(
       'SignallingClient - heartbeat was not answered; replacing signalling socket',
     );
+    this.heartbeatStats.recordHeartbeatTimeout();
     this.heartbeatReconnectInProgress = true;
     this.replaceSocket();
   }
 
   private onTalkStreamDeliveryFailed(correlationId: string) {
+    this.heartbeatStats.recordFailedStream();
     this.internalEventEmitter.emit(
       InternalEvent.TALK_STREAM_DELIVERY_FAILED,
       correlationId,
