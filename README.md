@@ -124,7 +124,7 @@ for (const chunk of llmChunks) {
 
 ### Delivery failures
 
-Talk-stream chunks travel over the session's signalling connection. The SDK checks that connection with heartbeats the engine answers, and the answer to a heartbeat sent after a chunk confirms the chunk arrived. The SDK does not resend chunks. If a chunk can't be sent because the connection is down or has stopped answering, or it isn't confirmed within about 3 seconds, the stream stops accepting chunks and the client emits `MESSAGE_DELIVERY_FAILED` with the stream's correlation id. The SDK reconnects on its own; deciding what to do with the answer is up to you. One option is to fall back to `talk()` with the full text:
+Talk-stream chunks travel over the session's signalling connection. The SDK checks that connection with heartbeats the engine answers, and the answer to a heartbeat sent after a chunk confirms the chunk arrived. The SDK does not resend chunks. If a chunk can't be sent because the connection is down or has stopped answering, or it isn't confirmed within about 3 seconds, the stream stops accepting chunks, `stream.getState()` returns `TalkMessageStreamState.DELIVERY_FAILED`, and the client emits `MESSAGE_DELIVERY_FAILED` with the stream's correlation id. The SDK reconnects on its own; deciding what to do with the answer is up to you. One option is to fall back to `talk()` with the full text:
 
 ```typescript
 import { AnamEvent } from '@anam-ai/js-sdk';
