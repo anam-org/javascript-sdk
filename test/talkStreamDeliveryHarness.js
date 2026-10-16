@@ -35,6 +35,8 @@ class FakeWebSocket {
     this.sent = [];
     // A half-open socket: writes succeed but never arrive.
     this.swallow = false;
+    // Some WebSocket implementations throw from send() while OPEN.
+    this.throwOnSend = false;
     this.onopen = null;
     this.onclose = null;
     this.onerror = null;
@@ -43,6 +45,9 @@ class FakeWebSocket {
   }
 
   send(data) {
+    if (this.throwOnSend) {
+      throw new Error('send failed');
+    }
     if (!this.swallow) {
       this.sent.push(JSON.parse(data));
     }
@@ -533,6 +538,23 @@ async function testOverdueHeartbeatFailsChunkWithoutWritingIt() {
   );
 }
 
+async function testThrowingSendFailsChunk() {
+  const { stream, log } = await connectedSignalling();
+  currentSocket().throwOnSend = true;
+  await stream.streamMessageChunk('a', false);
+  assert.deepEqual(log, [['failed', 'corr-1']]);
+  assert.equal(stream.getState(), TalkMessageStreamState.DELIVERY_FAILED);
+}
+
+async function testThrowingHeartbeatFailsWaitingChunks() {
+  const { stream, log } = await connectedSignalling();
+  await stream.streamMessageChunk('a', false);
+  // The chunk is written, but the heartbeat that would confirm it is not.
+  currentSocket().throwOnSend = true;
+  mock.timers.tick(0);
+  assert.deepEqual(log, [['failed', 'corr-1']]);
+}
+
 async function testRefusedChunkThenTimeoutFailsStreamOnce() {
   const { stream, log } = await connectedSignalling();
   sessionReady({ sendsHeartbeatAcks: true });
@@ -881,6 +903,8 @@ const signallingTests = [
   testSocketCloseFailsUnconfirmedChunksAtOnce,
   testOverdueHeartbeatFailsChunkWithoutWritingIt,
   testRefusedChunkThenTimeoutFailsStreamOnce,
+  testThrowingSendFailsChunk,
+  testThrowingHeartbeatFailsWaitingChunks,
   testOverdueHeartbeatDoesNotGuardBeforeSessionReady,
   testIdleUnansweredHeartbeatReplacesSocket,
   testIdleAnsweredHeartbeatsKeepSocket,

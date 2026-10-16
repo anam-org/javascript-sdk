@@ -7,7 +7,7 @@ export const HEARTBEAT_SUSPECT_MS = 1500;
 export const HEARTBEAT_PROBE_COALESCE_MS = 100;
 
 export interface HeartbeatMonitorCallbacks {
-  // Writes a heartbeat; returns false when there is no open socket.
+  // Writes a heartbeat; returns false when it could not be written.
   sendHeartbeat: (seq: number) => boolean;
   // A heartbeat went unanswered. Chunks waiting on it have already been failed.
   onAckTimeout: (failedChunks: boolean) => void;
@@ -56,7 +56,12 @@ export class HeartbeatMonitor {
 
   public beat(): void {
     const seq = this.nextSeq++;
-    if (!this.callbacks.sendHeartbeat(seq) || !this.enabled) {
+    if (!this.callbacks.sendHeartbeat(seq)) {
+      // Chunks waiting on this heartbeat can no longer be confirmed.
+      this.failUnconfirmed();
+      return;
+    }
+    if (!this.enabled) {
       return;
     }
     const now = Date.now();

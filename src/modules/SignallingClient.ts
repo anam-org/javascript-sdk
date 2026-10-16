@@ -265,8 +265,8 @@ export class SignallingClient {
     }
   }
 
-  // Returns false only when there is no open socket to write to. OPEN is the
-  // browser's readyState, not proof the engine is reachable: a half-open socket
+  // Returns false when there is no open socket to write to, or the write throws.
+  // OPEN is the browser's readyState, not proof the engine is reachable: a half-open socket
   // reports OPEN and accepts writes that never arrive. That is why talk-stream
   // chunks are also tracked until a heartbeat answer confirms them.
   private sendIfOpen(message: SignalMessage): boolean {
@@ -280,6 +280,7 @@ export class SignallingClient {
         'SignallingClient - sendIfOpen: error sending message',
         error,
       );
+      return false;
     }
     return true;
   }

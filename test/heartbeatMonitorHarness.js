@@ -144,6 +144,16 @@ function testUnsentHeartbeatIsNotAwaited() {
   assert.equal(monitor.isSuspect(), false);
 }
 
+function testUnsentProbeFailsWaitingChunks() {
+  const { monitor, timeouts, failed } = setup({ socketOpen: false });
+  monitor.trackChunk('a');
+  mock.timers.tick(0);
+  assert.deepEqual(failed, ['a']);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS * 2);
+  assert.deepEqual(failed, ['a']);
+  assert.deepEqual(timeouts, []);
+}
+
 function testResetFailsChunksAndForgetsHeartbeats() {
   const { monitor, timeouts, failed } = setup();
   monitor.beat();
@@ -212,6 +222,7 @@ const tests = [
   testDeadlineFollowsOldestUnansweredHeartbeat,
   testSuspectOnceAHeartbeatIsOverdue,
   testUnsentHeartbeatIsNotAwaited,
+  testUnsentProbeFailsWaitingChunks,
   testResetFailsChunksAndForgetsHeartbeats,
   testDropAndClearAreSilent,
   testDisabledMonitorStillBeatsButTracksNothing,
