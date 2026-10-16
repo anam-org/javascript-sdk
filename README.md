@@ -152,7 +152,7 @@ if (failed) await anamClient.talk(answer);
 
 A failure means the engine did not confirm the chunks, not that it never received them. Some of the answer may already have been spoken, and `talk()` repeats it. Once the client has received `TALK_STREAM_INTERRUPTED` for a stream, it does not emit `MESSAGE_DELIVERY_FAILED` for it. An interruption sent while the connection was down can be missed, though, so the fallback can still repeat an answer the user cut off.
 
-Confirming chunks needs an engine that answers heartbeats. Engines that do say so when the session becomes ready. On an older engine, the SDK stops tracking chunks once the session is ready, sends them as before, and never emits `MESSAGE_DELIVERY_FAILED`.
+Confirming chunks needs an engine that answers heartbeats. Engines that do say so when the session becomes ready. On an older engine, the SDK stops tracking chunks once the session is ready and sends them as before. It emits `MESSAGE_DELIVERY_FAILED` only for chunks sent after the connection has closed for good.
 
 ### Speech across a tool call
 

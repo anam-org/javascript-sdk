@@ -637,6 +637,25 @@ async function testChunkAfterTerminalCloseFails() {
   assert.deepEqual(signalling.sendingBuffer, []);
 }
 
+async function testChunkAfterTerminalCloseFailsOnOlderEngine() {
+  const { signalling, stream, log } = await connectedSignalling({
+    maxWsReconnectionAttempts: 1,
+  });
+  sessionReady({});
+  currentSocket().drop();
+  await flushPromises();
+  mock.timers.tick(100);
+  currentSocket().drop();
+  await flushPromises();
+  await stream.streamMessageChunk('late', false);
+  assert.deepEqual(
+    log.map(([kind]) => kind),
+    ['closed', 'failed'],
+  );
+  assert.equal(stream.getState(), TalkMessageStreamState.DELIVERY_FAILED);
+  assert.deepEqual(signalling.sendingBuffer, []);
+}
+
 async function testThrowingFailureListenerDoesNotBlockConnectionClosed() {
   const { signalling, stream, log, publicEmitter } = await connectedSignalling({
     maxWsReconnectionAttempts: 1,
@@ -758,6 +777,7 @@ const signallingTests = [
   testIceRestartReconnectFailsUnconfirmedChunks,
   testChunkAfterStopIsSilent,
   testChunkAfterTerminalCloseFails,
+  testChunkAfterTerminalCloseFailsOnOlderEngine,
   testThrowingFailureListenerDoesNotBlockConnectionClosed,
   testHeartbeatReplaceGetsExtendedRetryBudgetUntilStable,
 ];

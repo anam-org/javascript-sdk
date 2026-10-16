@@ -287,12 +287,15 @@ export class SignallingClient {
     if (this.stopSignal) {
       return;
     }
+    // No socket opens after a terminal close, so the chunk can never be sent.
+    if (this.permanentlyClosed) {
+      this.onTalkStreamDeliveryFailed(payload.correlationId);
+      return;
+    }
     // An engine that never answers heartbeats would fail every tracked chunk, so
-    // chunks go out as before. No socket flushes sendingBuffer after a terminal close.
+    // chunks go out as before.
     if (this.engineSendsHeartbeatAcks === false) {
-      if (!this.permanentlyClosed) {
-        this.sendSignalMessage(chatMessage);
-      }
+      this.sendSignalMessage(chatMessage);
       return;
     }
     // Never buffered or resent. A chunk fails its stream at once when there is no
