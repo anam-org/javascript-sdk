@@ -88,10 +88,11 @@ export class TalkMessageStream {
         ? { utteranceId: this.lastUtteranceId }
         : {}),
     };
-    await this.signallingClient.sendTalkMessage(payload);
+    // Set before sending, so a failure reported during the send is not overwritten.
     // ENDED is not final: the final chunk can still fail to deliver, and the turn
     // can still be interrupted while it plays.
     this.state = TalkMessageStreamState.ENDED;
+    await this.signallingClient.sendTalkMessage(payload);
   }
 
   /**

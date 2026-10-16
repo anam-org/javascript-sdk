@@ -365,6 +365,18 @@ async function testChunkWhileReconnectingFailsImmediately() {
   assert.deepEqual(signalling.sendingBuffer, []);
 }
 
+async function testEndMessageKeepsImmediateFailure() {
+  const { stream, log } = await connectedSignalling();
+  await sendChunk(stream, 'a');
+  answer();
+  currentSocket().drop();
+  await flushPromises();
+  // The terminator fails during the send; ENDED must not overwrite that.
+  await stream.endMessage();
+  assert.deepEqual(log, [['failed', 'corr-1']]);
+  assert.equal(stream.getState(), TalkMessageStreamState.DELIVERY_FAILED);
+}
+
 async function testSocketCloseFailsUnconfirmedChunksAtOnce() {
   const { stream, log } = await connectedSignalling();
   await sendChunk(stream, 'sent');
@@ -661,6 +673,7 @@ const signallingTests = [
   testChunkNeedsAHeartbeatSentAfterIt,
   testOldAnswerOnNewSocketConfirmsNothing,
   testChunkWhileReconnectingFailsImmediately,
+  testEndMessageKeepsImmediateFailure,
   testSocketCloseFailsUnconfirmedChunksAtOnce,
   testOverdueHeartbeatFailsChunkWithoutWritingIt,
   testOverdueHeartbeatDoesNotGuardBeforeSessionReady,
