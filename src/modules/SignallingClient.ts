@@ -376,6 +376,10 @@ export class SignallingClient {
       this.internalEventEmitter.emit(InternalEvent.WEB_SOCKET_OPEN);
     } catch (e) {
       console.error('SignallingClient - onOpen: error in onOpen', e);
+      // Closed before any failure is reported, so a listener cannot write a new
+      // chunk to this socket.
+      this.permanentlyClosed = true;
+      this.closeSocket();
       this.heartbeat.reset();
       this.failBufferedTalkChunks();
       this.heartbeatStats.stop();
@@ -383,7 +387,6 @@ export class SignallingClient {
         AnamEvent.CONNECTION_CLOSED,
         ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
       );
-      this.permanentlyClosed = true;
     }
   }
 

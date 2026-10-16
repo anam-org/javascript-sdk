@@ -869,27 +869,51 @@ async function testStopReportsHeartbeatStats() {
   }
 }
 
-async function testFailedOpenStopsHeartbeatStats() {
+async function testFailedOpenClosesBeforeReporting() {
   FakeWebSocket.instances = [];
+  const publicEmitter = new PublicEventEmitter();
   const internalEmitter = new InternalEventEmitter();
   internalEmitter.addListener(InternalEvent.WEB_SOCKET_OPEN, () => {
     throw new Error('listener bug');
   });
   const signalling = new SignallingClient(
     'session-1',
-    { url: { baseUrl: 'engine.test' } },
-    new PublicEventEmitter(),
+    { url: { baseUrl: 'engine.test' }, heartbeatIntervalSeconds: 600 },
+    publicEmitter,
     internalEmitter,
   );
+  const registry = new TalkMessageStreamRegistry(internalEmitter);
+  const stream = new TalkMessageStream('corr-1', signalling);
+  const retry = new TalkMessageStream('corr-2', signalling);
+  registry.register(stream);
+  registry.register(retry);
+  const failed = [];
+  publicEmitter.addListener(AnamEvent.MESSAGE_DELIVERY_FAILED, (failure) => {
+    failed.push(failure.correlationId);
+    // A fallback that streams again must not write to the failed socket.
+    if (failure.correlationId === 'corr-1') {
+      void retry.streamMessageChunk('retry', true);
+    }
+  });
   signalling.connect();
-  currentSocket().open();
+  await stream.streamMessageChunk('early', false);
+  const socket = currentSocket();
+  socket.open();
   await flushPromises();
   assert.equal(signalling.isPermanentlyClosed(), true);
+  assert.deepEqual(failed, ['corr-1', 'corr-2']);
+  assert.deepEqual(
+    talkSent(socket).map((p) => p.content),
+    ['early'],
+  );
+  assert.equal(socket.readyState, FakeWebSocket.CLOSED);
   assert.equal(signalling.heartbeatStats.timer, null);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS * 2);
+  assert.equal(FakeWebSocket.instances.length, 1);
 }
 
 const signallingTests = [
-  testFailedOpenStopsHeartbeatStats,
+  testFailedOpenClosesBeforeReporting,
   testStopReportsHeartbeatStats,
   testUnconfirmedChunkFailsStreamAndReplacesSocket,
   testAnsweredHeartbeatConfirmsChunks,
