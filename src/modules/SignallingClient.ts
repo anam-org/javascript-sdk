@@ -43,7 +43,7 @@ export class SignallingClient {
   // ICE-restart reconnect until the new socket proves stable.
   private talkStreamReconnectInProgress = false;
   // Assumed until sessionready says otherwise. That can arrive after the first
-  // chunks, and on an engine that acks, those chunks need holding too.
+  // chunks, and on an engine that acks, those chunks need tracking too.
   private engineSendsTalkStreamAcks = true;
   private heartBeatIntervalRef: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -197,6 +197,8 @@ export class SignallingClient {
       this.socket = null;
     }
     this.clearHeartbeatInterval();
+    // Acks for chunks written to the old socket will not arrive on the new one.
+    this.talkStreamDelivery.failAll();
     this.connect();
   }
 
@@ -248,7 +250,7 @@ export class SignallingClient {
   // Returns false only when there is no open socket to write to. OPEN is the
   // browser's readyState, not proof the engine is reachable: a half-open socket
   // reports OPEN and accepts writes that never arrive. That is why talk-stream
-  // chunks are also held until the engine acks them.
+  // chunks are also tracked until the engine acks them.
   private sendIfOpen(message: SignalMessage): boolean {
     if (this.socket?.readyState !== WebSocket.OPEN) {
       return false;
@@ -270,18 +272,25 @@ export class SignallingClient {
       sessionId: this.sessionId,
       payload: payload,
     };
-    // Once signalling has stopped nothing can be delivered, and no socket will
-    // flush sendingBuffer again, so the chunk is dropped.
-    if (this.isPermanentlyClosed()) {
+    // The session was stopped on purpose, so there is nothing to report.
+    if (this.stopSignal) {
       return;
     }
-    // An engine that never acks would fail every held chunk.
+    // An engine that never acks would fail every tracked chunk, so chunks go out
+    // as before. No socket flushes sendingBuffer after a terminal close.
     if (!this.engineSendsTalkStreamAcks) {
-      this.sendSignalMessage(chatMessage);
+      if (!this.permanentlyClosed) {
+        this.sendSignalMessage(chatMessage);
+      }
       return;
     }
-    // Held until acked, and replayed on the next socket instead of via sendingBuffer.
-    this.talkStreamDelivery.track(chatMessage, this.sendIfOpen(chatMessage));
+    // Never buffered or resent: a chunk that cannot be written now fails its
+    // stream, and one that is written is tracked until the engine acks it.
+    if (this.sendIfOpen(chatMessage)) {
+      this.talkStreamDelivery.track(payload);
+    } else {
+      this.onTalkStreamDeliveryFailed(payload.correlationId);
+    }
   }
 
   public sendAgentAudioInput(payload: AgentAudioInputPayload): void {
@@ -326,7 +335,6 @@ export class SignallingClient {
       // StreamingClient ends the episode: a socket that opens briefly and drops
       // again mid-restart must not fall back to the short default budget.
       this.scheduleStableConnectionReset(socket);
-      this.replayUnackedTalkMessages();
       this.flushSendingBuffer();
       socket.onmessage = this.onMessage.bind(this);
       this.startSendingHeartBeats();
@@ -390,6 +398,8 @@ export class SignallingClient {
     if (this.stopSignal) {
       return;
     }
+    // Acks for chunks written to this socket will not arrive on the next one.
+    this.talkStreamDelivery.failAll();
     const maxReconnectionAttempts = this.getMaxReconnectionAttempts(event);
     if (
       this.shouldRetryCloseEvent(event) &&
@@ -417,7 +427,6 @@ export class SignallingClient {
       this.iceRestartReconnectInProgress = false;
       this.talkStreamReconnectInProgress = false;
       this.permanentlyClosed = true;
-      this.talkStreamDelivery.failAll();
       this.publicEventEmitter.emit(
         AnamEvent.CONNECTION_CLOSED,
         ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
@@ -480,18 +489,9 @@ export class SignallingClient {
     this.sendingBuffer = newBuffer;
   }
 
-  private replayUnackedTalkMessages() {
-    const pending = this.talkStreamDelivery.pending();
-    if (pending.length === 0) {
-      return;
-    }
-    pending.forEach((message) => this.sendIfOpen(message));
-    this.talkStreamDelivery.markAllSent();
-  }
-
   private onTalkStreamAckTimeout() {
-    // A socket that is already reconnecting replays on open; only an OPEN socket
-    // that swallowed the chunks needs replacing.
+    // Only an OPEN socket that swallowed the chunks needs replacing; one that is
+    // not OPEN is already closing, and its close opens the next socket.
     if (this.isPermanentlyClosed() || !this.isConnected()) {
       return;
     }
@@ -510,13 +510,13 @@ export class SignallingClient {
     // This can run on the path that emits CONNECTION_CLOSED, so a throwing
     // listener must not stop the session from reporting that it closed.
     try {
-      this.publicEventEmitter.emit(
-        AnamEvent.TALK_STREAM_DELIVERY_FAILED,
+      this.publicEventEmitter.emit(AnamEvent.MESSAGE_DELIVERY_FAILED, {
+        messageType: 'talkStream',
         correlationId,
-      );
+      });
     } catch (error) {
       console.error(
-        'SignallingClient - TALK_STREAM_DELIVERY_FAILED listener threw',
+        'SignallingClient - MESSAGE_DELIVERY_FAILED listener threw',
         error,
       );
     }
@@ -528,7 +528,7 @@ export class SignallingClient {
       payload !== null &&
       (payload as SessionReadyPayload).sendsTalkStreamAcks === true;
     if (!this.engineSendsTalkStreamAcks) {
-      // These chunks were sent but will never be acked; holding them would only
+      // These chunks were sent but will never be acked; tracking them would only
       // replace a healthy socket and report false delivery failures.
       this.talkStreamDelivery.clear();
     }

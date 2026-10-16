@@ -124,7 +124,7 @@ for (const chunk of llmChunks) {
 
 ### Delivery failures
 
-Talk-stream chunks travel over the session's signalling connection. If that connection drops, the SDK holds unacknowledged chunks, reconnects, and resends them. The engine discards any chunk it already received, so nothing is spoken twice. If the chunks still can't be delivered within about 10 seconds, the SDK drops them, the stream stops accepting chunks, and the client emits `TALK_STREAM_DELIVERY_FAILED` with the stream's correlation id. Fall back to `talk()` with the full text:
+Talk-stream chunks travel over the session's signalling connection, and the engine acknowledges each one. The SDK does not resend chunks. If a chunk can't be sent because the connection is down, or the engine doesn't acknowledge it within about 3 seconds, the stream stops accepting chunks and the client emits `MESSAGE_DELIVERY_FAILED` with the stream's correlation id. The SDK reconnects on its own; deciding what to do with the answer is up to you. One option is to fall back to `talk()` with the full text:
 
 ```typescript
 import { AnamEvent } from '@anam-ai/js-sdk';
@@ -134,8 +134,8 @@ let answer = '';
 let complete = false;
 let failed = false;
 
-anamClient.addListener(AnamEvent.TALK_STREAM_DELIVERY_FAILED, (correlationId) => {
-  if (correlationId !== stream.getCorrelationId()) return;
+anamClient.addListener(AnamEvent.MESSAGE_DELIVERY_FAILED, (failure) => {
+  if (failure.correlationId !== stream.getCorrelationId()) return;
   failed = true;
   // If the failure arrives after the answer is complete, speak it now.
   if (complete) anamClient.talk(answer).catch(console.error);
@@ -150,9 +150,9 @@ complete = true;
 if (failed) await anamClient.talk(answer);
 ```
 
-If part of the answer had already been spoken, `talk()` repeats it. Once the client has received `TALK_STREAM_INTERRUPTED` for a stream, it does not emit `TALK_STREAM_DELIVERY_FAILED` for it. An interruption sent while the connection was down can be missed, though, so the fallback can still repeat an answer the user cut off.
+A failure means the engine did not confirm the chunks, not that it never received them. Some of the answer may already have been spoken, and `talk()` repeats it. Once the client has received `TALK_STREAM_INTERRUPTED` for a stream, it does not emit `MESSAGE_DELIVERY_FAILED` for it. An interruption sent while the connection was down can be missed, though, so the fallback can still repeat an answer the user cut off.
 
-Holding and resending needs an engine that acknowledges talk-stream chunks. Engines that do say so when the session becomes ready. On an older engine, the SDK stops holding chunks once the session is ready, sends them as before, and never emits `TALK_STREAM_DELIVERY_FAILED`.
+Acknowledgements need an engine that sends them. Engines that do say so when the session becomes ready. On an older engine, the SDK stops tracking chunks once the session is ready, sends them as before, and never emits `MESSAGE_DELIVERY_FAILED`.
 
 ### Speech across a tool call
 
