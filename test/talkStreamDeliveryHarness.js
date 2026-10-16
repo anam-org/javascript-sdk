@@ -609,6 +609,29 @@ async function testIceRestartReconnectFailsUnconfirmedChunks() {
   assert.deepEqual(talkSent(currentSocket()), []);
 }
 
+async function testStopFromFailureListenerPreventsReconnect() {
+  // On close.
+  const closed = await connectedSignalling();
+  closed.publicEmitter.addListener(AnamEvent.MESSAGE_DELIVERY_FAILED, () =>
+    closed.signalling.stop(),
+  );
+  await closed.stream.streamMessageChunk('pending', false);
+  currentSocket().drop();
+  await flushPromises();
+  mock.timers.tick(1000);
+  assert.equal(FakeWebSocket.instances.length, 1);
+
+  // On replacing a socket.
+  const replaced = await connectedSignalling();
+  replaced.publicEmitter.addListener(AnamEvent.MESSAGE_DELIVERY_FAILED, () =>
+    replaced.signalling.stop(),
+  );
+  await replaced.stream.streamMessageChunk('pending', false);
+  replaced.signalling.reconnectForIceRestart();
+  assert.deepEqual(replaced.log, [['failed', 'corr-1']]);
+  assert.equal(FakeWebSocket.instances.length, 1);
+}
+
 async function testChunkAfterStopIsSilent() {
   const { signalling, stream, log } = await connectedSignalling();
   signalling.stop();
@@ -775,6 +798,7 @@ const signallingTests = [
   testStopIsSilent,
   testTerminalCloseFailsPendingBeforeConnectionClosed,
   testIceRestartReconnectFailsUnconfirmedChunks,
+  testStopFromFailureListenerPreventsReconnect,
   testChunkAfterStopIsSilent,
   testChunkAfterTerminalCloseFails,
   testChunkAfterTerminalCloseFailsOnOlderEngine,

@@ -204,6 +204,10 @@ export class SignallingClient {
     this.clearHeartbeatInterval();
     // Chunks written to the old socket can no longer be confirmed.
     this.heartbeat.reset();
+    // A MESSAGE_DELIVERY_FAILED listener may have stopped the session.
+    if (this.stopSignal) {
+      return;
+    }
     this.connect();
   }
 
@@ -422,6 +426,10 @@ export class SignallingClient {
     }
     // Chunks written to this socket can no longer be confirmed.
     this.heartbeat.reset();
+    // A MESSAGE_DELIVERY_FAILED listener may have stopped the session.
+    if (this.stopSignal) {
+      return;
+    }
     const maxReconnectionAttempts = this.getMaxReconnectionAttempts(event);
     if (
       this.shouldRetryCloseEvent(event) &&
