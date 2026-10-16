@@ -161,8 +161,9 @@ async function speak(llmChunks: AsyncIterable<{ text: string; isLast: boolean }>
   latest = answer;
   for await (const chunk of llmChunks) {
     answer.text += chunk.text;
-    // A failed stream rejects further chunks, so keep collecting the answer instead.
-    if (!answer.failed) await stream.streamMessageChunk(chunk.text, chunk.isLast);
+    // A failed or interrupted stream rejects further chunks, so keep collecting the
+    // answer instead. This also covers a stale answer, whose failure the listener ignores.
+    if (stream.isActive()) await stream.streamMessageChunk(chunk.text, chunk.isLast);
   }
   answer.complete = true;
   if (answer.failed && latest === answer) await anamClient.talk(answer.text);
