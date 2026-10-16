@@ -174,7 +174,11 @@ A failure means the engine did not confirm the chunks, not that it never receive
 
 #### Older engines
 
-Confirming chunks needs an engine that answers heartbeats. Engines that do say so when the session becomes ready. On an older engine, the SDK stops tracking chunks once the session is ready and sends them as before. It emits `MESSAGE_DELIVERY_FAILED` only for chunks sent after the connection has closed for good.
+Confirming chunks needs an engine that answers heartbeats. Engines that do say so when the session becomes ready, with `sendsHeartbeatAcks: true` in the `sessionready` message. On an older engine, the SDK stops tracking chunks once the session is ready and sends them as before, queuing them while the connection reconnects. It still emits `MESSAGE_DELIVERY_FAILED` in three cases:
+
+- A chunk is sent after the connection has closed for good.
+- A chunk is queued before the connection first opens, and it never opens.
+- A chunk is sent before the session is ready, and the session takes more than about 3 seconds to become ready. Until then the SDK can't tell an older engine from one that has stopped answering, so it fails the stream and reconnects. Waiting for `AnamEvent.SESSION_READY` before the first chunk avoids this.
 
 ### Speech across a tool call
 
