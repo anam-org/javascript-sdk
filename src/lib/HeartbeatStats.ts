@@ -71,7 +71,7 @@ export class HeartbeatStats {
     this.roundTripsMs.push(ms);
   }
 
-  // A heartbeat went unanswered and the socket was replaced.
+  // A heartbeat went unanswered, so the socket was replaced or signalling closed.
   public recordHeartbeatTimeout(): void {
     this.heartbeatTimeouts++;
   }
