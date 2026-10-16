@@ -170,7 +170,7 @@ async function speak(llmChunks: AsyncIterable<{ text: string; isLast: boolean }>
 }
 ```
 
-A failure means the engine did not confirm the chunks, not that it never received them. Some of the answer may already have been spoken, and `talk()` repeats it. Once the client has received `TALK_STREAM_INTERRUPTED` for a stream, it does not emit `MESSAGE_DELIVERY_FAILED` for it. An interruption sent while the connection was down can be missed, though, so the fallback can still repeat an answer the user cut off.
+A failure means the engine did not confirm the chunks, not that it never received them. Some of the answer may already have been spoken, and `talk()` repeats it. Once the client has received `TALK_STREAM_INTERRUPTED` for a stream, it does not emit `MESSAGE_DELIVERY_FAILED` for it. An interruption sent while the connection was down can be missed, though, so the fallback can still repeat an answer the user cut off. The reverse can also happen: the engine can deliver that interruption after the client reconnects, so `TALK_STREAM_INTERRUPTED` can arrive for a stream that has already failed, after your fallback has started.
 
 Ending the session is not a delivery failure. After `stopStreaming()`, or when the client emits `CONNECTION_CLOSED` because the server ended the session or the media connection failed, unconfirmed chunks are lost without `MESSAGE_DELIVERY_FAILED`, and chunks sent afterwards are dropped. Treat `CONNECTION_CLOSED` as the end of every open stream. The one exception is the signalling connection closing for good on its own: unconfirmed chunks then fail before `CONNECTION_CLOSED`.
 
