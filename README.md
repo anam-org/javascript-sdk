@@ -129,25 +129,42 @@ Talk-stream chunks travel over the session's signalling connection. On engines t
 ```typescript
 import { AnamEvent } from '@anam-ai/js-sdk';
 
-const stream = anamClient.createTalkMessageStream();
-let answer = '';
-let complete = false;
-let failed = false;
+interface Answer {
+  correlationId: string;
+  text: string;
+  complete: boolean;
+  failed: boolean;
+}
 
+// Only the latest answer falls back: once a new one starts, the old one is stale.
+let latest: Answer | null = null;
+
+// Register once per client, not once per stream.
 anamClient.addListener(AnamEvent.MESSAGE_DELIVERY_FAILED, (failure) => {
-  if (failure.correlationId !== stream.getCorrelationId()) return;
-  failed = true;
+  const answer = latest;
+  if (!answer || failure.correlationId !== answer.correlationId) return;
+  answer.failed = true;
   // If the failure arrives after the answer is complete, speak it now.
-  if (complete) anamClient.talk(answer).catch(console.error);
+  if (answer.complete) anamClient.talk(answer.text).catch(console.error);
 });
 
-for (const chunk of llmChunks) {
-  answer += chunk.text;
-  // A failed stream rejects further chunks, so keep collecting the answer instead.
-  if (!failed) await stream.streamMessageChunk(chunk.text, chunk.isLast);
+async function speak(llmChunks: AsyncIterable<{ text: string; isLast: boolean }>) {
+  const stream = anamClient.createTalkMessageStream();
+  const answer: Answer = {
+    correlationId: stream.getCorrelationId(),
+    text: '',
+    complete: false,
+    failed: false,
+  };
+  latest = answer;
+  for await (const chunk of llmChunks) {
+    answer.text += chunk.text;
+    // A failed stream rejects further chunks, so keep collecting the answer instead.
+    if (!answer.failed) await stream.streamMessageChunk(chunk.text, chunk.isLast);
+  }
+  answer.complete = true;
+  if (answer.failed && latest === answer) await anamClient.talk(answer.text);
 }
-complete = true;
-if (failed) await anamClient.talk(answer);
 ```
 
 A failure means the engine did not confirm the chunks, not that it never received them. Some of the answer may already have been spoken, and `talk()` repeats it. Once the client has received `TALK_STREAM_INTERRUPTED` for a stream, it does not emit `MESSAGE_DELIVERY_FAILED` for it. An interruption sent while the connection was down can be missed, though, so the fallback can still repeat an answer the user cut off.
