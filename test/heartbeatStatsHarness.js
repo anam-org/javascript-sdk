@@ -5,11 +5,14 @@ const {
   HEARTBEAT_STATS_FLUSH_INTERVAL_MS,
 } = require('../dist/main/lib/HeartbeatStats');
 
-function setup() {
+function setup({ sampled = true } = {}) {
   const sent = [];
-  const stats = new HeartbeatStats(async (metrics) => {
-    sent.push(...metrics);
-  });
+  const stats = new HeartbeatStats(
+    async (metrics) => {
+      sent.push(...metrics);
+    },
+    () => (sampled ? 0 : 0.99),
+  );
   return { stats, sent };
 }
 
@@ -34,6 +37,7 @@ function testFlushReportsPercentilesAndCounts() {
     heartbeatTimeouts: 1,
     refusedChunks: 1,
     failedStreams: 2,
+    sampled: 1,
     p50Ms: 510,
     p90Ms: 920,
     p99Ms: 1500,
@@ -62,6 +66,7 @@ function testCountsWithoutAnswersOmitRoundTripFields() {
     heartbeatTimeouts: 1,
     refusedChunks: 0,
     failedStreams: 0,
+    sampled: 1,
   });
 }
 
@@ -81,13 +86,69 @@ function testFlushesPeriodicallyAndOnStop() {
   assert.equal(sent.length, 2);
 }
 
-function testFailingSendDoesNotThrow() {
-  const stats = new HeartbeatStats(() => {
-    throw new Error('send failed');
-  });
+function testUnsampledSessionDropsHealthyWindows() {
+  const { stats, sent } = setup({ sampled: false });
+  stats.recordRoundTrip(40);
+  stats.recordRoundTrip(1000);
+  stats.flush();
+  assert.equal(sent.length, 0);
+  // The dropped window is reset, not carried into the next one.
+  stats.recordRoundTrip(1001);
+  stats.flush();
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].fields.answers, 1);
+  assert.equal(sent[0].fields.over1s, 1);
+  assert.equal(sent[0].fields.sampled, 0);
+}
+
+function testUnsampledSessionReportsEveryKindOfProblem() {
+  for (const record of [
+    (stats) => stats.recordHeartbeatTimeout(),
+    (stats) => stats.recordRefusedChunk(),
+    (stats) => stats.recordFailedStream(),
+  ]) {
+    const { stats, sent } = setup({ sampled: false });
+    stats.recordRoundTrip(40);
+    record(stats);
+    stats.flush();
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].fields.sampled, 0);
+  }
+}
+
+function testSamplingIsDecidedOncePerSession() {
+  let calls = 0;
+  const sent = [];
+  const stats = new HeartbeatStats(
+    async (metrics) => {
+      sent.push(...metrics);
+    },
+    () => {
+      calls++;
+      return 0;
+    },
+  );
   stats.recordRoundTrip(10);
   stats.flush();
-  const rejecting = new HeartbeatStats(() => Promise.reject(new Error('no')));
+  stats.recordRoundTrip(20);
+  stats.flush();
+  assert.equal(calls, 1);
+  assert.equal(sent.length, 2);
+}
+
+function testFailingSendDoesNotThrow() {
+  const stats = new HeartbeatStats(
+    () => {
+      throw new Error('send failed');
+    },
+    () => 0,
+  );
+  stats.recordRoundTrip(10);
+  stats.flush();
+  const rejecting = new HeartbeatStats(
+    () => Promise.reject(new Error('no')),
+    () => 0,
+  );
   rejecting.recordRoundTrip(10);
   rejecting.flush();
 }
@@ -97,6 +158,9 @@ const tests = [
   testFlushResetsAndSkipsEmptyPeriods,
   testCountsWithoutAnswersOmitRoundTripFields,
   testFlushesPeriodicallyAndOnStop,
+  testUnsampledSessionDropsHealthyWindows,
+  testUnsampledSessionReportsEveryKindOfProblem,
+  testSamplingIsDecidedOncePerSession,
   testFailingSendDoesNotThrow,
 ];
 

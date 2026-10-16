@@ -630,9 +630,12 @@ async function testHeartbeatReplaceGetsExtendedRetryBudgetUntilStable() {
 async function testStopReportsHeartbeatStats() {
   const requests = [];
   const previousFetch = global.fetch;
+  const previousRandom = Math.random;
   global.fetch = async (_url, options) => {
     requests.push(JSON.parse(options.body));
   };
+  // Put this session in the sample, so a healthy window is reported.
+  Math.random = () => 0;
   try {
     const { signalling, stream } = await connectedSignalling();
     await stream.streamMessageChunk('a', true);
@@ -647,6 +650,7 @@ async function testStopReportsHeartbeatStats() {
     assert.equal(heartbeat[0].fields.p50Ms, 25);
   } finally {
     global.fetch = previousFetch;
+    Math.random = previousRandom;
   }
 }
 
