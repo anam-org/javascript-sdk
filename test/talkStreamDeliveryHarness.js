@@ -15,7 +15,7 @@ const { SignallingClient } = require('../dist/main/modules/SignallingClient');
 const {
   PublicEventEmitter,
 } = require('../dist/main/modules/PublicEventEmitter');
-const { AnamEvent } = require('../dist/main/types');
+const { AnamEvent, ConnectionClosedCode } = require('../dist/main/types');
 const {
   HEARTBEAT_ACK_TIMEOUT_MS,
   HEARTBEAT_SUSPECT_MS,
@@ -602,6 +602,53 @@ async function testIdleUnansweredHeartbeatReplacesSocket() {
   assert.deepEqual(log, []);
 }
 
+// Lets a socket that swallows everything time out and opens its replacement.
+async function timeOutSocket() {
+  currentSocket().swallow = true;
+  mock.timers.tick(1000);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS);
+  await reopen();
+}
+
+async function testUnansweredReplacementsAreCapped() {
+  const { signalling, log } = await connectedSignalling({
+    heartbeatIntervalSeconds: 1,
+  });
+  sessionReady({ sendsHeartbeatAcks: true });
+  for (let replacement = 0; replacement < 24; replacement += 1) {
+    await timeOutSocket();
+  }
+  assert.equal(FakeWebSocket.instances.length, 25);
+  assert.equal(signalling.isPermanentlyClosed(), false);
+  // The 25th socket opens but never answers either: the session ends.
+  currentSocket().swallow = true;
+  mock.timers.tick(1000);
+  mock.timers.tick(HEARTBEAT_ACK_TIMEOUT_MS);
+  assert.equal(signalling.isPermanentlyClosed(), true);
+  assert.equal(FakeWebSocket.instances.length, 25);
+  assert.equal(currentSocket().readyState, FakeWebSocket.CLOSED);
+  assert.deepEqual(log, [
+    ['closed', ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE],
+  ]);
+  mock.timers.tick(60_000);
+  assert.equal(FakeWebSocket.instances.length, 25);
+}
+
+async function testAnswerResetsReplacementCount() {
+  const { signalling } = await connectedSignalling({
+    heartbeatIntervalSeconds: 1,
+  });
+  sessionReady({ sendsHeartbeatAcks: true });
+  for (let replacement = 0; replacement < 24; replacement += 1) {
+    await timeOutSocket();
+  }
+  mock.timers.tick(1000);
+  answer();
+  await timeOutSocket();
+  assert.equal(signalling.isPermanentlyClosed(), false);
+  assert.equal(FakeWebSocket.instances.length, 26);
+}
+
 async function testIdleAnsweredHeartbeatsKeepSocket() {
   await connectedSignalling({ heartbeatIntervalSeconds: 1 });
   sessionReady({ sendsHeartbeatAcks: true });
@@ -941,6 +988,8 @@ const signallingTests = [
   testOverdueHeartbeatDoesNotGuardBeforeSessionReady,
   testIdleUnansweredHeartbeatReplacesSocket,
   testIdleAnsweredHeartbeatsKeepSocket,
+  testUnansweredReplacementsAreCapped,
+  testAnswerResetsReplacementCount,
   testIdleUnansweredHeartbeatBeforeSessionReadyIsIgnored,
   testNewStreamWorksAfterFailure,
   testInterruptionDropsTrackedChunksSilently,

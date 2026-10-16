@@ -24,6 +24,10 @@ const WEBSOCKET_STABLE_RECONNECTION_RESET_MS = 5000;
 // 3 attempts * (5s websocket-open wait + 3s restart watchdog) = 24s.
 // With 100ms linear backoff this keeps signalling non-terminal for ~30s.
 const ICE_RESTART_WS_RECONNECTION_ATTEMPTS = 24;
+// Sockets that open but never answer a heartbeat mean the engine side is broken,
+// not the network, so replacing them stops after this many in a row.
+const MAX_UNANSWERED_HEARTBEAT_REPLACEMENTS =
+  ICE_RESTART_WS_RECONNECTION_ATTEMPTS;
 const API_GATEWAY_BACKEND_CLOSE_REASON_PREFIX = 'Backend WebSocket';
 
 export class SignallingClient {
@@ -46,6 +50,9 @@ export class SignallingClient {
   // means a network switch, so the reconnect gets the same retry headroom as an
   // ICE-restart reconnect until the new socket proves stable.
   private heartbeatReconnectInProgress = false;
+  // Replacements since the last heartbeat answer. Opening a socket does not reset
+  // it: only an answer proves the new socket works.
+  private unansweredHeartbeatReplacements = 0;
   // Unknown until sessionready. Chunks sent before it are still tracked, since on an
   // engine that answers heartbeats they need confirming too.
   private engineSendsHeartbeatAcks: boolean | undefined = undefined;
@@ -60,7 +67,10 @@ export class SignallingClient {
     onAckTimeout: (failedChunks) => this.onHeartbeatAckTimeout(failedChunks),
     onDeliveryFailed: (correlationId) =>
       this.onTalkStreamDeliveryFailed(correlationId),
-    onRoundTrip: (ms) => this.heartbeatStats.recordRoundTrip(ms),
+    onRoundTrip: (ms) => {
+      this.unansweredHeartbeatReplacements = 0;
+      this.heartbeatStats.recordRoundTrip(ms);
+    },
   });
 
   constructor(
@@ -463,23 +473,29 @@ export class SignallingClient {
         this.connect();
       }, retryDelayMs);
     } else {
-      this.clearReconnectTimer();
-      this.clearHeartbeatInterval();
-      this.connectionMilestones?.publishFailure({
+      this.closePermanently({
         failureStage: 'websocket',
         closeCode: event?.code,
         closeReason: event?.reason,
       });
-      this.iceRestartReconnectInProgress = false;
-      this.heartbeatReconnectInProgress = false;
-      this.permanentlyClosed = true;
-      this.failBufferedTalkChunks();
-      this.heartbeatStats.stop();
-      this.publicEventEmitter.emit(
-        AnamEvent.CONNECTION_CLOSED,
-        ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
-      );
     }
+  }
+
+  private closePermanently(
+    failureTags: Record<string, string | number | undefined>,
+  ) {
+    this.clearReconnectTimer();
+    this.clearHeartbeatInterval();
+    this.connectionMilestones?.publishFailure(failureTags);
+    this.iceRestartReconnectInProgress = false;
+    this.heartbeatReconnectInProgress = false;
+    this.permanentlyClosed = true;
+    this.failBufferedTalkChunks();
+    this.heartbeatStats.stop();
+    this.publicEventEmitter.emit(
+      AnamEvent.CONNECTION_CLOSED,
+      ConnectionClosedCode.SIGNALLING_CLIENT_CONNECTION_FAILURE,
+    );
   }
 
   private getMaxReconnectionAttempts(event?: CloseEvent): number {
@@ -579,10 +595,22 @@ export class SignallingClient {
     if (this.isPermanentlyClosed() || !this.isConnected()) {
       return;
     }
+    this.heartbeatStats.recordHeartbeatTimeout();
+    if (
+      this.unansweredHeartbeatReplacements >=
+      MAX_UNANSWERED_HEARTBEAT_REPLACEMENTS
+    ) {
+      console.error(
+        'SignallingClient - heartbeats are still not answered after replacing the signalling socket; closing',
+      );
+      this.closeSocket();
+      this.closePermanently({ failureStage: 'websocket_heartbeat' });
+      return;
+    }
     console.warn(
       'SignallingClient - heartbeat was not answered; replacing signalling socket',
     );
-    this.heartbeatStats.recordHeartbeatTimeout();
+    this.unansweredHeartbeatReplacements += 1;
     this.heartbeatReconnectInProgress = true;
     this.replaceSocket();
   }
