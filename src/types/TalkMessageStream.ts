@@ -1,8 +1,5 @@
-import { InternalEvent, SignalMessage, SignalMessageAction } from '.';
 import { TalkMessageStreamState } from './TalkMessageStreamState';
 import { TalkMessageStreamPayload } from './signalling/TalkMessageStreamPayload';
-import { TalkStreamInterruptedSignalMessage } from './signalling/TalkStreamInterruptedSignalMessage';
-import { InternalEventEmitter } from '../modules/InternalEventEmitter';
 import { SignallingClient } from '../modules/SignallingClient';
 
 // Lowercase only: the engine round-trips the canonical form and replaces anything
@@ -21,6 +18,11 @@ const UUID_V4 =
  * utterance after the current one, so the stream can stay open while your application
  * runs a tool.
  *
+ * On engines that answer heartbeats, if a chunk cannot be sent, or the engine
+ * does not confirm it within about 3 seconds, the stream moves to DELIVERY_FAILED
+ * and the client emits AnamEvent.MESSAGE_DELIVERY_FAILED with this stream's
+ * correlationId. Chunks are not resent. See the README for older engines.
+ *
  * @example
  * ```typescript
  * // Streaming LLM output
@@ -38,45 +40,24 @@ const UUID_V4 =
  * ```
  */
 export class TalkMessageStream {
-  private internalEventEmitter: InternalEventEmitter;
   private state = TalkMessageStreamState.UNSTARTED;
   private correlationId: string;
   private signallingClient: SignallingClient;
   private lastUtteranceId?: string;
 
-  constructor(
-    correlationId: string,
-    internalEventEmitter: InternalEventEmitter,
-    signallingClient: SignallingClient,
-  ) {
+  constructor(correlationId: string, signallingClient: SignallingClient) {
     this.correlationId = correlationId;
-    this.internalEventEmitter = internalEventEmitter;
     this.signallingClient = signallingClient;
-
-    this.internalEventEmitter.addListener(
-      InternalEvent.SIGNAL_MESSAGE_RECEIVED,
-      this.onSignalMessage.bind(this),
-    );
   }
 
-  private onDeactivate() {
-    this.internalEventEmitter.removeListener(
-      InternalEvent.SIGNAL_MESSAGE_RECEIVED,
-      this.onSignalMessage.bind(this),
-    );
+  /** @internal Called by TalkMessageStreamRegistry. */
+  public markInterrupted(): void {
+    this.state = TalkMessageStreamState.INTERRUPTED;
   }
 
-  private async onSignalMessage(signalMessage: SignalMessage) {
-    if (
-      signalMessage.actionType === SignalMessageAction.TALK_STREAM_INTERRUPTED
-    ) {
-      const message =
-        signalMessage.payload as TalkStreamInterruptedSignalMessage;
-      if (message.correlationId === this.correlationId) {
-        this.state = TalkMessageStreamState.INTERRUPTED;
-        this.onDeactivate();
-      }
-    }
+  /** @internal Called by TalkMessageStreamRegistry. */
+  public markDeliveryFailed(): void {
+    this.state = TalkMessageStreamState.DELIVERY_FAILED;
   }
 
   /**
@@ -107,9 +88,11 @@ export class TalkMessageStream {
         ? { utteranceId: this.lastUtteranceId }
         : {}),
     };
-    await this.signallingClient.sendTalkMessage(payload);
+    // Set before sending, so a failure reported during the send is not overwritten.
+    // ENDED is not final: the final chunk can still fail to deliver, and the turn
+    // can still be interrupted while it plays.
     this.state = TalkMessageStreamState.ENDED;
-    this.onDeactivate();
+    await this.signallingClient.sendTalkMessage(payload);
   }
 
   /**
@@ -156,9 +139,6 @@ export class TalkMessageStream {
     this.state = endOfSpeech
       ? TalkMessageStreamState.ENDED
       : TalkMessageStreamState.STREAMING;
-    if (this.state === TalkMessageStreamState.ENDED) {
-      this.onDeactivate();
-    }
 
     // send message to signalling client
     await this.signallingClient.sendTalkMessage(payload);

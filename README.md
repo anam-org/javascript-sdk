@@ -122,6 +122,68 @@ for (const chunk of llmChunks) {
 }
 ```
 
+You can start a talk stream as soon as `streamToVideoElement()` resolves. Chunks sent before the signalling connection first opens are queued and sent when it does.
+
+### Delivery failures
+
+Talk-stream chunks travel over the session's signalling connection. On engines that answer heartbeats (see [older engines](#older-engines) below), the SDK checks that connection with heartbeats, and the answer to a heartbeat sent after a chunk confirms the chunk arrived. The SDK does not resend chunks. If a chunk can't be sent because the connection has dropped or stopped answering, or it isn't confirmed within about 3 seconds, the stream stops accepting chunks, `stream.getState()` returns `TalkMessageStreamState.DELIVERY_FAILED`, and the client emits `MESSAGE_DELIVERY_FAILED` with the stream's correlation id. The SDK reconnects on its own; deciding what to do with the answer is up to you. One option is to fall back to `talk()` with the full text:
+
+```typescript
+import { AnamEvent } from '@anam-ai/js-sdk';
+
+interface Answer {
+  correlationId: string;
+  text: string;
+  complete: boolean;
+  failed: boolean;
+}
+
+// Only the latest answer falls back: once a new one starts, the old one is stale.
+let latest: Answer | null = null;
+
+// Register once per client, not once per stream.
+anamClient.addListener(AnamEvent.MESSAGE_DELIVERY_FAILED, (failure) => {
+  const answer = latest;
+  if (!answer || failure.correlationId !== answer.correlationId) return;
+  answer.failed = true;
+  // If the failure arrives after the answer is complete, speak it now.
+  if (answer.complete) anamClient.talk(answer.text).catch(console.error);
+});
+
+async function speak(llmChunks: AsyncIterable<{ text: string; isLast: boolean }>) {
+  const stream = anamClient.createTalkMessageStream();
+  const answer: Answer = {
+    correlationId: stream.getCorrelationId(),
+    text: '',
+    complete: false,
+    failed: false,
+  };
+  latest = answer;
+  for await (const chunk of llmChunks) {
+    answer.text += chunk.text;
+    // A failed or interrupted stream rejects further chunks, so keep collecting the
+    // answer instead. This also covers a stale answer, whose failure the listener ignores.
+    if (stream.isActive()) await stream.streamMessageChunk(chunk.text, chunk.isLast);
+  }
+  answer.complete = true;
+  if (answer.failed && latest === answer) await anamClient.talk(answer.text);
+}
+```
+
+A failure means the engine did not confirm the chunks, not that it never received them. Some of the answer may already have been spoken, and `talk()` repeats it. Once the client has received `TALK_STREAM_INTERRUPTED` for a stream, it does not emit `MESSAGE_DELIVERY_FAILED` for it. An interruption sent while the connection was down can be missed, though, so the fallback can still repeat an answer the user cut off. The reverse can also happen: the engine can deliver that interruption after the client reconnects, so `TALK_STREAM_INTERRUPTED` can arrive for a stream that has already failed, after your fallback has started.
+
+Ending the session is not a delivery failure. After `stopStreaming()`, or when the client emits `CONNECTION_CLOSED` because the server ended the session or the media connection failed, unconfirmed chunks are lost without `MESSAGE_DELIVERY_FAILED`, and chunks sent afterwards are dropped. Treat `CONNECTION_CLOSED` as the end of every open stream. The one exception is the signalling connection closing for good on its own: unconfirmed chunks then fail before `CONNECTION_CLOSED`.
+
+Only talk streams are confirmed. Audio sent through `createAgentAudioInputStream()` is not, so a connection that stops working without closing can lose it without any event.
+
+#### Older engines
+
+Confirming chunks needs an engine that answers heartbeats. Engines that do say so when the session becomes ready, with `sendsHeartbeatAcks: true` in the `sessionready` message. On an older engine, the SDK stops tracking chunks once the session is ready and sends them as before, queuing them while the connection reconnects. It still emits `MESSAGE_DELIVERY_FAILED` in three cases:
+
+- A chunk is sent after the connection has closed for good.
+- A chunk is queued before the connection first opens, and it never opens.
+- A chunk is sent before the session is ready, and the session takes more than about 3 seconds to become ready. Until then the SDK can't tell an older engine from one that has stopped answering, so it fails the stream and reconnects. Waiting for `AnamEvent.SESSION_READY` before the first chunk avoids this.
+
 ### Speech across a tool call
 
 A talk stream can stay open while your application runs a tool. Give the speech before and after the tool call separate utterance ids, and the second waits for the first to finish playing.

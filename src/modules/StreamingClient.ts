@@ -37,6 +37,7 @@ import {
 import { AgentAudioInputStream } from '../types/AgentAudioInputStream';
 import { ToolCallResultReceivedPayload } from '../types/toolCalling/ToolCallPayload';
 import { TalkMessageStream } from '../types/TalkMessageStream';
+import { TalkMessageStreamRegistry } from './TalkMessageStreamRegistry';
 import { TalkStreamInterruptedSignalMessage } from '../types/signalling/TalkStreamInterruptedSignalMessage';
 import {
   WebRtcToolCallCompletedEvent,
@@ -61,6 +62,7 @@ const MEDIA_FAILURE_REASON_CODES = new Set([
 export class StreamingClient {
   private publicEventEmitter: PublicEventEmitter;
   private internalEventEmitter: InternalEventEmitter;
+  private talkStreams: TalkMessageStreamRegistry;
   private signallingClient: SignallingClient;
   private engineApiRestClient: EngineApiRestClient;
   private iceServers: RTCIceServer[];
@@ -137,6 +139,9 @@ export class StreamingClient {
       this.inputAudioStream = options.inputAudio.userProvidedMediaStream;
     }
     this.disableInputAudio = options.inputAudio.disableInputAudio === true;
+    // Registered before onSignalMessage, so a stream is already INTERRUPTED when
+    // the public TALK_STREAM_INTERRUPTED event fires.
+    this.talkStreams = new TalkMessageStreamRegistry(this.internalEventEmitter);
     // register event handlers
     this.internalEventEmitter.addListener(
       InternalEvent.WEB_SOCKET_OPEN,
@@ -540,11 +545,9 @@ export class StreamingClient {
       // generate a random correlation uuid
       correlationId = Math.random().toString(36).substring(2, 15);
     }
-    return new TalkMessageStream(
-      correlationId,
-      this.internalEventEmitter,
-      this.signallingClient,
-    );
+    const stream = new TalkMessageStream(correlationId, this.signallingClient);
+    this.talkStreams.register(stream);
+    return stream;
   }
 
   public createAgentAudioInputStream(
@@ -1616,6 +1619,7 @@ export class StreamingClient {
         error,
       );
     }
+    this.talkStreams.dispose();
 
     const peerConnection = this.peerConnection;
     if (peerConnection) {
