@@ -12,6 +12,13 @@ import {
   ToolCallFailedPayload,
   ToolCallCompletedPayload,
   ToolCallStartedPayload,
+  VisionAnalysisResult,
+  VisionProactiveTriggerEvent,
+  VisionSceneStateUpdatedEvent,
+  VisionStatusChangedEvent,
+  VisualSourceFailedEvent,
+  VisualSourceStartedEvent,
+  VisualSourceStoppedEvent,
 } from '../../index';
 
 export type EventCallbacks = {
@@ -62,5 +69,16 @@ export type EventCallbacks = {
   ) => void;
   [AnamEvent.PERSONA_CONFIG_UPDATE_APPLIED]: (
     updateAppliedEvent: PersonaConfigUpdateAppliedEvent,
+  ) => void;
+  [AnamEvent.VISUAL_SOURCE_STARTED]: (event: VisualSourceStartedEvent) => void;
+  [AnamEvent.VISUAL_SOURCE_STOPPED]: (event: VisualSourceStoppedEvent) => void;
+  [AnamEvent.VISUAL_SOURCE_FAILED]: (event: VisualSourceFailedEvent) => void;
+  [AnamEvent.VISION_STATUS_CHANGED]: (event: VisionStatusChangedEvent) => void;
+  [AnamEvent.VISION_SCENE_STATE_UPDATED]: (
+    event: VisionSceneStateUpdatedEvent,
+  ) => void;
+  [AnamEvent.VISION_ANALYSIS_COMPLETED]: (result: VisionAnalysisResult) => void;
+  [AnamEvent.VISION_PROACTIVE_TRIGGER]: (
+    event: VisionProactiveTriggerEvent,
   ) => void;
 };

@@ -38,6 +38,12 @@ import {
   ToolCallHandler,
 } from './types';
 import { AgentAudioInputStream } from './types/AgentAudioInputStream';
+import {
+  CameraInputOptions,
+  ScreenInputOptions,
+  VisionAnalysisRequest,
+  VisionAnalysisResult,
+} from './types/vision/VisionInput';
 import { TalkMessageStream } from './types/TalkMessageStream';
 import { ToolCallManager } from './modules/ToolCallManager';
 export default class AnamClient {
@@ -333,6 +339,7 @@ export default class AnamClient {
             disableInputAudio: this.clientOptions?.disableInputAudio,
           },
           apiGateway: this.clientOptions?.api?.apiGateway,
+          vision: this.clientOptions?.vision,
           metrics: {
             showPeerConnectionStatsReport:
               this.clientOptions?.metrics?.showPeerConnectionStatsReport ??
@@ -830,6 +837,63 @@ export default class AnamClient {
     }
 
     return this.streamingClient.startTalkMessageStream(correlationId);
+  }
+
+  /**
+   * Start sending the user's camera to the persona for vision analysis.
+   *
+   * Requires the `vision` client option and an active stream. Pass `stream` to
+   * use a camera stream you manage; the SDK then leaves its tracks running when
+   * the camera stops. Starting again replaces the current camera track without
+   * renegotiating the connection.
+   */
+  public async startCamera(options?: CameraInputOptions): Promise<void> {
+    if (!this.streamingClient) {
+      throw new Error('Failed to start camera: session is not started.');
+    }
+    await this.streamingClient.startCamera(options);
+  }
+
+  /** Stop sending the camera. Does nothing when the camera is not active. */
+  public async stopCamera(): Promise<void> {
+    await this.streamingClient?.stopVisualSource('camera');
+  }
+
+  /**
+   * Start sharing the user's screen with the persona for vision analysis.
+   *
+   * Prompts the user to pick a screen, window or tab unless `stream` is given.
+   * Screen capture is not available on mobile browsers; this method then
+   * rejects with CLIENT_ERROR_CODE_UNSUPPORTED_CAPABILITY.
+   */
+  public async startScreenCapture(options?: ScreenInputOptions): Promise<void> {
+    if (!this.streamingClient) {
+      throw new Error(
+        'Failed to start screen capture: session is not started.',
+      );
+    }
+    await this.streamingClient.startScreenCapture(options);
+  }
+
+  /** Stop sharing the screen. Does nothing when screen capture is not active. */
+  public async stopScreenCapture(): Promise<void> {
+    await this.streamingClient?.stopVisualSource('screen');
+  }
+
+  /**
+   * Ask the engine to analyze a newly captured frame from the active visual
+   * sources. Resolves with the structured result, or rejects on failure or
+   * after `timeoutMs` (20 seconds by default).
+   */
+  public async requestVisionAnalysis(
+    request?: VisionAnalysisRequest,
+  ): Promise<VisionAnalysisResult> {
+    if (!this.streamingClient) {
+      throw new Error(
+        'Failed to request vision analysis: session is not started.',
+      );
+    }
+    return this.streamingClient.requestVisionAnalysis(request);
   }
 
   /**

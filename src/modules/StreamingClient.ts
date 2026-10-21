@@ -3,6 +3,7 @@ import {
   createRTCStatsReport,
   sendClientMetric,
 } from '../lib/ClientMetrics';
+import { ClientError, ErrorCode } from '../lib/ClientError';
 import { ClientConnectionMilestoneRecorder } from '../lib/ConnectionMilestones';
 import { SessionDataChannelNegotiation } from '../lib/sessionDataChannel';
 import {
@@ -45,6 +46,15 @@ import {
   WebRtcToolCallStartedEvent,
 } from '../types/streaming/WebRtcToolCallEvent';
 import { ToolCallManager } from './ToolCallManager';
+import { VisualInputManager } from './VisualInputManager';
+import {
+  CameraInputOptions,
+  ScreenInputOptions,
+  VisionAnalysisRequest,
+  VisionAnalysisResult,
+  VisionClientOptions,
+  VisualInputSource,
+} from '../types/vision/VisionInput';
 
 const SUCCESS_METRIC_POLLING_TIMEOUT_MS = 15000; // After this time we will stop polling for the first frame and consider the session a failure.
 const STATS_COLLECTION_INTERVAL_MS = 5000;
@@ -113,6 +123,9 @@ export class StreamingClient {
   private statsCollectionInterval: ReturnType<typeof setInterval> | null = null;
   private agentAudioInputStream: AgentAudioInputStream | null = null;
   private toolCallManager: ToolCallManager;
+  private readonly sessionId: string;
+  private readonly visionOptions: VisionClientOptions | undefined;
+  private visualInputManager: VisualInputManager | null = null;
   private connectionMilestones: ClientConnectionMilestoneRecorder | undefined;
   private firstLocalIceCandidateSent = false;
   private firstRemoteIceCandidateReceived = false;
@@ -132,6 +145,8 @@ export class StreamingClient {
     this.toolCallManager = toolCallManager;
     this.connectionMilestones = connectionMilestones;
     this.apiGatewayConfig = options.apiGateway;
+    this.sessionId = sessionId;
+    this.visionOptions = options.vision;
     // initialize input audio state
     const { inputAudio } = options;
     this.inputAudioState = inputAudio.inputAudioState;
@@ -564,6 +579,35 @@ export class StreamingClient {
     return this.agentAudioInputStream;
   }
 
+  public async startCamera(options?: CameraInputOptions): Promise<void> {
+    await this.requireVisualInputManager().startCamera(options);
+  }
+
+  public async startScreenCapture(options?: ScreenInputOptions): Promise<void> {
+    await this.requireVisualInputManager().startScreenCapture(options);
+  }
+
+  public async stopVisualSource(source: VisualInputSource): Promise<void> {
+    await this.visualInputManager?.stopSource(source);
+  }
+
+  public requestVisionAnalysis(
+    request?: VisionAnalysisRequest,
+  ): Promise<VisionAnalysisResult> {
+    return this.requireVisualInputManager().requestAnalysis(request);
+  }
+
+  private requireVisualInputManager(): VisualInputManager {
+    if (!this.visualInputManager) {
+      throw new ClientError(
+        'Vision is not enabled. Set the vision client option and start streaming first.',
+        ErrorCode.CLIENT_ERROR_CODE_CONFIGURATION_ERROR,
+        400,
+      );
+    }
+    return this.visualInputManager;
+  }
+
   private async initPeerConnection() {
     this.connectionMilestones?.record('peer_connection_creating');
     this.peerConnection = new RTCPeerConnection({
@@ -624,6 +668,20 @@ export class StreamingClient {
           console.error('Async microphone permission request failed:', error);
         });
       }
+    }
+
+    // Visual input transceivers come after the avatar and audio m-lines so the
+    // existing m-line order is unchanged. The engine maps them by MID.
+    this.visualInputManager?.shutdown();
+    this.visualInputManager = null;
+    if (this.visionOptions) {
+      this.visualInputManager = new VisualInputManager(
+        this.visionOptions,
+        this.publicEventEmitter,
+        this.sendDataMessage.bind(this),
+        () => this.sessionId,
+      );
+      this.visualInputManager.attach(this.peerConnection);
     }
   }
 
@@ -1113,6 +1171,7 @@ export class StreamingClient {
       await this.signallingClient.sendOffer(
         this.peerConnection.localDescription,
         this.sessionDataChannelNegotiation?.offerId(),
+        this.visualInputManager?.getTrackMappings(),
       );
       this.flushIceRestartCandidateBuffer();
 
@@ -1330,6 +1389,7 @@ export class StreamingClient {
       this.dataChannel = dataChannel ?? null;
       this.connectionMilestones?.record('data_channel_open', { negotiated });
       this.publicEventEmitter.emit(AnamEvent.DATA_CHANNEL_OPEN);
+      this.visualInputManager?.onDataChannelOpen();
     };
     dataChannel.onclose = () => {
       this.connectionMilestones?.record('data_channel_closed');
@@ -1338,6 +1398,15 @@ export class StreamingClient {
     dataChannel.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
+
+        if (
+          this.visualInputManager?.handleDataChannelMessage(
+            message.messageType,
+            message.data,
+          )
+        ) {
+          return;
+        }
 
         // Handle known message types
         switch (message.messageType) {
@@ -1603,6 +1672,7 @@ export class StreamingClient {
     await this.signallingClient.sendOffer(
       this.peerConnection.localDescription,
       this.sessionDataChannelNegotiation?.offerId(),
+      this.visualInputManager?.getTrackMappings(),
     );
     this.connectionMilestones?.record('offer_sent');
   }
@@ -1658,6 +1728,10 @@ export class StreamingClient {
       this.successMetricPoller = null;
     }
     this.successMetricFired = false;
+
+    // stop visual sources before the peer connection closes
+    this.visualInputManager?.shutdown();
+    this.visualInputManager = null;
 
     // stop the input audio stream
     try {

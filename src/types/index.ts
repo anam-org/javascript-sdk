@@ -23,3 +23,5 @@ export { TalkMessageStreamState } from './TalkMessageStreamState'; // need to ex
 export type * from './toolCalling';
 export type * from './directorNotes';
 export { DIRECTOR_NOTE_CUE_TAGS } from './directorNotes';
+export type * from './vision';
+export { VISUAL_INPUT_SOURCES } from './vision';

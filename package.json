@@ -54,6 +54,8 @@
     "test:harness:heartbeat-monitor": "node test/heartbeatMonitorHarness.js",
     "test:harness:heartbeat-stats": "node test/heartbeatStatsHarness.js",
     "test:harness:utterance-id": "node test/utteranceIdHarness.js",
+    "test:harness:visual-input": "node test/visualInputHarness.js",
+    "test:harness:vision-wire": "node test/visionWireHarness.js",
     "watch": "nodemon -e ts --watch src --exec \"npm run build\"",
     "prepare": "npm run build"
   },

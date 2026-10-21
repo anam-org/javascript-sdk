@@ -1,3 +1,4 @@
+import { VisualTrackMapping } from '../lib/visualInput';
 import { InternalEventEmitter, PublicEventEmitter } from '.';
 import { ClientConnectionMilestoneRecorder } from '../lib/ConnectionMilestones';
 import {
@@ -247,6 +248,7 @@ export class SignallingClient {
   public async sendOffer(
     localDescription: RTCSessionDescription,
     negotiatedSessionDataChannelId?: number,
+    visualTracks?: VisualTrackMapping[],
   ) {
     const offerMessagePayload = {
       connectionDescription: localDescription,
@@ -254,6 +256,9 @@ export class SignallingClient {
       ...(negotiatedSessionDataChannelId !== undefined && {
         negotiatedSessionDataChannelId,
       }),
+      // The engine identifies camera and screen tracks by MID only.
+      ...(visualTracks !== undefined &&
+        visualTracks.length > 0 && { visualTracks }),
     };
     const offerMessage: SignalMessage = {
       actionType: SignalMessageAction.OFFER,

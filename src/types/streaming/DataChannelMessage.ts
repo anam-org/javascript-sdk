@@ -9,4 +9,10 @@ export enum DataChannelMessage {
   USER_SPEECH_ENDED = 'userSpeechEnded',
   DIRECTOR_NOTE_CUE_APPLIED = 'directorNoteCueApplied',
   PERSONA_CONFIG_UPDATE_APPLIED = 'personaConfigUpdateApplied',
+  VISION_STATUS_CHANGED = 'visionStatusChanged',
+  VISION_SCENE_STATE_UPDATED = 'visionSceneStateUpdated',
+  VISION_ANALYSIS_COMPLETED = 'visionAnalysisCompleted',
+  VISION_ANALYSIS_FAILED = 'visionAnalysisFailed',
+  VISUAL_SOURCE_FAILED = 'visualSourceFailed',
+  VISION_PROACTIVE_TRIGGER = 'visionProactiveTrigger',
 }

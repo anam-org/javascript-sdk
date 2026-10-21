@@ -1,6 +1,7 @@
 import { ApiOptions } from '../types';
 import { ConnectionMilestoneMetricsOptions } from './ConnectionMilestoneMetricsOptions';
 import { VoiceDetectionOptions } from './VoiceDetectionOptions';
+import { VisionClientOptions } from './vision/VisionInput';
 
 export interface AnamPublicClientOptions {
   api?: ApiOptions;
@@ -25,4 +26,12 @@ export interface AnamPublicClientOptions {
    * precedence over `rtcConfiguration.iceServers`.
    */
   rtcConfiguration?: RTCConfiguration;
+  /**
+   * Enables camera and screen input for vision analysis. When set, the SDK
+   * negotiates one send-only video track per source up front, so sources can
+   * be started and stopped later without renegotiating. Screen capture is
+   * left out on devices that do not support it, such as mobile browsers.
+   * Vision must also be enabled for the session.
+   */
+  vision?: VisionClientOptions;
 }
