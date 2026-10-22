@@ -14,6 +14,8 @@ export interface VisionClientOptions {
    * browsers that cannot capture the screen (mobile).
    */
   sources?: VisualInputSource[];
+  /** Development perception profile; ordinary send rate remains 10 fps. */
+  cameraFrameRate?: 10 | 25;
 }
 
 export interface CameraInputOptions {
@@ -33,6 +35,8 @@ export interface ScreenInputOptions {
 export interface VisionAnalysisRequest {
   /** Sources to analyze. Defaults to every active source. */
   sources?: VisualInputSource[];
+  /** Development perception profile; ordinary send rate remains 10 fps. */
+  cameraFrameRate?: 10 | 25;
   /** A short goal for this analysis, e.g. "read the error message on screen". */
   goal?: string;
   /** How long to wait for the result before rejecting. Defaults to 20 seconds. */

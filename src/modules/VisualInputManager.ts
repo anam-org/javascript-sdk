@@ -71,7 +71,7 @@ export class VisualInputManager {
   private readonly pendingAnalyses = new Map<string, PendingAnalysis>();
 
   constructor(
-    options: VisionClientOptions,
+    private readonly options: VisionClientOptions,
     private readonly publicEventEmitter: PublicEventEmitter,
     private readonly sendDataMessage: VisionDataChannelSender,
     private readonly getSessionId: () => string | null,
@@ -85,7 +85,7 @@ export class VisualInputManager {
   /** Adds one send-only video transceiver per source. Call before the first offer. */
   public attach(peerConnection: RTCPeerConnection): void {
     for (const source of this.sources) {
-      const profile = VISUAL_SOURCE_SEND_PROFILES[source];
+      const profile = { ...VISUAL_SOURCE_SEND_PROFILES[source], ...(source === 'camera' && this.options.cameraFrameRate === 25 ? {maxFramerate:25, maxBitrate:1500000} : {}) };
       const transceiver = peerConnection.addTransceiver('video', {
         direction: 'sendonly',
         sendEncodings: [
@@ -370,7 +370,7 @@ export class VisualInputManager {
     track: MediaStreamTrack,
     ownsTrack: boolean,
   ): Promise<void> {
-    const profile = VISUAL_SOURCE_SEND_PROFILES[source];
+    const profile = { ...VISUAL_SOURCE_SEND_PROFILES[source], ...(source === 'camera' && this.options.cameraFrameRate === 25 ? {maxFramerate:25, maxBitrate:1500000} : {}) };
     if ('contentHint' in track) {
       track.contentHint = profile.contentHint;
     }

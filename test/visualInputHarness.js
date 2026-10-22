@@ -357,7 +357,15 @@ function testNonVisionMessagesAreNotHandled() {
   assert.equal(manager.handleDataChannelMessage('speechText', {}), false);
 }
 
+async function testOptionalHighRateCamera() {
+  const {manager,pc}=setup({sources:['camera'],cameraFrameRate:25});
+  assert.equal(pc.transceivers[0].init.sendEncodings[0].maxFramerate,25);
+  await manager.startCamera({stream:fakeStream(fakeTrack())});
+  assert.equal(pc.transceivers[0].sender.parameters.encodings[0].maxFramerate,25);
+  assert.equal(pc.transceivers[0].sender.parameters.encodings[0].maxBitrate,1500000);
+}
 async function main() {
+  await testOptionalHighRateCamera();
   testScreenPrefersAv1ThenFallbacks();
   testSkipsCodecsTheBrowserCannotEncode();
   testCameraPrefersH264AndKeepsAllProfiles();
