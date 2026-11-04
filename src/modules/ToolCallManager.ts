@@ -155,7 +155,9 @@ export class ToolCallManager {
    * handlers but none matches an incoming client tool, the most likely cause
    * is a name mismatch, and with awaitResult the call would otherwise just
    * time out. Apps that only listen to TOOL_CALL_STARTED register no handlers
-   * and get no warning. Warns once per tool name per session.
+   * and get no warning. An app that mixes handlers with a TOOL_CALL_STARTED
+   * listener still sees it for the listener's tools, so the message says how
+   * to tell the two apart. Warns once per tool name per session.
    */
   private warnUnhandledClientTool(toolName: string): void {
     const registeredNames = Object.keys(this.handlers);
@@ -169,7 +171,9 @@ export class ToolCallManager {
     console.warn(
       `Anam: no tool call handler registered for client tool "${toolName}". ` +
         `Handlers are matched by exact name; registered handlers: ` +
-        `${registeredNames.map((name) => `"${name}"`).join(', ')}.`,
+        `${registeredNames.map((name) => `"${name}"`).join(', ')}. ` +
+        `If you handle this tool with a TOOL_CALL_STARTED listener instead, ` +
+        `you can ignore this warning.`,
     );
   }
 
