@@ -38,6 +38,7 @@ export class ToolCallManager {
   private pendingCalls: Record<string, PendingToolCall> = Object.create(null);
   private failedCalls: Record<string, ToolCallFailedPayload> =
     Object.create(null);
+  private warnedUnhandledToolNames = new Set<string>();
   private activeSessionId: string | null = null;
 
   constructor(
@@ -52,12 +53,14 @@ export class ToolCallManager {
     this.activeSessionId = sessionId;
     this.clearPendingCalls();
     this.clearFailedCalls();
+    this.warnedUnhandledToolNames.clear();
   }
 
   clearSessionState(): void {
     this.activeSessionId = null;
     this.clearPendingCalls();
     this.clearFailedCalls();
+    this.warnedUnhandledToolNames.clear();
   }
 
   clearPendingCalls(): void {
@@ -95,6 +98,9 @@ export class ToolCallManager {
     };
 
     if (!(tool_name in this.handlers)) {
+      if (toolCallEvent.tool_type === 'client') {
+        this.warnUnhandledClientTool(tool_name);
+      }
       return;
     }
 
@@ -142,6 +148,33 @@ export class ToolCallManager {
       });
       return;
     }
+  }
+
+  /**
+   * Handlers are matched by exact tool name. When the app has registered
+   * handlers but none matches an incoming client tool, the most likely cause
+   * is a name mismatch, and with awaitResult the call would otherwise just
+   * time out. Apps that only listen to TOOL_CALL_STARTED register no handlers
+   * and get no warning. An app that mixes handlers with a TOOL_CALL_STARTED
+   * listener still sees it for the listener's tools, so the message says how
+   * to tell the two apart. Warns once per tool name per session.
+   */
+  private warnUnhandledClientTool(toolName: string): void {
+    const registeredNames = Object.keys(this.handlers);
+    if (
+      registeredNames.length === 0 ||
+      this.warnedUnhandledToolNames.has(toolName)
+    ) {
+      return;
+    }
+    this.warnedUnhandledToolNames.add(toolName);
+    console.warn(
+      `Anam: no tool call handler registered for client tool "${toolName}". ` +
+        `Handlers are matched by exact name; registered handlers: ` +
+        `${registeredNames.map((name) => `"${name}"`).join(', ')}. ` +
+        `If you handle this tool with a TOOL_CALL_STARTED listener instead, ` +
+        `you can ignore this warning.`,
+    );
   }
 
   async processToolCallCompletedEvent(

@@ -44,6 +44,7 @@
     "test:session-regions": "npm run build:main && npm run test:harness:session-regions",
     "test:talk-stream-delivery": "npm run build:main && run-s test:harness:talk-stream-delivery test:harness:heartbeat-monitor test:harness:heartbeat-stats",
     "test:utterance-id": "npm run build:main && npm run test:harness:utterance-id",
+    "test:tool-call-handlers": "npm run build:main && npm run test:harness:tool-call-handlers",
     "test:harness:director-notes": "node test/directorNotesHarness.js && tsc --noEmit --strict --target es2015 --moduleResolution node --skipLibCheck test/directorNotesTypes.ts",
     "test:harness:connection-closed": "node test/connectionClosedHarness.js",
     "test:harness:connection-milestones": "node test/connectionMilestonesHarness.js",
@@ -54,6 +55,7 @@
     "test:harness:heartbeat-monitor": "node test/heartbeatMonitorHarness.js",
     "test:harness:heartbeat-stats": "node test/heartbeatStatsHarness.js",
     "test:harness:utterance-id": "node test/utteranceIdHarness.js",
+    "test:harness:tool-call-handlers": "node test/toolCallHandlersHarness.js",
     "watch": "nodemon -e ts --watch src --exec \"npm run build\"",
     "prepare": "npm run build"
   },
