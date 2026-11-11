@@ -108,6 +108,10 @@ export class StreamingClient {
   private disableInputAudio: boolean;
   private successMetricPoller: ReturnType<typeof setInterval> | null = null;
   private successMetricFired = false;
+  // SESSION_READY is a one-time milestone per session. A server may re-send
+  // it after the signalling WebSocket reconnects, in case the first copy was
+  // lost with the old socket; apps only ever see it once.
+  private sessionReadyEmitted = false;
   private showPeerConnectionStatsReport: boolean = false;
   private peerConnectionStatsReportOutputFormat: 'console' | 'json' = 'console';
   private statsCollectionInterval: ReturnType<typeof setInterval> | null = null;
@@ -738,6 +742,8 @@ export class StreamingClient {
         );
         break;
       case SignalMessageAction.SESSION_READY:
+        if (this.sessionReadyEmitted) break;
+        this.sessionReadyEmitted = true;
         const sessionId = signalMessage.sessionId as string;
         this.publicEventEmitter.emit(AnamEvent.SESSION_READY, sessionId);
         break;

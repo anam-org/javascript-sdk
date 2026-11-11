@@ -47,6 +47,7 @@
     "test:tool-call-handlers": "npm run build:main && npm run test:harness:tool-call-handlers",
     "test:harness:director-notes": "node test/directorNotesHarness.js && tsc --noEmit --strict --target es2015 --moduleResolution node --skipLibCheck test/directorNotesTypes.ts",
     "test:harness:connection-closed": "node test/connectionClosedHarness.js",
+    "test:harness:session-ready": "node test/sessionReadyHarness.js",
     "test:harness:connection-milestones": "node test/connectionMilestonesHarness.js",
     "test:harness:input-audio-capture": "node test/inputAudioCaptureHarness.js",
     "test:harness:session-regions": "node test/sessionRegionsHarness.js",
