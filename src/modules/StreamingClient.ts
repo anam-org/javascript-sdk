@@ -108,6 +108,7 @@ export class StreamingClient {
   private disableInputAudio: boolean;
   private successMetricPoller: ReturnType<typeof setInterval> | null = null;
   private successMetricFired = false;
+  private readonly sessionId: string;
   // SESSION_READY is a one-time milestone per session. A server may re-send
   // it after the signalling WebSocket reconnects, in case the first copy was
   // lost with the old socket; apps only ever see it once.
@@ -131,6 +132,7 @@ export class StreamingClient {
     toolCallManager: ToolCallManager,
     connectionMilestones?: ClientConnectionMilestoneRecorder,
   ) {
+    this.sessionId = sessionId;
     this.publicEventEmitter = publicEventEmitter;
     this.internalEventEmitter = internalEventEmitter;
     this.toolCallManager = toolCallManager;
@@ -742,10 +744,13 @@ export class StreamingClient {
         );
         break;
       case SignalMessageAction.SESSION_READY:
+        // Clients share one internal emitter, and a stopped client can still
+        // receive the next session's messages, so only this session's
+        // SESSION_READY counts.
+        if (signalMessage.sessionId !== this.sessionId) break;
         if (this.sessionReadyEmitted) break;
         this.sessionReadyEmitted = true;
-        const sessionId = signalMessage.sessionId as string;
-        this.publicEventEmitter.emit(AnamEvent.SESSION_READY, sessionId);
+        this.publicEventEmitter.emit(AnamEvent.SESSION_READY, this.sessionId);
         break;
       case SignalMessageAction.HEARTBEAT:
         break;
